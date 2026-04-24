@@ -36,7 +36,11 @@ import { startCombat as startCombatBase, resolvePlayerAction, type CombatAction 
 import { applyAbandonPenalty, applyDeathPenalty, applyExtractionRewards, applyXpAndLevel, type DeathSummary, type ExtractionRewardSummary } from "../game/progression";
 import { appendRunSummary, buildRunSummary } from "../game/runSummary";
 import { recalculateCharacterStats } from "../game/characterMath";
-import { RUN_RULES } from "../game/constants";
+import { RUN_RULES, THREAT_RULES } from "../game/constants";
+import type { CombatThreatDelta } from "../game/combat";
+import type { DungeonLogEntryType, ThreatChange, ThreatChangeReason } from "../game/types";
+import { applyThreatChange, getThreatLabel } from "../game/threat";
+import { addDungeonLogEntry } from "../game/dungeonLog";
 import {
   canMerchantUpgrade,
   getBuyPrice,
@@ -368,20 +372,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const target = getRoomById(run.roomGraph, roomId);
     if (!current || !target || !current.connectedRoomIds.includes(roomId)) return;
 
+    const wasVisited = run.visitedRoomIds.includes(roomId);
     const updatedRooms: DungeonRoom[] = run.roomGraph.map(r =>
       r.id === roomId ? { ...r, visited: true } : r
     );
-    let next: GameState = {
-      ...s,
-      activeRun: {
-        ...run,
-        currentRoomId: roomId,
-        roomGraph: updatedRooms,
-        visitedRoomIds: run.visitedRoomIds.includes(roomId)
-          ? run.visitedRoomIds
-          : [...run.visitedRoomIds, roomId]
-      }
+    let updatedRun: DungeonRun = {
+      ...run,
+      currentRoomId: roomId,
+      roomGraph: updatedRooms,
+      visitedRoomIds: wasVisited ? run.visitedRoomIds : [...run.visitedRoomIds, roomId]
     };
+
+    updatedRun = logInRun(
+      updatedRun,
+      "info",
+      wasVisited
+        ? `You step back into ${target.title}.`
+        : `You enter ${target.title}.`,
+      roomId
+    );
+
+    const threatAmount = wasVisited
+      ? THREAT_RULES.gains.revisitedRoom
+      : THREAT_RULES.gains.enteredNewRoom;
+    const threatReason: ThreatChangeReason = "enteredRoom";
+    updatedRun = applyRunThreat(
+      updatedRun,
+      threatAmount,
+      threatReason,
+      roomId
+    ).run;
+
+    let next: GameState = { ...s, activeRun: updatedRun };
 
     next = notifyQuestEvent(next, {
       kind: "roomScouted",
@@ -728,7 +750,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const combat = s.activeCombat;
     if (!s.player || !combat) return;
     const rng = createRng(`combat:${s.activeRun?.seed ?? "x"}:${combat.encounterId}:${combat.turn}`);
-    const result = resolvePlayerAction(combat, s.player, action, rng, s.activeRun?.raidInventory.items ?? []);
+    const threatLevel = s.activeRun?.threat.level ?? 0;
+    const result = resolvePlayerAction(
+      combat,
+      s.player,
+      action,
+      rng,
+      s.activeRun?.raidInventory.items ?? [],
+      threatLevel
+    );
     let nextPlayer: Character = result.player;
     let nextRun = s.activeRun;
 
@@ -758,6 +788,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       nextPlayer = { ...nextPlayer, equipped };
     }
 
+    if (nextRun && result.threatDeltas.length > 0) {
+      nextRun = applyCombatThreatDeltas(nextRun, result.threatDeltas, combat.fromRoomId);
+    }
+
     const nextState: GameState = { ...s, player: nextPlayer, activeRun: nextRun, activeCombat: result.combat };
     set({ state: nextState });
     persist(nextState);
@@ -779,6 +813,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const s = get().state;
     let combat = s.activeCombat;
     let player = s.player;
+    let run = s.activeRun;
     if (!player || !combat || combat.over) return;
 
     const maxSteps = 12;
@@ -791,9 +826,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const target = combat.enemies.find(e => e.hp > 0);
       if (!target) break;
       const rng = createRng(`combat:${s.activeRun?.seed ?? "x"}:${combat.encounterId}:${combat.turn}:auto:${step}`);
-      const result = resolvePlayerAction(combat, player, { kind: "attack", targetId: target.instanceId }, rng, s.activeRun?.raidInventory.items ?? []);
+      const threatLevel = run?.threat.level ?? 0;
+      const result = resolvePlayerAction(
+        combat,
+        player,
+        { kind: "attack", targetId: target.instanceId },
+        rng,
+        s.activeRun?.raidInventory.items ?? [],
+        threatLevel
+      );
       combat = result.combat;
       player = result.player;
+      if (run && result.threatDeltas.length > 0) {
+        run = applyCombatThreatDeltas(run, result.threatDeltas, combat.fromRoomId);
+      }
     }
 
     if (!combat.over && !stopReason) {
@@ -803,7 +849,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       combat = { ...combat, log: [...combat.log, stopReason] };
     }
 
-    const nextState: GameState = { ...s, player, activeCombat: combat };
+    const nextState: GameState = { ...s, player, activeCombat: combat, activeRun: run };
     set({ state: nextState });
     persist(nextState);
 
@@ -1211,6 +1257,58 @@ export const useGameStore = create<GameStore>((set, get) => ({
     persist(next);
   }
 }));
+
+function applyRunThreat(
+  run: DungeonRun,
+  amount: number,
+  reason: ThreatChangeReason,
+  roomId?: string,
+  message?: string,
+  now?: number
+): { run: DungeonRun; change: ThreatChange } {
+  const { threat, change } = applyThreatChange({ threat: run.threat, amount, reason, now, message });
+  let updated: DungeonRun = { ...run, threat };
+  updated = addDungeonLogEntry({
+    run: updated,
+    type: "threat",
+    message: formatThreatLogMessage(change),
+    roomId,
+    now: change.timestamp
+  });
+  return { run: updated, change };
+}
+
+function formatThreatLogMessage(change: ThreatChange): string {
+  const sign = change.amount >= 0 ? "+" : "";
+  const base = `${change.message} (${sign}${change.amount})`;
+  if (change.newLevel !== change.previousLevel) {
+    return `${base} — Threat level now ${getThreatLabel(change.newLevel)} [${change.newLevel}].`;
+  }
+  return base;
+}
+
+function logInRun(
+  run: DungeonRun,
+  type: DungeonLogEntryType,
+  message: string,
+  roomId?: string,
+  now?: number
+): DungeonRun {
+  return addDungeonLogEntry({ run, type, message, roomId, now });
+}
+
+function applyCombatThreatDeltas(
+  run: DungeonRun,
+  deltas: CombatThreatDelta[],
+  roomId?: string
+): DungeonRun {
+  let next = run;
+  for (const delta of deltas) {
+    const result = applyRunThreat(next, delta.amount, delta.reason, roomId, delta.message);
+    next = result.run;
+  }
+  return next;
+}
 
 function collectLoadoutSnapshot(player: Character): ItemInstance[] {
   const slots = player.equipped;

@@ -255,13 +255,14 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
 
 /* Dungeon */
 .dungeon-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
-.dungeon-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; grid-template-areas: "current adj player" "map map map"; gap: 12px; }
+.dungeon-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; grid-template-areas: "current adj player" "map map log"; gap: 12px; }
 .dungeon-grid .card:nth-child(1) { grid-area: current; }
 .dungeon-grid .card:nth-child(2) { grid-area: adj; }
 .dungeon-grid .card:nth-child(3) { grid-area: player; }
 .dungeon-grid .card:nth-child(4) { grid-area: map; }
+.dungeon-grid .card:nth-child(5) { grid-area: log; }
 @media (max-width: 800px) {
-  .dungeon-grid { grid-template-columns: 1fr; grid-template-areas: "current" "adj" "player" "map"; }
+  .dungeon-grid { grid-template-columns: 1fr; grid-template-areas: "current" "adj" "player" "map" "log"; }
 }
 .run-pressure {
   border-left: 3px solid var(--accent);
@@ -636,3 +637,77 @@ button.map-room:hover {
   padding: 8px;
   font: 0.78rem ui-monospace, Menlo, monospace;
 }
+
+/* Threat meter */
+.threat-meter {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  background: linear-gradient(90deg, rgba(200, 155, 60, 0.06), rgba(199, 80, 80, 0.00));
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-left-color: var(--text-muted);
+  border-radius: 6px;
+}
+.threat-meter.threat-level-0 { border-left-color: var(--good); }
+.threat-meter.threat-level-1 { border-left-color: var(--text-dim); }
+.threat-meter.threat-level-2 { border-left-color: var(--accent); }
+.threat-meter.threat-level-3 { border-left-color: var(--warn); }
+.threat-meter.threat-level-4 { border-left-color: var(--danger); }
+.threat-meter.threat-level-5 {
+  border-left-color: var(--danger);
+  background: linear-gradient(90deg, rgba(199, 80, 80, 0.18), rgba(199, 80, 80, 0.02));
+}
+.threat-meter-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.threat-meter-label { font-weight: 700; letter-spacing: 0.02em; color: var(--text); }
+.threat-meter-level { font-size: 0.85rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.threat-meter-bar {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  background: var(--bg-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.threat-meter-bar-fill {
+  position: absolute; inset: 0 auto 0 0;
+  background: linear-gradient(90deg, var(--good) 0%, var(--accent) 40%, var(--warn) 70%, var(--danger) 100%);
+  transition: width 240ms ease;
+}
+.threat-meter-tick {
+  position: absolute; top: 0; bottom: 0;
+  width: 1px;
+  background: rgba(10, 11, 13, 0.9);
+}
+.threat-meter-footer { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; font-size: 0.88rem; }
+.threat-meter-desc { color: var(--text-dim); font-style: italic; }
+.threat-meter-points { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* Dungeon log */
+.dungeon-log {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.dungeon-log-entry {
+  padding: 4px 8px;
+  border-left: 2px solid var(--line);
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  line-height: 1.35;
+}
+.dungeon-log-info { border-left-color: var(--text-muted); }
+.dungeon-log-warning { border-left-color: var(--accent); color: var(--text); }
+.dungeon-log-danger { border-left-color: var(--danger); color: var(--text); }
+.dungeon-log-threat { border-left-color: var(--warn); color: var(--text); }
+.dungeon-log-loot { border-left-color: var(--good); }
+.dungeon-log-combat { border-left-color: var(--danger); }
+.dungeon-log-extraction { border-left-color: var(--accent-2); }
+.dungeon-log-event { border-left-color: var(--accent-2); }
+.dungeon-log-trap { border-left-color: var(--warn); }
+.dungeon-log-quest { border-left-color: var(--rarity-rare); }
+

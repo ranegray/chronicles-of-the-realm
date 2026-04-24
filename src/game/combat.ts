@@ -3,13 +3,16 @@ import type {
   CombatState,
   EnemyInstance,
   EncounterDefinition,
-  ItemInstance
+  ItemInstance,
+  ThreatChangeReason,
+  ThreatLevel
 } from "./types";
-import { COMBAT_RULES } from "./constants";
+import { COMBAT_RULES, THREAT_RULES } from "./constants";
 import { rollD20, rollDice } from "./dice";
 import { buildEncounterEnemies } from "./encounterGenerator";
 import { getModifier } from "./characterMath";
 import { rollConsumableHealAmount } from "./itemEffects";
+import { getThreatModifiers } from "./threat";
 import type { Rng } from "./rng";
 
 export type CombatAction =
@@ -19,11 +22,21 @@ export type CombatAction =
   | { kind: "useItem"; itemInstanceId: string }
   | { kind: "flee" };
 
+export interface CombatThreatDelta {
+  amount: number;
+  reason: ThreatChangeReason;
+  message?: string;
+}
+
 export interface CombatResolveResult {
   combat: CombatState;
   player: Character;
   consumedItems: string[];
+  threatDeltas: CombatThreatDelta[];
 }
+
+const FLEE_CHANCE_MIN = 0.1;
+const FLEE_CHANCE_MAX = 0.85;
 
 export function startCombat(
   encounter: EncounterDefinition,
@@ -51,21 +64,23 @@ export function resolvePlayerAction(
   player: Character,
   action: CombatAction,
   rng: Rng,
-  carriedItems: ItemInstance[] = []
+  carriedItems: ItemInstance[] = [],
+  threatLevel: ThreatLevel = 0
 ): CombatResolveResult {
   if (state.over) {
-    return { combat: state, player, consumedItems: [] };
+    return { combat: state, player, consumedItems: [], threatDeltas: [] };
   }
   let next: CombatState = { ...state, log: [...state.log] };
   let nextPlayer: Character = { ...player };
   const consumed: string[] = [];
+  const threatDeltas: CombatThreatDelta[] = [];
 
   if (action.kind === "attack" || action.kind === "powerAttack") {
     const isPowerAttack = action.kind === "powerAttack";
     const target = next.enemies.find(e => e.instanceId === action.targetId && e.hp > 0);
     if (!target) {
       next.log.push("There is no living target.");
-      return { combat: next, player: nextPlayer, consumedItems: consumed };
+      return { combat: next, player: nextPlayer, consumedItems: consumed, threatDeltas };
     }
     const roll = rollD20(rng);
     const accuracy = nextPlayer.derivedStats.accuracy - (isPowerAttack ? 2 : 0);
@@ -107,7 +122,7 @@ export function resolvePlayerAction(
         if (newHp === nextPlayer.hp) {
           next.log.push(`${nextPlayer.name} is already at full health.`);
           next.playerDefending = false;
-          return { combat: next, player: nextPlayer, consumedItems: consumed };
+          return { combat: next, player: nextPlayer, consumedItems: consumed, threatDeltas };
         }
         nextPlayer = { ...nextPlayer, hp: newHp };
         next.log.push(`You drink ${item.name} (+${heal} HP).`);
@@ -119,12 +134,17 @@ export function resolvePlayerAction(
     next.playerDefending = false;
   } else if (action.kind === "flee") {
     const roll = rng.nextFloat();
-    const chance = COMBAT_RULES.fleeBaseChance + getModifier(nextPlayer.abilityScores.agility) * 0.05;
+    const chance = computeFleeChance(nextPlayer, threatLevel);
     if (roll < chance) {
       next.log.push("You break away into the dark.");
       next.over = true;
       next.outcome = "fled";
-      return { combat: next, player: nextPlayer, consumedItems: consumed };
+      threatDeltas.push({
+        amount: THREAT_RULES.gains.fledCombat,
+        reason: "fledCombat",
+        message: "Your retreat rings through the halls."
+      });
+      return { combat: next, player: nextPlayer, consumedItems: consumed, threatDeltas };
     } else {
       next.log.push("You stumble. The thing in front of you laughs.");
     }
@@ -135,7 +155,7 @@ export function resolvePlayerAction(
     next.over = true;
     next.outcome = "victory";
     next.log.push("The room is yours.");
-    return { combat: next, player: nextPlayer, consumedItems: consumed };
+    return { combat: next, player: nextPlayer, consumedItems: consumed, threatDeltas };
   }
 
   // Enemy turn
@@ -143,8 +163,29 @@ export function resolvePlayerAction(
   next = enemyResult.combat;
   nextPlayer = enemyResult.player;
 
+  const roundJustCompleted = next.turn;
   next.turn += 1;
-  return { combat: next, player: nextPlayer, consumedItems: consumed };
+
+  if (!next.over && roundJustCompleted > THREAT_RULES.gains.extendedCombatAfterRound) {
+    const amount = THREAT_RULES.gains.extendedCombatPerRound;
+    threatDeltas.push({
+      amount,
+      reason: "extendedCombat",
+      message: `The fight drags on (round ${roundJustCompleted}).`
+    });
+    next.log.push(`The dungeon grows restless as the fight drags on (+${amount} threat).`);
+  }
+
+  return { combat: next, player: nextPlayer, consumedItems: consumed, threatDeltas };
+}
+
+export function computeFleeChance(player: Character, threatLevel: ThreatLevel): number {
+  const base = COMBAT_RULES.fleeBaseChance + getModifier(player.abilityScores.agility) * 0.05;
+  const penalty = getThreatModifiers(threatLevel).fleeChancePenalty;
+  const chance = base - penalty;
+  if (chance < FLEE_CHANCE_MIN) return FLEE_CHANCE_MIN;
+  if (chance > FLEE_CHANCE_MAX) return FLEE_CHANCE_MAX;
+  return chance;
 }
 
 export function resolveEnemyTurn(

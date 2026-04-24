@@ -1,5 +1,7 @@
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
+import { DungeonLog } from "../components/DungeonLog";
+import { ThreatMeter } from "../components/ThreatMeter";
 import { useGameStore } from "../store/gameStore";
 import { getRoomById } from "../game/dungeonGenerator";
 import { getBiome } from "../data/biomes";
@@ -91,6 +93,8 @@ export function DungeonScreen() {
         </div>
       </header>
 
+      <ThreatMeter threat={run.threat} />
+
       <div className="dungeon-grid">
         <Card title={current.title} subtitle={`Danger ${current.dangerRating} · Exits ${exitCount}/4`} variant={current.dangerRating > 2 ? "danger" : "default"}>
           <p>{current.description}</p>
@@ -174,6 +178,10 @@ export function DungeonScreen() {
 
         <Card title="Dungeon Map" subtitle={`${run.visitedRoomIds.length}/${run.roomGraph.length} rooms charted`}>
           <DungeonMap run={run} current={current} onMove={moveToRoom} />
+        </Card>
+
+        <Card title="Dungeon Log" subtitle={`${run.dungeonLog.length} event${run.dungeonLog.length === 1 ? "" : "s"}`}>
+          <DungeonLog entries={run.dungeonLog} />
         </Card>
       </div>
     </div>
