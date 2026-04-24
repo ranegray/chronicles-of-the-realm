@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { defaultGameState, hasSave, loadGame, resetGame, saveGame } from "../game/save";
-import { STORAGE_KEY } from "../game/constants";
+import { SAVE_VERSION, STORAGE_KEY } from "../game/constants";
 
 describe("save", () => {
   beforeEach(() => {
@@ -30,7 +30,7 @@ describe("save", () => {
     const old = { ...defaultGameState(), version: 0 };
     saveGame(old);
     const loaded = loadGame();
-    expect(loaded?.version).toBe(2);
+    expect(loaded?.version).toBe(SAVE_VERSION);
   });
 
   it("backfills prepared inventory on load", () => {

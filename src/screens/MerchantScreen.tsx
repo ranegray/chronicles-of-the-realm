@@ -2,6 +2,10 @@ import type { ReactNode } from "react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { ItemCard } from "../components/ItemCard";
+import { CraftingPanel } from "../components/CraftingPanel";
+import { MaterialInventory } from "../components/MaterialInventory";
+import { ServiceActionPanel } from "../components/ServiceActionPanel";
+import { VillageNpcDetail } from "../components/VillageNpcDetail";
 import {
   canMerchantUpgrade,
   getBuyPrice,
@@ -12,6 +16,9 @@ import {
 } from "../game/merchants";
 import type { ItemInstance } from "../game/types";
 import { useGameStore } from "../store/gameStore";
+import { getUnlockedRecipes } from "../game/crafting";
+import { canUpgradeNpcService, getCurrentServiceLevelDefinition, getNextServiceLevelDefinition } from "../game/villageProgression";
+import { getAvailableServiceActions } from "../game/services";
 
 const SLOT_LABELS: Record<EquipmentSlotId, string> = {
   weapon: "Weapon",
@@ -33,6 +40,10 @@ export function MerchantScreen() {
   const upgrade = useGameStore(s => s.upgradeEquippedItem);
   const toggleQuest = useGameStore(s => s.toggleQuestActive);
   const claimQuest = useGameStore(s => s.claimQuestReward);
+  const upgradeService = useGameStore(s => s.upgradeNpcService);
+  const craft = useGameStore(s => s.craftRecipe);
+  const performAction = useGameStore(s => s.performServiceAction);
+  const state = useGameStore(s => s.state);
 
   const merchant = village?.npcs.find(npc => npc.id === merchantId);
   if (!player || !village || !merchant) {
@@ -46,6 +57,11 @@ export function MerchantScreen() {
 
   const stock = getMerchantStock(merchant.role, merchant.serviceLevel);
   const quests = village.quests.filter(q => q.npcId === merchant.id);
+  const currentLevel = getCurrentServiceLevelDefinition({ npc: merchant });
+  const nextLevel = getNextServiceLevelDefinition({ npc: merchant });
+  const upgradeGate = canUpgradeNpcService({ gameState: state, npcId: merchant.id });
+  const recipes = getUnlockedRecipes({ gameState: state, npcId: merchant.id });
+  const actions = getAvailableServiceActions({ gameState: state, npcId: merchant.id });
   const upgradeSlots = (Object.keys(SLOT_LABELS) as EquipmentSlotId[])
     .map(slot => ({ slot, item: player.equipped[slot] }))
     .filter(entry => entry.item && canMerchantUpgrade(merchant.role, entry.item));
@@ -64,6 +80,29 @@ export function MerchantScreen() {
       {message && <p className="msg">{message}</p>}
 
       <div className="merchant-grid">
+        <Card title="Service Track" subtitle="Village progression">
+          <VillageNpcDetail
+            npc={merchant}
+            currentLevel={currentLevel}
+            nextLevel={nextLevel}
+            canUpgrade={upgradeGate.canUpgrade}
+            reason={upgradeGate.reason}
+            onUpgrade={() => upgradeService(merchant.id)}
+          />
+        </Card>
+
+        <Card title="Materials" subtitle="Available for crafting and upgrades">
+          <MaterialInventory materials={stash.materials ?? {}} compact />
+        </Card>
+
+        <Card title="Service Actions">
+          <ServiceActionPanel actions={actions} onPerform={actionId => performAction(merchant.id, actionId)} />
+        </Card>
+
+        <Card title="Crafting" subtitle={`${recipes.length} unlocked recipe${recipes.length === 1 ? "" : "s"}`}>
+          <CraftingPanel recipes={recipes} inventory={stash} onCraft={craft} />
+        </Card>
+
         <Card title="Stock" subtitle={`${stash.gold} gold available`}>
           <div className="inv-items">
             {stock.map(item => {

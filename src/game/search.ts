@@ -12,8 +12,9 @@ import { applyThreatChange, getThreatModifiers, shouldTriggerAmbush } from "./th
 import { addDungeonLogEntry } from "./dungeonLog";
 import { detectTrap, triggerTrap } from "./traps";
 import { getLootTableForBiome } from "../data/lootTables";
-import { generateLootForRoomLootTableId } from "./lootGenerator";
+import { generateLootForRoomLootTableId, generateMaterialLoot } from "./lootGenerator";
 import { addItem, calculateInventoryWeight } from "./inventory";
+import { addMaterials } from "./materials";
 import type { Rng } from "./rng";
 import { createRng } from "./rng";
 
@@ -163,6 +164,29 @@ export function searchCurrentRoom(params: {
         }
       };
     }
+  }
+
+  const materials = generateMaterialLoot({ biome: room.biome, roomType: room.type, tier: run.tier, rng });
+  if (Object.keys(materials).length > 0) {
+    run = {
+      ...run,
+      raidInventory: addMaterials({ inventory: run.raidInventory, materials })
+    };
+    run = updateRoomSearchState(run, room.id, prev => ({ ...prev, hiddenLootClaimed: true }));
+    const names = Object.entries(materials).map(([id, amount]) => `${amount} ${id}`).join(", ");
+    run = addDungeonLogEntry({
+      run, type: "loot", now, roomId: room.id,
+      message: `Materials: ${names}.`
+    });
+    return {
+      run,
+      character: nextCharacter,
+      result: {
+        type: "hiddenLoot",
+        message: `You gather ${names}.`,
+        loot: []
+      }
+    };
   }
 
   // Rare ambush

@@ -1,4 +1,4 @@
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const DUNGEON_GENERATOR_VERSION = 1;
 export const STORAGE_KEY = "chronicles-of-the-realm:save";
 
@@ -63,6 +63,170 @@ export const INVENTORY_RULES = {
   defaultCarryCapacity: 20,
   maxStackSize: 99
 };
+
+export const VILLAGE_PROGRESSION_RULES = {
+  startingServiceLevel: 1,
+  maxServiceLevel: 5,
+  startingRenown: 0,
+  serviceXpThresholds: {
+    1: 0,
+    2: 50,
+    3: 125,
+    4: 250,
+    5: 450
+  },
+  relationshipThresholds: {
+    stranger: 0,
+    trusted: 25,
+    ally: 60,
+    devoted: 100
+  },
+  generatedQuestRefreshOnExtraction: true,
+  maxAvailableQuestsPerNpc: 2,
+  maxActiveQuests: 4,
+  defaultRelationshipGainOnQuest: 10,
+  defaultServiceXpOnQuest: 25,
+  defaultVillageRenownOnChainStep: 5
+} as const;
+
+export const MATERIAL_RULES = {
+  defaultMaterialVault: {},
+  maxMaterialStackDisplay: 999,
+  roomMaterialRolls: {
+    entrance: 0,
+    combat: 1,
+    eliteCombat: 2,
+    treasure: 3,
+    trap: 1,
+    shrine: 1,
+    npcEvent: 1,
+    questObjective: 2,
+    lockedChest: 3,
+    extraction: 0,
+    boss: 4,
+    empty: 1
+  },
+  rarityWeightsByTier: {
+    1: { common: 82, uncommon: 16, rare: 2, epic: 0 },
+    2: { common: 68, uncommon: 25, rare: 7, epic: 0 },
+    3: { common: 52, uncommon: 32, rare: 14, epic: 2 },
+    4: { common: 38, uncommon: 36, rare: 22, epic: 4 },
+    5: { common: 26, uncommon: 38, rare: 28, epic: 8 }
+  },
+  biomeMaterialProfiles: {
+    crypt: {
+      common: ["graveDust", "boneShards", "paleWax"],
+      uncommon: ["moonlitThread"],
+      rare: ["emberglassShard"]
+    },
+    goblinWarrens: {
+      common: ["scrapIron", "snareCord", "tunnelCharcoal"],
+      uncommon: ["rawhide"],
+      rare: ["emberglassShard"]
+    },
+    fungalCaverns: {
+      common: ["glowcapSpores", "commonHerbs"],
+      uncommon: ["fungalHeart"],
+      rare: ["livingMycelium"]
+    },
+    ruinedKeep: {
+      common: ["oathIron", "bannerThread", "crackedScale"],
+      uncommon: ["moonlitThread"],
+      rare: ["blackQuartz"]
+    },
+    oldMine: {
+      common: ["ironOre", "saltstone", "scrapIron"],
+      uncommon: ["blackQuartz"],
+      rare: ["emberglassShard"]
+    },
+    sunkenTemple: {
+      common: ["coralShard", "drownedSilk", "saltstone"],
+      uncommon: ["brinePearl"],
+      rare: ["moonlitThread"]
+    }
+  }
+} as const;
+
+export const CRAFTING_RULES = {
+  craftFromStashOnly: true,
+  craftedItemsGoToStash: true,
+  allowCraftingDuringActiveRun: false,
+  defaultCraftingGoldMultiplier: 1,
+  minimumServiceLevelForRecipes: {
+    common: 1,
+    uncommon: 2,
+    rare: 3,
+    epic: 4,
+    legendary: 5
+  },
+  maxRecipeOutputs: 3
+} as const;
+
+export const SERVICE_ACTION_RULES = {
+  repairGear: {
+    baseGoldCost: 5,
+    rarityMultiplier: {
+      common: 1,
+      uncommon: 2,
+      rare: 4,
+      epic: 8,
+      legendary: 12
+    }
+  },
+  reinforceItem: {
+    durationRuns: 1,
+    armorBonus: 1,
+    weaponAccuracyBonus: 1,
+    maxReinforcedItemsAtOnce: 1
+  },
+  identifyItem: { baseGoldCost: 8 },
+  rerollMinorAffix: {
+    baseGoldCost: 25,
+    allowedRarities: ["uncommon", "rare"]
+  },
+  healWounded: { baseGoldCost: 10 },
+  sellLoot: {
+    defaultValueMultiplier: 0.5,
+    traderLevelBonusPerLevel: 0.05
+  }
+} as const;
+
+export const RUN_PREPARATION_RULES = {
+  maxPreparedModifiers: 3,
+  maxByServiceRole: {
+    blacksmith: 1,
+    alchemist: 1,
+    enchanter: 1,
+    cartographer: 1,
+    healer: 1,
+    quartermaster: 1,
+    trader: 0,
+    elder: 0
+  },
+  consumeOnRunStart: true,
+  defaultDurationRuns: 1
+} as const;
+
+export const QUEST_CHAIN_RULES = {
+  minStepsPerChain: 3,
+  maxStepsPerChain: 5,
+  autoCreateFirstStepQuest: true,
+  chainQuestClaimRequiresExtraction: true,
+  serviceXpByStepIndex: {
+    0: 25,
+    1: 35,
+    2: 50,
+    3: 75,
+    4: 100
+  },
+  relationshipGainByStepIndex: {
+    0: 8,
+    1: 10,
+    2: 15,
+    3: 20,
+    4: 25
+  }
+} as const;
 
 // ---------------------------------------------------------------------------
 // v0.2: Threat

@@ -11,6 +11,8 @@ import {
 import type { Rng } from "./rng";
 import { makeId } from "./rng";
 
+const STARTING_SERVICE_LEVEL = 1 as const;
+
 export function generateNpcName(rng: Rng): string {
   const first = rng.pickOne(NPC_FIRST_NAMES);
   const last = rng.pickOne(NPC_SURNAMES);
@@ -28,21 +30,29 @@ export function generateVillageNpc(rng: Rng, role: NpcRole): VillageNpc {
     role,
     personality: rng.pickOne(NPC_PERSONALITIES),
     description: ROLE_DESCRIPTIONS[role],
-    serviceLevel: 1,
+    serviceLevel: STARTING_SERVICE_LEVEL,
     relationship: 0,
-    questIds: []
+    questIds: [],
+    service: {
+      role,
+      level: STARTING_SERVICE_LEVEL,
+      xp: 0,
+      unlockedActionIds: [],
+      unlockedRecipeIds: [],
+      unlockedRunPreparationIds: [],
+      unlockedFlags: {}
+    },
+    activeQuestChainIds: [],
+    completedQuestChainIds: []
   };
 }
 
 export function generateVillage(rng: Rng): VillageState {
   const villageName = generateVillageName(rng);
-  const roles: NpcRole[] = [];
-  // Always include elder
-  roles.push("elder");
-  // Pick 4 more roles deterministically from the role pool minus elder
-  const remaining = ROLES_FOR_NEW_VILLAGE.filter(r => r !== "elder");
+  const roles: NpcRole[] = ["elder", "blacksmith", "alchemist", "cartographer", "enchanter", "healer", "quartermaster"];
+  const remaining = ROLES_FOR_NEW_VILLAGE.filter(r => !roles.includes(r));
   const shuffled = rng.shuffle(remaining);
-  for (let i = 0; i < 4 && i < shuffled.length; i++) {
+  for (let i = 0; i < 1 && i < shuffled.length; i++) {
     roles.push(shuffled[i]!);
   }
   const npcs = roles.map(r => generateVillageNpc(rng, r));
@@ -50,6 +60,11 @@ export function generateVillage(rng: Rng): VillageState {
     name: villageName,
     npcs,
     quests: [],
-    unlockFlags: {}
+    questChains: [],
+    unlockFlags: {},
+    renown: 0,
+    completedUpgradeIds: [],
+    discoveredRecipeIds: [],
+    completedRunPreparationIds: []
   };
 }

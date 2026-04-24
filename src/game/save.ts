@@ -17,14 +17,19 @@ import { SAVE_VERSION, STORAGE_KEY, THREAT_RULES } from "./constants";
 import { createEmptyInventory } from "./inventory";
 import { createInitialThreatState, getThreatLevelFromPoints } from "./threat";
 import { createDefaultSearchState } from "./dungeonGenerator";
+import { normalizeMaterialVault } from "./materials";
+import { initializeVillageProgression } from "./villageProgression";
+import { initializeQuestChainsForVillage } from "./questChains";
+import { createRng } from "./rng";
 
 export function defaultGameState(): GameState {
   return {
     version: SAVE_VERSION,
-    stash: { items: [], gold: 0 },
-    preparedInventory: { items: [], gold: 0 },
+    stash: createEmptyInventory(),
+    preparedInventory: createEmptyInventory(),
     completedRuns: [],
     runSummaries: [],
+    pendingRunPreparations: [],
     settings: {
       onboardingComplete: false,
       textSpeed: "normal"
@@ -73,6 +78,7 @@ export function migrateSaveIfNeeded(state: unknown): GameState | null {
     : [];
   const activeRun = normalizeRun(state.activeRun);
   const activeCombat = activeRun ? normalizeCombat(state.activeCombat, activeRun) : undefined;
+  const village = normalizeVillage(state.village);
 
   const normalized: GameState = {
     ...base,
@@ -80,11 +86,13 @@ export function migrateSaveIfNeeded(state: unknown): GameState | null {
     version: SAVE_VERSION,
     stash,
     preparedInventory: normalizeInventory(state.preparedInventory) ?? createEmptyInventory(),
+    village,
     completedRuns,
     runSummaries: normalizeRunSummaries(state.runSummaries),
     lastRunSummary: normalizeRunSummary(state.lastRunSummary),
     activeRun,
     activeCombat,
+    pendingRunPreparations: Array.isArray(state.pendingRunPreparations) ? state.pendingRunPreparations as GameState["pendingRunPreparations"] : [],
     settings: {
       ...base.settings,
       ...(isRecord(state.settings) ? state.settings : {})
@@ -113,8 +121,32 @@ function normalizeInventory(value: unknown): Inventory | null {
   if (!isRecord(value)) return null;
   return {
     items: Array.isArray(value.items) ? value.items as Inventory["items"] : [],
-    gold: typeof value.gold === "number" && Number.isFinite(value.gold) ? value.gold : 0
+    gold: typeof value.gold === "number" && Number.isFinite(value.gold) ? value.gold : 0,
+    materials: normalizeMaterialVault(value.materials)
   };
+}
+
+function normalizeVillage(value: unknown): GameState["village"] {
+  if (!isRecord(value)) return undefined;
+  const npcs = Array.isArray(value.npcs) ? value.npcs as NonNullable<GameState["village"]>["npcs"] : [];
+  const quests = Array.isArray(value.quests) ? value.quests as NonNullable<GameState["village"]>["quests"] : [];
+  let village = initializeVillageProgression({
+    village: {
+      name: typeof value.name === "string" ? value.name : "Hearthglen",
+      npcs,
+      quests,
+      questChains: Array.isArray(value.questChains) ? value.questChains as NonNullable<GameState["village"]>["questChains"] : [],
+      unlockFlags: isRecord(value.unlockFlags) ? value.unlockFlags as Record<string, boolean> : {},
+      renown: typeof value.renown === "number" ? value.renown : 0,
+      completedUpgradeIds: Array.isArray(value.completedUpgradeIds) ? value.completedUpgradeIds as string[] : [],
+      discoveredRecipeIds: Array.isArray(value.discoveredRecipeIds) ? value.discoveredRecipeIds as string[] : [],
+      completedRunPreparationIds: Array.isArray(value.completedRunPreparationIds) ? value.completedRunPreparationIds as string[] : []
+    }
+  });
+  if (village.npcs.length > 0 && village.questChains.length === 0) {
+    village = initializeQuestChainsForVillage({ village, rng: createRng(`migrate-chains:${village.name}`) });
+  }
+  return village;
 }
 
 function normalizeRun(value: unknown): DungeonRun | undefined {
@@ -146,7 +178,8 @@ function normalizeRun(value: unknown): DungeonRun | undefined {
     dangerLevel: typeof value.dangerLevel === "number" ? value.dangerLevel : 1,
     threat: normalizeThreatState(value.threat),
     knownRoomIntel: normalizeKnownRoomIntel(value.knownRoomIntel),
-    dungeonLog: normalizeDungeonLog(value.dungeonLog)
+    dungeonLog: normalizeDungeonLog(value.dungeonLog),
+    appliedRunPreparations: Array.isArray(value.appliedRunPreparations) ? value.appliedRunPreparations as DungeonRun["appliedRunPreparations"] : []
   } as DungeonRun;
 }
 

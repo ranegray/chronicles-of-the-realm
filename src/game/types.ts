@@ -64,6 +64,113 @@ export type DungeonBiome =
   | "oldMine"
   | "sunkenTemple";
 
+export type ServiceLevel = 1 | 2 | 3 | 4 | 5;
+
+export type ServiceUpgradeStatus =
+  | "locked"
+  | "available"
+  | "purchased";
+
+export type ServiceUnlockType =
+  | "serviceAction"
+  | "recipe"
+  | "runPreparation"
+  | "scoutingBonus"
+  | "vendorInventoryTier"
+  | "biomeChoice"
+  | "stashUpgrade"
+  | "itemProtection"
+  | "unlockFlag";
+
+export type ServiceActionId =
+  | "repairGear"
+  | "craftWeapon"
+  | "craftArmor"
+  | "reinforceItem"
+  | "brewPotion"
+  | "brewAntidote"
+  | "brewResistanceTonic"
+  | "identifyItem"
+  | "minorEnchant"
+  | "rerollMinorAffix"
+  | "healWounds"
+  | "buyBasicSupplies"
+  | "sellLoot"
+  | "revealDungeonHint"
+  | "chooseDungeonBiome"
+  | "prepareExtractionMap";
+
+export type MaterialRarity =
+  | "common"
+  | "uncommon"
+  | "rare"
+  | "epic";
+
+export type MaterialCategory =
+  | "ore"
+  | "herb"
+  | "reagent"
+  | "relic"
+  | "cloth"
+  | "bone"
+  | "crystal"
+  | "monsterPart"
+  | "salvage";
+
+export type MaterialId =
+  | "graveDust"
+  | "boneShards"
+  | "paleWax"
+  | "scrapIron"
+  | "snareCord"
+  | "tunnelCharcoal"
+  | "glowcapSpores"
+  | "fungalHeart"
+  | "livingMycelium"
+  | "oathIron"
+  | "bannerThread"
+  | "crackedScale"
+  | "ironOre"
+  | "saltstone"
+  | "blackQuartz"
+  | "brinePearl"
+  | "coralShard"
+  | "drownedSilk"
+  | "commonHerbs"
+  | "rawhide"
+  | "emberglassShard"
+  | "moonlitThread";
+
+export type MaterialVault = Partial<Record<MaterialId, number>>;
+
+export interface MaterialDefinition {
+  id: MaterialId;
+  name: string;
+  description: string;
+  category: MaterialCategory;
+  rarity: MaterialRarity;
+  sourceBiomes: DungeonBiome[];
+  baseValue: number;
+  tags: string[];
+}
+
+export interface MaterialBundle {
+  materials: MaterialVault;
+}
+
+export interface ResourceCost {
+  gold?: number;
+  materials?: MaterialVault;
+  itemTemplateIds?: string[];
+}
+
+export interface ResourceReward {
+  gold?: number;
+  xp?: number;
+  materials?: MaterialVault;
+  itemTemplateIds?: string[];
+}
+
 export type RunStatus =
   | "notStarted"
   | "active"
@@ -191,6 +298,7 @@ export interface Character {
 export interface Inventory {
   items: ItemInstance[];
   gold: number;
+  materials?: MaterialVault;
 }
 
 export interface DiceFormula {
@@ -289,6 +397,7 @@ export interface DungeonRun {
     extractionId: string;
     turnsRemaining: number;
   };
+  appliedRunPreparations?: PreparedRunModifier[];
 }
 
 export type NpcRole =
@@ -301,15 +410,75 @@ export type NpcRole =
   | "healer"
   | "trader";
 
+export interface ServiceUnlock {
+  id: string;
+  type: ServiceUnlockType;
+  label: string;
+  description: string;
+  actionId?: ServiceActionId;
+  recipeId?: string;
+  runPreparationId?: string;
+  unlockFlag?: string;
+  value?: number | string | boolean;
+}
+
+export type UpgradeRequirementType =
+  | "npcRelationship"
+  | "completedQuest"
+  | "completedQuestChain"
+  | "completedQuestChainStep"
+  | "playerLevel"
+  | "serviceLevel"
+  | "villageFlag"
+  | "itemInStash"
+  | "materialCount";
+
+export interface UpgradeRequirement {
+  type: UpgradeRequirementType;
+  key: string;
+  value?: string | number | boolean;
+  description: string;
+}
+
+export interface ServiceLevelDefinition {
+  level: ServiceLevel;
+  title: string;
+  description: string;
+  upgradeCost?: ResourceCost;
+  requirements?: UpgradeRequirement[];
+  unlocks: ServiceUnlock[];
+}
+
+export interface ServiceDefinition {
+  role: NpcRole;
+  displayName: string;
+  description: string;
+  levelDefinitions: ServiceLevelDefinition[];
+}
+
+export interface NpcServiceState {
+  role: NpcRole;
+  level: ServiceLevel;
+  xp: number;
+  unlockedActionIds: ServiceActionId[];
+  unlockedRecipeIds: string[];
+  unlockedRunPreparationIds: string[];
+  unlockedFlags: Record<string, boolean>;
+  lastUpgradedAt?: number;
+}
+
 export interface VillageNpc {
   id: string;
   name: string;
   role: NpcRole;
   personality: string;
   description: string;
-  serviceLevel: number;
+  serviceLevel: ServiceLevel;
   relationship: number;
   questIds: string[];
+  service: NpcServiceState;
+  activeQuestChainIds?: string[];
+  completedQuestChainIds?: string[];
 }
 
 export type QuestType =
@@ -333,15 +502,22 @@ export interface QuestReward {
   gold?: number;
   xp?: number;
   itemTemplateIds?: string[];
-  materials?: Record<string, number>;
+  materials?: MaterialVault;
   relationshipGain?: number;
+  serviceXp?: number;
+  villageRenown?: number;
+  discoveredRecipeIds?: string[];
 }
 
 export interface UnlockEffect {
   npcId?: string;
   role?: NpcRole;
   serviceLevelIncrease?: number;
+  serviceXpGain?: number;
   unlockFlag?: string;
+  unlockRecipeIds?: string[];
+  unlockActionIds?: ServiceActionId[];
+  unlockRunPreparationIds?: string[];
 }
 
 export interface Quest {
@@ -357,13 +533,188 @@ export interface Quest {
   reward: QuestReward;
   unlockEffect?: UnlockEffect;
   status: QuestStatus;
+  chainId?: string;
+  chainStepId?: string;
+  chainStepIndex?: number;
+  claimOnlyAfterExtraction?: boolean;
+}
+
+export type QuestChainStatus =
+  | "locked"
+  | "available"
+  | "active"
+  | "completed";
+
+export type QuestChainStepStatus =
+  | "locked"
+  | "available"
+  | "active"
+  | "completed"
+  | "claimed";
+
+export interface QuestChainDefinition {
+  id: string;
+  title: string;
+  description: string;
+  npcRole: NpcRole;
+  minServiceLevel?: ServiceLevel;
+  steps: QuestChainStepDefinition[];
+  completionReward?: QuestReward;
+  completionUnlocks?: ServiceUnlock[];
+}
+
+export interface QuestChainStepDefinition {
+  id: string;
+  chainId: string;
+  stepIndex: number;
+  title: string;
+  description: string;
+  questType: QuestType;
+  target: string;
+  requiredCount: number;
+  biome?: DungeonBiome;
+  reward: QuestReward;
+  unlockEffect?: UnlockEffect;
+  claimOnlyAfterExtraction: boolean;
+}
+
+export interface QuestChainState {
+  chainId: string;
+  npcId: string;
+  status: QuestChainStatus;
+  currentStepIndex: number;
+  stepStatuses: Record<string, QuestChainStepStatus>;
+  activeQuestId?: string;
+  completedAt?: number;
 }
 
 export interface VillageState {
   name: string;
   npcs: VillageNpc[];
   quests: Quest[];
+  questChains: QuestChainState[];
   unlockFlags: Record<string, boolean>;
+  renown: number;
+  completedUpgradeIds: string[];
+  discoveredRecipeIds: string[];
+  completedRunPreparationIds?: string[];
+}
+
+export type RecipeCategory =
+  | "weapon"
+  | "armor"
+  | "shield"
+  | "potion"
+  | "trinket"
+  | "tool"
+  | "enchantment"
+  | "upgradeMaterial";
+
+export interface RecipeIngredient {
+  materialId?: MaterialId;
+  itemTemplateId?: string;
+  quantity: number;
+}
+
+export interface RecipeOutput {
+  itemTemplateId?: string;
+  materialId?: MaterialId;
+  quantity: number;
+}
+
+export interface CraftingRecipe {
+  id: string;
+  name: string;
+  description: string;
+  category: RecipeCategory;
+  stationRole: NpcRole;
+  requiredServiceLevel: ServiceLevel;
+  ingredients: RecipeIngredient[];
+  goldCost?: number;
+  outputs: RecipeOutput[];
+  unlockFlag?: string;
+  repeatable: boolean;
+}
+
+export interface ServiceActionDefinition {
+  id: ServiceActionId;
+  role: NpcRole;
+  name: string;
+  description: string;
+  requiredServiceLevel: ServiceLevel;
+  cost?: ResourceCost;
+  effect: ServiceActionEffect;
+  repeatable: boolean;
+}
+
+export type ServiceActionEffectType =
+  | "repairItem"
+  | "craftRecipe"
+  | "healWounded"
+  | "identifyItem"
+  | "addRunPreparation"
+  | "revealDungeonHint"
+  | "unlockRecipe"
+  | "rerollAffix"
+  | "reinforceItem"
+  | "sellItems";
+
+export interface ServiceActionEffect {
+  type: ServiceActionEffectType;
+  recipeId?: string;
+  runPreparationId?: string;
+  itemInstanceId?: string;
+  amount?: number;
+  message: string;
+}
+
+export interface ServiceActionResult {
+  success: boolean;
+  message: string;
+  gameState?: GameState;
+  createdItems?: ItemInstance[];
+  spentResources?: ResourceCost;
+}
+
+export type RunPreparationEffectType =
+  | "startWithItem"
+  | "revealExtraRooms"
+  | "increaseCarryCapacity"
+  | "temporaryStatBonus"
+  | "protectOneItem"
+  | "reduceStartingThreat"
+  | "trapWard"
+  | "extractionHint"
+  | "improveScouting";
+
+export interface RunPreparationEffect {
+  type: RunPreparationEffectType;
+  amount?: number;
+  quantity?: number;
+  itemTemplateId?: string;
+  statKey?: keyof DerivedStats | AbilityName;
+  targetItemInstanceId?: string;
+  durationRuns: number;
+}
+
+export interface RunPreparationOption {
+  id: string;
+  name: string;
+  description: string;
+  sourceRole: NpcRole;
+  requiredServiceLevel: ServiceLevel;
+  cost: ResourceCost;
+  effect: RunPreparationEffect;
+  oncePerRun: boolean;
+}
+
+export interface PreparedRunModifier {
+  id: string;
+  optionId: string;
+  sourceNpcId: string;
+  effect: RunPreparationEffect;
+  createdAt: number;
+  consumed: boolean;
 }
 
 export interface GameSettings {
@@ -383,6 +734,7 @@ export interface GameState {
   runSummaries: RunSummary[];
   lastRunSummary?: RunSummary;
   settings: GameSettings;
+  pendingRunPreparations?: PreparedRunModifier[];
 }
 
 export type RunEndReason =

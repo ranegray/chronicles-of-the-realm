@@ -27,7 +27,7 @@ import { generateDungeonRun, getRoomById } from "../game/dungeonGenerator";
 import { defaultGameState, loadGame, resetGame, saveGame } from "../game/save";
 import { addItem, calculateInventoryWeight, createEmptyInventory, instanceFromTemplateId, removeItem } from "../game/inventory";
 import { getConsumableHealFormula, rollConsumableHealAmount } from "../game/itemEffects";
-import { generateLootForRoomLootTableId, rollGold } from "../game/lootGenerator";
+import { generateLootForRoomLootTableId, generateMaterialLoot, rollGold } from "../game/lootGenerator";
 import { getLootTableForBiome } from "../data/lootTables";
 import { getEncounter, getEncountersForBiome } from "../data/encounters";
 import { getEnemy } from "../data/enemies";
@@ -60,6 +60,13 @@ import {
 } from "../game/merchants";
 import type { Rng } from "../game/rng";
 import { createRng, randomSeed } from "../game/rng";
+import { addMaterials } from "../game/materials";
+import { initializeVillageProgression, upgradeNpcService as upgradeNpcServiceBase } from "../game/villageProgression";
+import { initializeQuestChainsForVillage, advanceQuestChainAfterQuestClaim } from "../game/questChains";
+import { craftRecipe as craftRecipeBase } from "../game/crafting";
+import { performServiceAction as performServiceActionBase } from "../game/services";
+import { purchaseRunPreparation as purchaseRunPreparationBase, applyRunPreparationsToRun } from "../game/runPreparation";
+import { applyQuestReward } from "../game/villageRewards";
 
 export interface GameStore {
   screen: ScreenId;
@@ -133,6 +140,19 @@ export interface GameStore {
   sellStashItem: (itemInstanceId: string) => void;
   upgradeEquippedItem: (slot: EquipmentSlotId) => void;
   claimQuestReward: (questId: string) => void;
+  upgradeNpcService: (npcId: string) => void;
+  craftRecipe: (recipeId: string) => void;
+  performServiceAction: (
+    npcId: string,
+    actionId: import("../game/types").ServiceActionId,
+    options?: {
+      targetItemInstanceId?: string;
+      recipeId?: string;
+    }
+  ) => void;
+  purchaseRunPreparation: (npcId: string, optionId: string) => void;
+  clearPendingRunPreparation: (preparedModifierId: string) => void;
+  startDungeonRunWithPreparations: (params?: { biome?: import("../game/types").DungeonBiome; seed?: string }) => void;
 
   // Dev tools
   debugGenerateDungeonSeed: () => void;
@@ -147,6 +167,7 @@ export interface GameStore {
 interface RoomScratch {
   loot?: ItemInstance[];
   goldFound?: number;
+  materialsFound?: import("../game/types").MaterialVault;
   searched?: boolean;
 }
 
@@ -295,7 +316,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const finalized = CharacterCreationService.finalizeCharacter(d);
     const villageRng = createRng(`village:${finalized.character.id}`);
-    let village = generateVillage(villageRng);
+    let village = initializeVillageProgression({ village: generateVillage(villageRng) });
+    village = initializeQuestChainsForVillage({ village, rng: villageRng });
     village = seedVillageQuests(village, villageRng);
     const equippedIds = new Set(Object.values(finalized.character.equipped).filter(Boolean).map(item => item!.instanceId));
     const starterStash = finalized.equipment.filter(item => !equippedIds.has(item.instanceId));
@@ -311,7 +333,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       stash,
       preparedInventory: createEmptyInventory()
     };
-    next.stash = { items: next.stash.items, gold: next.stash.gold + 25 };
+    next.stash = { ...next.stash, gold: next.stash.gold + 25, materials: next.stash.materials ?? {} };
     set({ state: next, draft: null, screen: "village" });
     persist(next);
   },
@@ -344,9 +366,49 @@ export const useGameStore = create<GameStore>((set, get) => ({
     run.raidInventory = s.preparedInventory ?? createEmptyInventory();
     run.loadoutSnapshot = collectLoadoutSnapshot(s.player);
     run.questProgressAtStart = captureQuestProgress(s.village, activeIds);
-    run = scoutFromCurrent(run, s.player, s.village);
+    const prepared = applyRunPreparationsToRun({
+      run,
+      character: s.player,
+      preparations: s.pendingRunPreparations ?? [],
+      rng: createRng(`prep:${seed}`)
+    });
+    run = scoutFromCurrent(prepared.run, prepared.character, s.village);
     roomScratch.clear();
-    const next: GameState = { ...s, activeRun: run, preparedInventory: createEmptyInventory() };
+    const next: GameState = {
+      ...s,
+      player: prepared.character,
+      activeRun: run,
+      preparedInventory: createEmptyInventory(),
+      pendingRunPreparations: (s.pendingRunPreparations ?? []).filter(prep => !prepared.appliedPreparations.some(applied => applied.id === prep.id))
+    };
+    set({ state: next, screen: "dungeon", lastRoomMessage: `You enter the ${run.biome} (${run.seed}).` });
+    persist(next);
+  },
+
+  startDungeonRunWithPreparations: params => {
+    const s = get().state;
+    if (!s.player) return;
+    const seed = params?.seed ?? randomSeed();
+    const activeIds = s.village?.quests.filter(q => q.status === "active").map(q => q.id) ?? [];
+    let run = generateDungeonRun({ seed, biome: params?.biome, activeQuestIds: activeIds });
+    run.raidInventory = s.preparedInventory ?? createEmptyInventory();
+    run.loadoutSnapshot = collectLoadoutSnapshot(s.player);
+    run.questProgressAtStart = captureQuestProgress(s.village, activeIds);
+    const prepared = applyRunPreparationsToRun({
+      run,
+      character: s.player,
+      preparations: s.pendingRunPreparations ?? [],
+      rng: createRng(`prep:${seed}`)
+    });
+    run = scoutFromCurrent(prepared.run, prepared.character, s.village);
+    roomScratch.clear();
+    const next: GameState = {
+      ...s,
+      player: prepared.character,
+      activeRun: run,
+      preparedInventory: createEmptyInventory(),
+      pendingRunPreparations: (s.pendingRunPreparations ?? []).filter(prep => !prepared.appliedPreparations.some(applied => applied.id === prep.id))
+    };
     set({ state: next, screen: "dungeon", lastRoomMessage: `You enter the ${run.biome} (${run.seed}).` });
     persist(next);
   },
@@ -503,8 +565,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } else if (room.type === "shrine") {
       gold = rollGold(rng, run.tier);
     }
+    const materials = generateMaterialLoot({ biome: room.biome, roomType: room.type, tier: run.tier, rng });
     scratch.loot = items;
     scratch.goldFound = gold;
+    scratch.materialsFound = materials;
     scratch.searched = true;
     roomScratch.set(room.id, scratch);
 
@@ -515,9 +579,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       state: next,
       lastRoomMessage:
-        items.length === 0 && gold === 0
+        items.length === 0 && gold === 0 && Object.keys(materials).length === 0
           ? "Nothing of worth in this room."
-          : `Found ${items.length} item(s)${gold > 0 ? ` and ${gold} gold` : ""}.`
+          : `Found ${items.length} item(s)${gold > 0 ? ` and ${gold} gold` : ""}${Object.keys(materials).length > 0 ? " and materials" : ""}.`
     });
   },
 
@@ -606,6 +670,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     const items = scratch.loot ?? [];
     const gold = scratch.goldFound ?? 0;
+    const materials = scratch.materialsFound ?? {};
     let raid = run.raidInventory;
     const cap = s.player.derivedStats.carryCapacity;
     const remaining: ItemInstance[] = [];
@@ -626,8 +691,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
     raid = { ...raid, gold: raid.gold + gold };
+    raid = addMaterials({ inventory: raid, materials });
+    for (const [id, amount] of Object.entries(materials)) {
+      for (let i = 0; i < (amount ?? 0); i++) {
+        next = notifyQuestEvent(next, { kind: "materialCollected", tag: id, biome: room.biome });
+      }
+    }
     scratch.loot = remaining;
     scratch.goldFound = 0;
+    scratch.materialsFound = {};
     roomScratch.set(room.id, scratch);
 
     const updatedRooms = run.roomGraph.map(r =>
@@ -642,7 +714,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastRoomMessage:
         remaining.length > 0
           ? "You take what you can carry. Some loot is left behind."
-          : "Loot taken into your raid pack."
+          : "Loot and materials taken into your raid pack."
     });
     persist(next);
   },
@@ -672,7 +744,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       next = notifyQuestEvent(next, { kind: "signFound", biome: room.biome });
     }
     scratch.loot = remaining;
-    if (remaining.length === 0 && (scratch.goldFound ?? 0) === 0) {
+    if (remaining.length === 0 && (scratch.goldFound ?? 0) === 0 && Object.keys(scratch.materialsFound ?? {}).length === 0) {
       const updatedRooms = next.activeRun!.roomGraph.map(r =>
         r.id === room.id ? { ...r, completed: true } : r
       );
@@ -1041,6 +1113,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
       next = { ...next, activeRun: { ...next.activeRun!, raidInventory: raid } };
     }
+    const materialLoot = generateMaterialLoot({ biome: room.biome, roomType: room.type, tier: run.tier, rng });
+    if (Object.keys(materialLoot).length > 0 && next.activeRun) {
+      let raid = addMaterials({ inventory: next.activeRun.raidInventory, materials: materialLoot });
+      next = { ...next, activeRun: { ...next.activeRun, raidInventory: raid } };
+      for (const [id, amount] of Object.entries(materialLoot)) {
+        lootMessages.push(`${amount} ${id}`);
+        for (let i = 0; i < (amount ?? 0); i++) {
+          next = notifyQuestEvent(next, { kind: "materialCollected", tag: id, biome: room.biome });
+        }
+      }
+    }
     const enc = getEncounter(combat.encounterId);
     let xpGain = 0;
     for (const enemyId of enc.enemyIds) {
@@ -1278,40 +1361,68 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   claimQuestReward: questId => {
     const s = get().state;
-    if (!s.player || !s.village) return;
-    const quest = s.village.quests.find(q => q.id === questId);
-    if (!quest || quest.status !== "completed") return;
-    let stash = { ...s.stash, gold: s.stash.gold + (quest.reward.gold ?? 0) };
-    const rng = createRng(`questReward:${quest.id}`);
-    for (const templateId of quest.reward.itemTemplateIds ?? []) {
-      stash = addItem(stash, instanceFromTemplateId(templateId, rng, 1));
+    const reward = applyQuestReward({ gameState: s, questId, now: Date.now() });
+    if (!reward.success) {
+      set({ lastVillageMessage: reward.messages[0] ?? "Quest is not ready." });
+      return;
     }
-    let village: VillageState = {
-      ...s.village,
-      npcs: s.village.npcs.map(npc =>
-        npc.id === quest.npcId && quest.reward.relationshipGain
-          ? { ...npc, relationship: npc.relationship + quest.reward.relationshipGain }
-          : { ...npc }
-      ),
-      quests: s.village.quests.map(q => q.id === questId ? { ...q, status: "claimed" } : q)
+    const advanced = advanceQuestChainAfterQuestClaim({ gameState: reward.gameState, questId, now: Date.now() });
+    const next: GameState = {
+      ...advanced.gameState,
+      player: advanced.gameState.player ? applyXpAndLevel(advanced.gameState.player) : advanced.gameState.player
     };
-    if (quest.unlockEffect) {
-      const effect = quest.unlockEffect;
-      village = {
-        ...village,
-        unlockFlags: effect.unlockFlag
-          ? { ...village.unlockFlags, [effect.unlockFlag]: true }
-          : village.unlockFlags,
-        npcs: village.npcs.map(npc =>
-          effect.role && npc.role === effect.role && effect.serviceLevelIncrease
-            ? { ...npc, serviceLevel: npc.serviceLevel + effect.serviceLevelIncrease! }
-            : npc
-        )
-      };
+    const message = advanced.message ? `${reward.messages[0]} ${advanced.message}` : reward.messages[0];
+    set({ state: next, lastVillageMessage: message });
+    persist(next);
+  },
+
+  upgradeNpcService: npcId => {
+    const result = upgradeNpcServiceBase({ gameState: get().state, npcId, now: Date.now() });
+    set({ state: result.gameState, lastVillageMessage: result.message });
+    persist(result.gameState);
+  },
+
+  craftRecipe: recipeId => {
+    const result = craftRecipeBase({
+      gameState: get().state,
+      recipeId,
+      rng: createRng(`craft:${recipeId}:${Date.now()}`),
+      now: Date.now()
+    });
+    set({ state: result.gameState, lastVillageMessage: result.message });
+    persist(result.gameState);
+  },
+
+  performServiceAction: (npcId, actionId, options) => {
+    const result = performServiceActionBase({
+      gameState: get().state,
+      npcId,
+      actionId,
+      targetItemInstanceId: options?.targetItemInstanceId,
+      recipeId: options?.recipeId,
+      now: Date.now()
+    });
+    if (result.gameState) {
+      set({ state: result.gameState, lastVillageMessage: result.message });
+      persist(result.gameState);
+    } else {
+      set({ lastVillageMessage: result.message });
     }
-    const playerWithXp = applyXpAndLevel({ ...s.player, xp: s.player.xp + (quest.reward.xp ?? 0) });
-    const next: GameState = { ...s, player: playerWithXp, village, stash };
-    set({ state: next, lastVillageMessage: `${quest.title} turned in.` });
+  },
+
+  purchaseRunPreparation: (npcId, optionId) => {
+    const result = purchaseRunPreparationBase({ gameState: get().state, optionId, npcId, now: Date.now() });
+    set({ state: result.gameState, lastVillageMessage: result.message });
+    persist(result.gameState);
+  },
+
+  clearPendingRunPreparation: preparedModifierId => {
+    const s = get().state;
+    const next: GameState = {
+      ...s,
+      pendingRunPreparations: (s.pendingRunPreparations ?? []).filter(prep => prep.id !== preparedModifierId)
+    };
+    set({ state: next, lastVillageMessage: "Preparation cleared." });
     persist(next);
   },
 

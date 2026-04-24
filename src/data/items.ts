@@ -281,6 +281,52 @@ export const ITEM_TEMPLATES: ItemTemplate[] = [
     value: 2, weight: 1, stackable: true,
     tags: ["food"]
   },
+  {
+    id: "consumable_basic_antidote",
+    name: "Basic Antidote",
+    category: "consumable",
+    rarity: "common",
+    description: "A sharp green mixture prepared for venom, spores, and bad air.",
+    value: 10, weight: 1, stackable: true,
+    tags: ["potion", "antidote"]
+  },
+  {
+    id: "consumable_stamina_tonic",
+    name: "Stamina Tonic",
+    category: "consumable",
+    rarity: "uncommon",
+    description: "A hot tonic that steadies tired legs before a hard retreat.",
+    value: 16, weight: 1, stackable: true,
+    tags: ["potion", "stamina"]
+  },
+  {
+    id: "consumable_resistance_tonic",
+    name: "Resistance Tonic",
+    category: "consumable",
+    rarity: "uncommon",
+    description: "A bitter brew that leaves the tongue numb and the nerves braced.",
+    value: 20, weight: 1, stackable: true,
+    tags: ["potion", "resistance"]
+  },
+  {
+    id: "tool_field_repair_kit",
+    name: "Field Repair Kit",
+    category: "trinket",
+    rarity: "common",
+    description: "Wire, straps, and resin bundled for quick equipment fixes.",
+    value: 12, weight: 1, stackable: true,
+    tags: ["tool", "repair"]
+  },
+  {
+    id: "tool_delvers_kit",
+    name: "Delver's Kit",
+    category: "trinket",
+    rarity: "uncommon",
+    description: "A careful bundle of chalk, hooks, cord, wedges, and oilcloth.",
+    value: 28, weight: 1, stackable: true,
+    stats: { trapSense: 1 },
+    tags: ["tool", "delving"]
+  },
   // -- Scrolls --
   {
     id: "scroll_spark",

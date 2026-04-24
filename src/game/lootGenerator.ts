@@ -1,5 +1,5 @@
-import type { ItemInstance, Rarity } from "./types";
-import { LOOT_RULES } from "./constants";
+import type { DungeonBiome, ItemInstance, MaterialId, MaterialRarity, MaterialVault, Rarity, RoomType } from "./types";
+import { LOOT_RULES, MATERIAL_RULES } from "./constants";
 import { getItemTemplate } from "../data/items";
 import { getLootTableById, type LootTable, type LootEntry } from "../data/lootTables";
 import { instanceFromTemplateId } from "./inventory";
@@ -57,4 +57,39 @@ export function rollGold(rng: Rng, tier: number): number {
   const min = 2 + tier * 2;
   const max = 10 + tier * 6;
   return rng.nextInt(min, max);
+}
+
+export function generateMaterialLoot(params: {
+  biome: DungeonBiome;
+  roomType: RoomType;
+  tier: number;
+  rng: Rng;
+}): MaterialVault {
+  const rolls = MATERIAL_RULES.roomMaterialRolls[params.roomType] ?? 0;
+  if (rolls <= 0) return {};
+  const vault: MaterialVault = {};
+  for (let i = 0; i < rolls; i++) {
+    const rarity = rollMaterialRarity(params.tier, params.rng);
+    const id = pickMaterialForBiome(params.biome, rarity, params.rng);
+    const quantity = rarity === "common" ? params.rng.nextInt(1, 3) : 1;
+    vault[id] = (vault[id] ?? 0) + quantity;
+  }
+  return vault;
+}
+
+function rollMaterialRarity(tier: number, rng: Rng): MaterialRarity {
+  const clampedTier = Math.min(5, Math.max(1, tier)) as keyof typeof MATERIAL_RULES.rarityWeightsByTier;
+  const weights = MATERIAL_RULES.rarityWeightsByTier[clampedTier];
+  return rng.pickWeighted(
+    (Object.entries(weights) as [MaterialRarity, number][])
+      .filter(([, weight]) => weight > 0)
+      .map(([value, weight]) => ({ value, weight }))
+  );
+}
+
+function pickMaterialForBiome(biome: DungeonBiome, rarity: MaterialRarity, rng: Rng): MaterialId {
+  const profile = MATERIAL_RULES.biomeMaterialProfiles[biome];
+  const rarityKey = rarity === "epic" ? "rare" : rarity;
+  const pool = profile[rarityKey as keyof typeof profile] ?? profile.common;
+  return rng.pickOne(pool) as MaterialId;
 }

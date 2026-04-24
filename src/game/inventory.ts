@@ -5,7 +5,7 @@ import type { Rng } from "./rng";
 import { makeId } from "./rng";
 
 export function createEmptyInventory(): Inventory {
-  return { items: [], gold: 0 };
+  return { items: [], gold: 0, materials: {} };
 }
 
 export function instanceFromTemplate(
@@ -94,7 +94,17 @@ export function moveRaidInventoryToStash(
   for (const item of raid.items) {
     next = addItem(next, item);
   }
-  next = { ...next, gold: next.gold + raid.gold };
+  next = {
+    ...next,
+    gold: next.gold + raid.gold,
+    materials: { ...(next.materials ?? {}) }
+  };
+  for (const [id, amount] of Object.entries(raid.materials ?? {})) {
+    next.materials = {
+      ...(next.materials ?? {}),
+      [id]: (next.materials?.[id as keyof typeof next.materials] ?? 0) + (amount ?? 0)
+    };
+  }
   return { stash: next, raid: createEmptyInventory() };
 }
 
