@@ -22,6 +22,8 @@ import { createInitialThreatState } from "./threat";
 import { addDungeonLogEntry, createEmptyDungeonLog } from "./dungeonLog";
 import { BIOME_SIGN_FLAVOR, ROOM_SIGNS_BY_TYPE } from "../data/roomSigns";
 import { generateTrapForRoom } from "./traps";
+import { generateRoomEvent } from "./roomEvents";
+import { ROOM_EVENT_RULES } from "./constants";
 
 export interface DungeonGenParams {
   seed?: string;
@@ -246,7 +248,7 @@ function buildRoom(
   }
 
   const id = `room_${idx}_${makeId(rng, "r")}`;
-  return {
+  const bareRoom: DungeonRoom = {
     id,
     type,
     biome,
@@ -264,7 +266,30 @@ function buildRoom(
     searchState: createDefaultSearchState(),
     scoutingProfile: computeScoutingProfile(type, biome, dangerRating, extractionPoint)
   };
+  const activeEvent = maybeGenerateEvent({ room: bareRoom, biome, tier, rng });
+  return activeEvent ? { ...bareRoom, activeEvent } : bareRoom;
 }
+
+function maybeGenerateEvent(params: {
+  room: DungeonRoom;
+  biome: DungeonBiome;
+  tier: number;
+  rng: Rng;
+}): ActiveRoomEventSeed | undefined {
+  const { room, biome, tier, rng } = params;
+  // shrine and npcEvent rooms always get an event; empty rooms roll a chance;
+  // lockedChest rooms have a 50% chance of a whispering-chest event.
+  let spawn = false;
+  if (room.type === "shrine" || room.type === "npcEvent") spawn = true;
+  else if (room.type === "empty") spawn = rng.nextFloat() < ROOM_EVENT_RULES.eventRoomChance;
+  else if (room.type === "lockedChest") spawn = rng.nextFloat() < 0.5;
+  if (!spawn) return undefined;
+  const generated = generateRoomEvent({ room, biome, tier, rng });
+  if (!generated) return undefined;
+  return { ...generated, roomId: room.id };
+}
+
+type ActiveRoomEventSeed = NonNullable<DungeonRoom["activeEvent"]>;
 
 export function computeScoutingProfile(
   type: RoomType,

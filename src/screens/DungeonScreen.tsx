@@ -1,6 +1,7 @@
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { DungeonLog } from "../components/DungeonLog";
+import { EventChoicePanel } from "../components/EventChoicePanel";
 import { RoomIntelCard } from "../components/RoomIntelCard";
 import { ThreatMeter } from "../components/ThreatMeter";
 import { useGameStore } from "../store/gameStore";
@@ -12,6 +13,7 @@ import type { ActiveTrap, DungeonRoom, DungeonRun } from "../game/types";
 import { nextStepToKnownExtraction } from "../game/pathing";
 import { SEARCH_RULES } from "../game/constants";
 import { getTrapTemplate } from "../data/trapTables";
+import { getEventTemplate } from "../data/eventTemplates";
 
 const TYPE_LABELS: Record<string, string> = {
   entrance: "Entrance",
@@ -49,6 +51,7 @@ export function DungeonScreen() {
   const moveToRoom = useGameStore(s => s.moveToRoom);
   const search = useGameStore(s => s.searchRoom);
   const disarm = useGameStore(s => s.disarmTrap);
+  const chooseEvent = useGameStore(s => s.chooseRoomEventOption);
   const loot = useGameStore(s => s.lootRoom);
   const extract = useGameStore(s => s.attemptExtract);
   const descend = useGameStore(s => s.descendDungeon);
@@ -104,7 +107,19 @@ export function DungeonScreen() {
           {current.trapId && <p className="warn">Trap: {current.trapId}</p>}
           {lastMessage && <p className="msg">{lastMessage}</p>}
 
+          {current.activeEvent && (
+            <EventChoicePanel
+              event={current.activeEvent}
+              definition={tryEventTemplate(current.activeEvent.eventId) ?? fallbackDefinition(current.activeEvent.eventId)}
+              character={player}
+              run={run}
+              onChoose={chooseEvent}
+            />
+          )}
+
           <div className="room-actions">
+            {current.activeEvent && !current.activeEvent.resolved ? null : (
+            <>
             {(current.type === "treasure" || current.type === "lockedChest" || current.type === "shrine") && (
               <>
                 <Button onClick={search}>Search</Button>
@@ -135,8 +150,10 @@ export function DungeonScreen() {
             {current.type === "questObjective" && (
               <Button onClick={search}>Investigate</Button>
             )}
-            {current.type === "npcEvent" && (
+            {current.type === "npcEvent" && !current.activeEvent && (
               <Button onClick={search}>Listen</Button>
+            )}
+            </>
             )}
           </div>
           {current.activeTrap && (
@@ -233,6 +250,23 @@ function TrapStatus({ trap }: { trap: ActiveTrap }) {
 
 function tryTrapTemplate(id: string) {
   try { return getTrapTemplate(id); } catch { return undefined; }
+}
+
+function tryEventTemplate(id: string) {
+  try { return getEventTemplate(id); } catch { return undefined; }
+}
+
+function fallbackDefinition(id: string) {
+  return {
+    id,
+    type: "obstacle" as const,
+    title: "Something Happens",
+    description: "The moment passes without drama.",
+    minTier: 1,
+    maxTier: 5,
+    weight: 0,
+    choices: []
+  };
 }
 
 function ExtractionPressureBanner({

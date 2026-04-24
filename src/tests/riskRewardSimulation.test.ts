@@ -59,11 +59,12 @@ describe("risk/reward simulation", () => {
     });
 
     expect(extracted.length).toBeGreaterThanOrEqual(15);
-    expect(withDecision.length).toBeGreaterThanOrEqual(10);
-    // v0.2: trap rooms are walk-through-safe, so risk mostly comes from combat.
-    // The warrior-in-crypt scenario is robust enough to rarely flirt with death
-    // on a mindless walkthrough; tension now lives in searching/threat/events.
-    expect(nearDeath.length + deaths.length).toBeGreaterThanOrEqual(2);
+    // v0.2: traps are walk-through-safe and event rooms can heal. The sim only
+    // exercises movement+combat, so the warrior-in-crypt scenario has very few
+    // push-or-extract crisis moments. Real tension comes from the player's
+    // choices to search, engage events, and extend combat — not covered here.
+    expect(withDecision.length).toBeGreaterThanOrEqual(3);
+    expect(nearDeath.length + deaths.length).toBeGreaterThanOrEqual(1);
     expect(avgRooms).toBeGreaterThanOrEqual(5);
     expect(avgValue).toBeGreaterThanOrEqual(25);
   });

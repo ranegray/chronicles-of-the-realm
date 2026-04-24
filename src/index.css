@@ -711,3 +711,53 @@ button.map-room:hover {
 .dungeon-log-trap { border-left-color: var(--warn); }
 .dungeon-log-quest { border-left-color: var(--rarity-rare); }
 
+/* Event panel */
+.event-panel {
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent-2);
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(216, 178, 92, 0.06), transparent 60%);
+}
+.event-panel-resolved {
+  border-left-color: var(--text-muted);
+  background: none;
+  opacity: 0.85;
+}
+.event-panel-header h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  color: var(--accent-2);
+  letter-spacing: 0.02em;
+}
+.event-panel-description {
+  margin: 0 0 8px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.event-panel-choices {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.event-choice .btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 10px;
+  width: 100%;
+}
+.event-choice-locked .btn {
+  opacity: 0.55;
+}
+.event-choice-desc {
+  color: var(--text-dim);
+  font-size: 0.88rem;
+  font-weight: 400;
+}
+

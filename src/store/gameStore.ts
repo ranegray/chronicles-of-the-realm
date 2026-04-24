@@ -45,6 +45,7 @@ import { addDungeonLogEntry } from "../game/dungeonLog";
 import { scoutAdjacentRooms } from "../game/scouting";
 import { searchCurrentRoom } from "../game/search";
 import { disarmTrap as disarmTrapCheck, triggerTrap } from "../game/traps";
+import { resolveEventChoice } from "../game/roomEvents";
 import {
   canMerchantUpgrade,
   getBuyPrice,
@@ -101,6 +102,7 @@ export interface GameStore {
   moveToRoom: (roomId: string) => void;
   searchRoom: () => void;
   disarmTrap: () => void;
+  chooseRoomEventOption: (choiceId: string) => void;
   lootRoom: () => void;
   attemptExtract: () => void;
   descendDungeon: () => void;
@@ -557,6 +559,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
     persist(next);
     if (nextPlayer.hp <= 0) {
       finishRunWithDeath(get, set, nextRun, nextPlayer);
+    }
+  },
+
+  chooseRoomEventOption: (choiceId: string) => {
+    const s = get().state;
+    if (!s.activeRun || !s.player) return;
+    const run = s.activeRun;
+    const room = getRoomById(run.roomGraph, run.currentRoomId);
+    if (!room || !room.activeEvent || room.activeEvent.resolved) return;
+
+    const rng = createRng(`${run.seed}:event:${room.id}:${choiceId}:${Date.now()}`);
+    const result = resolveEventChoice({
+      run, character: s.player, event: room.activeEvent, choiceId, rng
+    });
+    const next: GameState = { ...s, activeRun: result.run, player: result.character };
+    set({ state: next, lastRoomMessage: result.resultMessage });
+    persist(next);
+    if (result.character.hp <= 0) {
+      finishRunWithDeath(get, set, result.run, result.character);
     }
   },
 

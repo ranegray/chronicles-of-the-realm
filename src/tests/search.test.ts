@@ -22,9 +22,9 @@ function firstKitFor(classId: ClassId): string {
   switch (classId) {
     case "warrior": return "warrior_sword_shield";
     case "scout": return "scout_bow_dagger";
-    case "arcanist": return "arcanist_staff";
-    case "warden": return "warden_spear";
-    case "devout": return "devout_mace";
+    case "arcanist": return "arcanist_fire_focus";
+    case "warden": return "warden_hunter";
+    case "devout": return "devout_healer";
   }
 }
 
