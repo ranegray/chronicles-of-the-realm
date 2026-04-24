@@ -77,11 +77,13 @@ describe("scouting", () => {
     const target = run.roomGraph.find(r => !r.visited)!;
     const a = scoutRoom({
       room: target, character, run,
-      rng: createRng(`${run.seed}:scout:${target.id}`)
+      rng: createRng(`${run.seed}:scout:${target.id}`),
+      now: 1000
     });
     const b = scoutRoom({
       room: target, character, run,
-      rng: createRng(`${run.seed}:scout:${target.id}`)
+      rng: createRng(`${run.seed}:scout:${target.id}`),
+      now: 1000
     });
     expect(a).toEqual(b);
   });

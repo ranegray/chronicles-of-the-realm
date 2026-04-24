@@ -23,6 +23,7 @@ import { addDungeonLogEntry, createEmptyDungeonLog } from "./dungeonLog";
 import { BIOME_SIGN_FLAVOR, ROOM_SIGNS_BY_TYPE } from "../data/roomSigns";
 import { generateTrapForRoom } from "./traps";
 import { generateRoomEvent } from "./roomEvents";
+import { generateExtractionPoint } from "./extraction";
 import { ROOM_EVENT_RULES } from "./constants";
 
 export interface DungeonGenParams {
@@ -248,6 +249,9 @@ function buildRoom(
   }
 
   const id = `room_${idx}_${makeId(rng, "r")}`;
+  const extraction = type === "extraction" || extractionPoint
+    ? generateExtractionPoint({ roomId: id, biome, tier, rng })
+    : undefined;
   const bareRoom: DungeonRoom = {
     id,
     type,
@@ -263,6 +267,7 @@ function buildRoom(
     trapId,
     activeTrap: activeTrap ? { ...activeTrap, roomId: id } : undefined,
     extractionPoint,
+    extraction,
     searchState: createDefaultSearchState(),
     scoutingProfile: computeScoutingProfile(type, biome, dangerRating, extractionPoint)
   };

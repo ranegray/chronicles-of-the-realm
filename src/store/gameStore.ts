@@ -46,6 +46,8 @@ import { scoutAdjacentRooms } from "../game/scouting";
 import { searchCurrentRoom } from "../game/search";
 import { disarmTrap as disarmTrapCheck, triggerTrap } from "../game/traps";
 import { resolveEventChoice } from "../game/roomEvents";
+import { activateExtraction as activateExtractionFlow, canAttemptExtraction, resolveExtractionTurn } from "../game/extraction";
+import type { ExtractionActivationResult } from "../game/extraction";
 import {
   canMerchantUpgrade,
   getBuyPrice,
@@ -105,6 +107,7 @@ export interface GameStore {
   chooseRoomEventOption: (choiceId: string) => void;
   lootRoom: () => void;
   attemptExtract: () => void;
+  continueExtraction: () => void;
   descendDungeon: () => void;
   takeItemFromRoom: (item: ItemInstance) => void;
   useRaidConsumable: (itemInstanceId: string) => void;
@@ -785,7 +788,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const run = s.activeRun;
     const room = getRoomById(run.roomGraph, run.currentRoomId);
     if (!room || !room.extractionPoint) return;
-    finishRunWithExtraction(get, set, run, "extracted", "You extracted from a marked exit with the loot you carried.");
+
+    if (!room.extraction) {
+      // Legacy fallback — should only apply to pre-migration data.
+      finishRunWithExtraction(get, set, run, "extracted", "You extracted from a marked exit with the loot you carried.");
+      return;
+    }
+
+    const rng = createRng(`extraction:${run.seed}:${room.id}:activate:${Date.now()}`);
+    const result = activateExtractionFlow({ run, character: s.player, room, rng });
+    handleExtractionResult(get, set, result, room.id);
+  },
+
+  continueExtraction: () => {
+    const s = get().state;
+    if (!s.activeRun || !s.player) return;
+    const run = s.activeRun;
+    const room = getRoomById(run.roomGraph, run.currentRoomId);
+    if (!room || !room.extraction) return;
+    const rng = createRng(`extraction:${run.seed}:${room.id}:turn:${Date.now()}`);
+    const result = resolveExtractionTurn({ run, character: s.player, room, rng });
+    handleExtractionResult(get, set, result, room.id);
   },
 
   descendDungeon: () => {
@@ -972,9 +995,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       persist(clearedState);
       return;
     }
-    const updatedRooms = run.roomGraph.map(r =>
-      r.id === room.id ? { ...r, completed: true } : r
-    );
+    // If the combat came from a guarded-extraction encounter, mark the guard
+    // as defeated rather than completing the room (so the player can still
+    // activate the extraction afterwards).
+    const isExtractionGuardWin =
+      room.type === "extraction" &&
+      room.extraction?.variant === "guarded" &&
+      room.extraction.guardEncounterId === combat.encounterId &&
+      !room.extraction.guardDefeated;
+    const updatedRooms = run.roomGraph.map(r => {
+      if (r.id !== room.id) return r;
+      if (isExtractionGuardWin && r.extraction) {
+        return { ...r, extraction: { ...r.extraction, guardDefeated: true, state: "available" as const } };
+      }
+      return { ...r, completed: true };
+    });
     let next: GameState = {
       ...s,
       activeCombat: undefined,
@@ -1611,6 +1646,47 @@ function finishRunWithExtraction(
   };
   set({ state: next, lastExtractionSummary: result.summary, lastDeathSummary: undefined, screen: "runSummary" });
   persist(next);
+}
+
+function handleExtractionResult(
+  get: () => GameStore,
+  set: (partial: Partial<GameStore>) => void,
+  result: ExtractionActivationResult,
+  roomId: string
+) {
+  const s = get().state;
+  let nextState: GameState = {
+    ...s,
+    activeRun: result.run,
+    player: result.character
+  };
+
+  if (result.extracted) {
+    set({ state: nextState });
+    persist(nextState);
+    finishRunWithExtraction(get, set, result.run, "extracted", result.message);
+    return;
+  }
+
+  if (result.character.hp <= 0) {
+    set({ state: nextState });
+    persist(nextState);
+    finishRunWithDeath(get, set, result.run, result.character);
+    return;
+  }
+
+  if (result.startedCombat && result.combatEncounterId && result.fromRoomId) {
+    const enc = getEncounter(result.combatEncounterId);
+    const rng = createRng(`enc:${roomId}:${Date.now()}`);
+    const combat = startCombatBase(enc, rng, result.fromRoomId);
+    nextState = { ...nextState, activeCombat: combat };
+    set({ state: nextState, screen: "combat", lastRoomMessage: result.message });
+    saveGame(nextState);
+    return;
+  }
+
+  set({ state: nextState, lastRoomMessage: result.message });
+  persist(nextState);
 }
 
 const NEW_SEARCH_ROOM_TYPES: RoomType[] = [

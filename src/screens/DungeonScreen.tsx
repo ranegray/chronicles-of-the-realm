@@ -2,6 +2,7 @@ import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { DungeonLog } from "../components/DungeonLog";
 import { EventChoicePanel } from "../components/EventChoicePanel";
+import { ExtractionPanel } from "../components/ExtractionPanel";
 import { RoomIntelCard } from "../components/RoomIntelCard";
 import { ThreatMeter } from "../components/ThreatMeter";
 import { useGameStore } from "../store/gameStore";
@@ -54,6 +55,7 @@ export function DungeonScreen() {
   const chooseEvent = useGameStore(s => s.chooseRoomEventOption);
   const loot = useGameStore(s => s.lootRoom);
   const extract = useGameStore(s => s.attemptExtract);
+  const continueExtract = useGameStore(s => s.continueExtraction);
   const descend = useGameStore(s => s.descendDungeon);
   const abandon = useGameStore(s => s.abandonRun);
   const lastMessage = useGameStore(s => s.lastRoomMessage);
@@ -138,7 +140,7 @@ export function DungeonScreen() {
             {current.activeTrap?.detected && !current.activeTrap.disarmed && !current.activeTrap.triggered && (
               <Button variant="secondary" onClick={disarm}>Disarm Trap</Button>
             )}
-            {current.extractionPoint && (
+            {current.extractionPoint && !current.extraction && (
               <Button onClick={extract}>Extract</Button>
             )}
             {current.type === "boss" && current.completed && run.tier < RUN_RULES.maxDungeonDepth && (
@@ -158,6 +160,15 @@ export function DungeonScreen() {
           </div>
           {current.activeTrap && (
             <TrapStatus trap={current.activeTrap} />
+          )}
+          {current.extraction && (
+            <ExtractionPanel
+              run={run}
+              character={player}
+              room={current}
+              onActivate={extract}
+              onContinue={continueExtract}
+            />
           )}
         </Card>
 
