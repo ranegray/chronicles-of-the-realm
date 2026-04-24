@@ -30,7 +30,7 @@ describe("save", () => {
     const old = { ...defaultGameState(), version: 0 };
     saveGame(old);
     const loaded = loadGame();
-    expect(loaded?.version).toBe(1);
+    expect(loaded?.version).toBe(2);
   });
 
   it("backfills prepared inventory on load", () => {

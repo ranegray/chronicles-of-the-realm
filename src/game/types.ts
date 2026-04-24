@@ -255,6 +255,11 @@ export interface DungeonRoom {
   trapId?: string;
   questId?: string;
   extractionPoint?: boolean;
+  extraction?: ExtractionPoint;
+  scoutingProfile?: RoomScoutingProfile;
+  activeEvent?: ActiveRoomEvent;
+  activeTrap?: ActiveTrap;
+  searchState?: RoomSearchState;
 }
 
 export interface DungeonRun {
@@ -276,6 +281,14 @@ export interface DungeonRun {
   roomsVisitedBeforeDepth: number;
   roomsCompletedBeforeDepth: number;
   dangerLevel: number;
+  threat: ThreatState;
+  knownRoomIntel: Record<string, ScoutedRoomInfo>;
+  dungeonLog: DungeonLogEntry[];
+  currentExtractionInteraction?: {
+    roomId: string;
+    extractionId: string;
+    turnsRemaining: number;
+  };
 }
 
 export type NpcRole =
@@ -449,3 +462,407 @@ export type QuestEvent =
   | { kind: "miniBossDefeated"; biome: DungeonBiome }
   | { kind: "itemRetrieved"; templateId: string; biome: DungeonBiome }
   | { kind: "signFound"; biome: DungeonBiome };
+
+// ---------------------------------------------------------------------------
+// v0.2: Threat
+// ---------------------------------------------------------------------------
+
+export type ThreatLevel = 0 | 1 | 2 | 3 | 4 | 5;
+
+export type ThreatChangeReason =
+  | "enteredRoom"
+  | "searchedRoom"
+  | "failedTrap"
+  | "openedNoisyChest"
+  | "eventChoice"
+  | "extendedCombat"
+  | "fledCombat"
+  | "usedLoudMagic"
+  | "carriedCursedLoot"
+  | "extractionComplication"
+  | "debug";
+
+export interface ThreatChange {
+  id: string;
+  timestamp: number;
+  reason: ThreatChangeReason;
+  amount: number;
+  previousPoints: number;
+  newPoints: number;
+  previousLevel: ThreatLevel;
+  newLevel: ThreatLevel;
+  message: string;
+}
+
+export interface ThreatState {
+  points: number;
+  level: ThreatLevel;
+  maxLevel: ThreatLevel;
+  lastChangedAt: number;
+  changes: ThreatChange[];
+}
+
+export interface ThreatLevelModifier {
+  level: ThreatLevel;
+  label: string;
+  description: string;
+  encounterDangerBonus: number;
+  eliteEncounterChanceBonus: number;
+  trapDifficultyBonus: number;
+  trapDamageBonus: number;
+  fleeChancePenalty: number;
+  ambushChance: number;
+  extractionComplicationChance: number;
+}
+
+// ---------------------------------------------------------------------------
+// v0.2: Room scouting
+// ---------------------------------------------------------------------------
+
+export type RoomKnowledgeLevel =
+  | "unknown"
+  | "signsOnly"
+  | "dangerKnown"
+  | "likelyType"
+  | "exactType";
+
+export type DangerBand =
+  | "safe"
+  | "low"
+  | "moderate"
+  | "high"
+  | "severe"
+  | "unknown";
+
+export type RoomSignTag =
+  | "blood"
+  | "bones"
+  | "footprints"
+  | "scraping"
+  | "whispers"
+  | "coldAir"
+  | "warmAir"
+  | "rot"
+  | "smoke"
+  | "metal"
+  | "water"
+  | "fungus"
+  | "arcaneResidue"
+  | "tripwire"
+  | "treasureGlint"
+  | "chanting"
+  | "silence"
+  | "freshAir"
+  | "collapsedStone"
+  | "distantMovement";
+
+export interface RoomScoutingProfile {
+  signs: RoomSignTag[];
+  hiddenDanger: boolean;
+  hasTrapSignature: boolean;
+  hasMagicSignature: boolean;
+  hasCreatureSigns: boolean;
+  hasTreasureSigns: boolean;
+  hasExtractionSigns: boolean;
+  falseSignalChance: number;
+}
+
+export interface ScoutedRoomInfo {
+  roomId: string;
+  knowledgeLevel: RoomKnowledgeLevel;
+  dangerBand: DangerBand;
+  shownType?: RoomType;
+  likelyTypes: RoomType[];
+  signs: RoomSignTag[];
+  warning?: string;
+  confidence: number;
+  scoutedAtThreatLevel: ThreatLevel;
+  scoutedAt: number;
+}
+
+// ---------------------------------------------------------------------------
+// v0.2: Extraction
+// ---------------------------------------------------------------------------
+
+export type ExtractionVariant =
+  | "stable"
+  | "delayed"
+  | "guarded"
+  | "unstable"
+  | "burdened";
+
+export type ExtractionState =
+  | "available"
+  | "charging"
+  | "blocked"
+  | "completed"
+  | "failed";
+
+export interface ExtractionPoint {
+  id: string;
+  variant: ExtractionVariant;
+  state: ExtractionState;
+  title: string;
+  description: string;
+  activationText: string;
+  successText: string;
+  failureText?: string;
+
+  requiredTurns?: number;
+  turnsRemaining?: number;
+
+  guardEncounterId?: string;
+  guardDefeated?: boolean;
+
+  baseComplicationChance?: number;
+  threatSensitive?: boolean;
+
+  burdenedWeightLimitRatio?: number;
+
+  requiredItemTemplateId?: string;
+  requiredGold?: number;
+
+  activatedAt?: number;
+}
+
+// ---------------------------------------------------------------------------
+// v0.2: Stat checks (shared by events/traps/search)
+// ---------------------------------------------------------------------------
+
+export type StatCheckAbility =
+  | "might"
+  | "agility"
+  | "endurance"
+  | "intellect"
+  | "will"
+  | "presence"
+  | "trapSense"
+  | "magicPower";
+
+export interface StatCheckDefinition {
+  ability: StatCheckAbility;
+  difficulty: number;
+  successMessage: string;
+  failureMessage: string;
+}
+
+export interface StatCheckResult {
+  passed: boolean;
+  roll: number;
+  modifier: number;
+  total: number;
+  difficulty: number;
+}
+
+// ---------------------------------------------------------------------------
+// v0.2: Room events
+// ---------------------------------------------------------------------------
+
+export type RoomEventType =
+  | "shrine"
+  | "obstacle"
+  | "stranger"
+  | "strangeChest"
+  | "oldCamp"
+  | "obelisk"
+  | "merchantShade"
+  | "ominousSilence"
+  | "sealedDoor"
+  | "lostSupplies";
+
+export type EventChoiceRequirementType =
+  | "hasItem"
+  | "hasGold"
+  | "class"
+  | "ancestry"
+  | "minAbility"
+  | "minThreat"
+  | "maxThreat"
+  | "serviceUnlocked";
+
+export interface EventChoiceRequirement {
+  type: EventChoiceRequirementType;
+  key: string;
+  value?: string | number | boolean;
+}
+
+export type EventOutcomeType =
+  | "gainGold"
+  | "loseGold"
+  | "gainItem"
+  | "gainLootFromTable"
+  | "loseRandomItem"
+  | "heal"
+  | "damage"
+  | "increaseThreat"
+  | "decreaseThreat"
+  | "startCombat"
+  | "applyStatus"
+  | "questProgress"
+  | "revealAdjacentRoom"
+  | "improveRoomScouting"
+  | "triggerTrap"
+  | "markRoomCompleted"
+  | "addDungeonLog";
+
+export interface EventOutcome {
+  type: EventOutcomeType;
+  amount?: number;
+  itemTemplateId?: string;
+  lootTableId?: string;
+  encounterId?: string;
+  statusId?: string;
+  questTarget?: string;
+  roomId?: string;
+  message?: string;
+}
+
+export interface EventChoice {
+  id: string;
+  label: string;
+  description: string;
+  requirements?: EventChoiceRequirement[];
+  statCheck?: StatCheckDefinition;
+  successOutcomes: EventOutcome[];
+  failureOutcomes?: EventOutcome[];
+  alwaysAvailable?: boolean;
+}
+
+export interface RoomEventDefinition {
+  id: string;
+  type: RoomEventType;
+  title: string;
+  description: string;
+  biomeTags?: DungeonBiome[];
+  minTier: number;
+  maxTier: number;
+  weight: number;
+  choices: EventChoice[];
+}
+
+export interface ActiveRoomEvent {
+  eventId: string;
+  roomId: string;
+  resolved: boolean;
+  selectedChoiceId?: string;
+  resultMessage?: string;
+}
+
+// ---------------------------------------------------------------------------
+// v0.2: Traps
+// ---------------------------------------------------------------------------
+
+export type TrapType =
+  | "mechanical"
+  | "magical"
+  | "poison"
+  | "collapse"
+  | "alarm"
+  | "curse";
+
+export type TrapOutcomeType =
+  | "damage"
+  | "increaseThreat"
+  | "destroyRandomLoot"
+  | "applyStatus"
+  | "startCombat"
+  | "lockRoom"
+  | "addDungeonLog";
+
+export interface TrapOutcome {
+  type: TrapOutcomeType;
+  amount?: number;
+  statusId?: string;
+  encounterId?: string;
+  message: string;
+}
+
+export interface TrapDefinition {
+  id: string;
+  name: string;
+  type: TrapType;
+  description: string;
+  biomeTags?: DungeonBiome[];
+  minTier: number;
+  maxTier: number;
+  weight: number;
+  detectionDifficulty: number;
+  disarmDifficulty: number;
+  triggerDifficulty: number;
+  damageDice?: DiceFormula;
+  threatIncreaseOnTrigger?: number;
+  threatIncreaseOnDetectionFailure?: number;
+  outcomesOnTrigger: TrapOutcome[];
+  outcomesOnDisarm?: TrapOutcome[];
+}
+
+export interface ActiveTrap {
+  trapId: string;
+  roomId: string;
+  detected: boolean;
+  disarmed: boolean;
+  triggered: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// v0.2: Search
+// ---------------------------------------------------------------------------
+
+export type SearchResultType =
+  | "nothing"
+  | "hiddenLoot"
+  | "trapDetected"
+  | "trapTriggered"
+  | "eventRevealed"
+  | "questClue"
+  | "ambush";
+
+export interface RoomSearchState {
+  searched: boolean;
+  searchCount: number;
+  hiddenLootClaimed: boolean;
+  trapChecked: boolean;
+  eventRevealed: boolean;
+}
+
+export interface TrapResolutionResult {
+  trapId: string;
+  detected: boolean;
+  disarmed?: boolean;
+  triggered: boolean;
+  checkResult?: StatCheckResult;
+  message: string;
+}
+
+export interface SearchResult {
+  type: SearchResultType;
+  message: string;
+  loot?: ItemInstance[];
+  trapResult?: TrapResolutionResult;
+  threatChange?: ThreatChange;
+  revealedEventId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// v0.2: Dungeon log
+// ---------------------------------------------------------------------------
+
+export type DungeonLogEntryType =
+  | "info"
+  | "warning"
+  | "danger"
+  | "loot"
+  | "combat"
+  | "threat"
+  | "extraction"
+  | "event"
+  | "trap"
+  | "quest";
+
+export interface DungeonLogEntry {
+  id: string;
+  timestamp: number;
+  type: DungeonLogEntryType;
+  message: string;
+  roomId?: string;
+}

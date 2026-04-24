@@ -1,6 +1,22 @@
-import type { CombatState, DungeonRun, GameState, Inventory, RunSummary } from "./types";
-import { SAVE_VERSION, STORAGE_KEY } from "./constants";
+import type {
+  CombatState,
+  DungeonLogEntry,
+  DungeonRoom,
+  DungeonRun,
+  ExtractionPoint,
+  ExtractionState,
+  ExtractionVariant,
+  GameState,
+  Inventory,
+  RoomSearchState,
+  RunSummary,
+  ScoutedRoomInfo,
+  ThreatState
+} from "./types";
+import { SAVE_VERSION, STORAGE_KEY, THREAT_RULES } from "./constants";
 import { createEmptyInventory } from "./inventory";
+import { createInitialThreatState, getThreatLevelFromPoints } from "./threat";
+import { createDefaultSearchState } from "./dungeonGenerator";
 
 export function defaultGameState(): GameState {
   return {
@@ -109,8 +125,11 @@ function normalizeRun(value: unknown): DungeonRun | undefined {
   if (typeof value.currentRoomId !== "string") return undefined;
   if (!value.roomGraph.some(room => isRecord(room) && room.id === value.currentRoomId)) return undefined;
 
+  const roomGraph = value.roomGraph.map(room => normalizeRoom(room)).filter(Boolean) as DungeonRoom[];
+
   return {
     ...value,
+    roomGraph,
     generatorVersion: typeof value.generatorVersion === "number" ? value.generatorVersion : 1,
     status: value.status === "extracted" || value.status === "dead" || value.status === "abandoned"
       ? value.status
@@ -124,8 +143,93 @@ function normalizeRun(value: unknown): DungeonRun | undefined {
     xpGained: typeof value.xpGained === "number" ? value.xpGained : 0,
     roomsVisitedBeforeDepth: typeof value.roomsVisitedBeforeDepth === "number" ? value.roomsVisitedBeforeDepth : 0,
     roomsCompletedBeforeDepth: typeof value.roomsCompletedBeforeDepth === "number" ? value.roomsCompletedBeforeDepth : 0,
-    dangerLevel: typeof value.dangerLevel === "number" ? value.dangerLevel : 1
+    dangerLevel: typeof value.dangerLevel === "number" ? value.dangerLevel : 1,
+    threat: normalizeThreatState(value.threat),
+    knownRoomIntel: normalizeKnownRoomIntel(value.knownRoomIntel),
+    dungeonLog: normalizeDungeonLog(value.dungeonLog)
   } as DungeonRun;
+}
+
+function normalizeRoom(value: unknown): DungeonRoom | undefined {
+  if (!isRecord(value)) return undefined;
+  if (typeof value.id !== "string") return undefined;
+
+  const partial = value as Partial<DungeonRoom>;
+  return {
+    ...(value as unknown as DungeonRoom),
+    searchState: normalizeSearchState(value.searchState),
+    extraction: normalizeExtraction(value.extraction, partial)
+  };
+}
+
+function normalizeSearchState(value: unknown): RoomSearchState {
+  if (!isRecord(value)) return createDefaultSearchState();
+  return {
+    searched: Boolean(value.searched),
+    searchCount: typeof value.searchCount === "number" ? value.searchCount : 0,
+    hiddenLootClaimed: Boolean(value.hiddenLootClaimed),
+    trapChecked: Boolean(value.trapChecked),
+    eventRevealed: Boolean(value.eventRevealed)
+  };
+}
+
+function normalizeThreatState(value: unknown): ThreatState {
+  if (!isRecord(value)) return createInitialThreatState();
+  const points = typeof value.points === "number" ? Math.max(0, value.points) : 0;
+  const maxLevel = typeof value.maxLevel === "number"
+    ? value.maxLevel
+    : THREAT_RULES.maxLevel;
+  const level = getThreatLevelFromPoints(points);
+  return {
+    points,
+    level,
+    maxLevel: maxLevel as ThreatState["maxLevel"],
+    lastChangedAt: typeof value.lastChangedAt === "number" ? value.lastChangedAt : Date.now(),
+    changes: Array.isArray(value.changes) ? value.changes as ThreatState["changes"] : []
+  };
+}
+
+function normalizeKnownRoomIntel(value: unknown): Record<string, ScoutedRoomInfo> {
+  if (!isRecord(value)) return {};
+  const out: Record<string, ScoutedRoomInfo> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (isRecord(entry) && typeof entry.roomId === "string") {
+      out[key] = entry as unknown as ScoutedRoomInfo;
+    }
+  }
+  return out;
+}
+
+function normalizeDungeonLog(value: unknown): DungeonLogEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(entry =>
+    isRecord(entry) && typeof entry.id === "string" && typeof entry.message === "string"
+  ) as unknown as DungeonLogEntry[];
+}
+
+function normalizeExtraction(
+  value: unknown,
+  room: Partial<DungeonRoom>
+): ExtractionPoint | undefined {
+  if (isRecord(value) && typeof value.id === "string" && typeof value.variant === "string") {
+    return value as unknown as ExtractionPoint;
+  }
+  if (room.extractionPoint) {
+    return legacyStableExtraction();
+  }
+  return undefined;
+}
+
+function legacyStableExtraction(): ExtractionPoint {
+  return {
+    id: "legacy-stable-extraction",
+    variant: "stable" as ExtractionVariant,
+    state: "available" as ExtractionState,
+    title: "Clear Way Out",
+    description: "A safe route leads back to the surface.",
+    activationText: "You leave the dungeon with your spoils.",
+    successText: "You escaped."
+  };
 }
 
 function normalizeCombat(value: unknown, run: DungeonRun): CombatState | undefined {

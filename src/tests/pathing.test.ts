@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { extractionDistances, nextStepToKnownExtraction, shortestDistance } from "../game/pathing";
+import { createInitialThreatState } from "../game/threat";
 import type { DungeonRoom, DungeonRun } from "../game/types";
 
 function room(partial: Partial<DungeonRoom> & { id: string }): DungeonRoom {
@@ -26,7 +27,10 @@ function makeRun(rooms: DungeonRoom[], visitedIds: string[], currentId: string):
     loadoutSnapshot: [], activeQuestIds: [],
     questProgressAtStart: {}, xpGained: 0,
     roomsVisitedBeforeDepth: 0, roomsCompletedBeforeDepth: 0,
-    dangerLevel: 1
+    dangerLevel: 1,
+    threat: createInitialThreatState(0),
+    knownRoomIntel: {},
+    dungeonLog: []
   };
 }
 

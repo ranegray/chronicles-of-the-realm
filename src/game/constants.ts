@@ -1,4 +1,4 @@
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const DUNGEON_GENERATOR_VERSION = 1;
 export const STORAGE_KEY = "chronicles-of-the-realm:save";
 
@@ -63,3 +63,290 @@ export const INVENTORY_RULES = {
   defaultCarryCapacity: 20,
   maxStackSize: 99
 };
+
+// ---------------------------------------------------------------------------
+// v0.2: Threat
+// ---------------------------------------------------------------------------
+
+export const THREAT_RULES = {
+  maxLevel: 5,
+
+  thresholds: [
+    { level: 0, minPoints: 0, label: "Quiet" },
+    { level: 1, minPoints: 20, label: "Stirring" },
+    { level: 2, minPoints: 40, label: "Watching" },
+    { level: 3, minPoints: 65, label: "Hunting" },
+    { level: 4, minPoints: 90, label: "Swarming" },
+    { level: 5, minPoints: 120, label: "Awakened" }
+  ],
+
+  gains: {
+    enteredNewRoom: 8,
+    revisitedRoom: 1,
+    searchedRoom: 3,
+    failedTrap: 10,
+    triggeredTrap: 14,
+    openedNoisyChest: 8,
+    eventMinor: 4,
+    eventMajor: 12,
+    fledCombat: 8,
+    extendedCombatAfterRound: 5,
+    extendedCombatPerRound: 2,
+    unstableExtractionComplication: 10
+  },
+
+  modifiersByLevel: {
+    0: {
+      level: 0,
+      label: "Quiet",
+      description: "The dungeon has not noticed you.",
+      encounterDangerBonus: 0,
+      eliteEncounterChanceBonus: 0,
+      trapDifficultyBonus: 0,
+      trapDamageBonus: 0,
+      fleeChancePenalty: 0,
+      ambushChance: 0,
+      extractionComplicationChance: 0
+    },
+    1: {
+      level: 1,
+      label: "Stirring",
+      description: "Something moves in the walls.",
+      encounterDangerBonus: 1,
+      eliteEncounterChanceBonus: 0.03,
+      trapDifficultyBonus: 1,
+      trapDamageBonus: 0,
+      fleeChancePenalty: 0.03,
+      ambushChance: 0.04,
+      extractionComplicationChance: 0.03
+    },
+    2: {
+      level: 2,
+      label: "Watching",
+      description: "The dungeon feels aware of your presence.",
+      encounterDangerBonus: 2,
+      eliteEncounterChanceBonus: 0.07,
+      trapDifficultyBonus: 2,
+      trapDamageBonus: 1,
+      fleeChancePenalty: 0.06,
+      ambushChance: 0.08,
+      extractionComplicationChance: 0.07
+    },
+    3: {
+      level: 3,
+      label: "Hunting",
+      description: "The halls seem to bend against you.",
+      encounterDangerBonus: 3,
+      eliteEncounterChanceBonus: 0.12,
+      trapDifficultyBonus: 4,
+      trapDamageBonus: 2,
+      fleeChancePenalty: 0.1,
+      ambushChance: 0.12,
+      extractionComplicationChance: 0.12
+    },
+    4: {
+      level: 4,
+      label: "Swarming",
+      description: "The dungeon sends teeth and claws through every passage.",
+      encounterDangerBonus: 4,
+      eliteEncounterChanceBonus: 0.18,
+      trapDifficultyBonus: 6,
+      trapDamageBonus: 3,
+      fleeChancePenalty: 0.16,
+      ambushChance: 0.18,
+      extractionComplicationChance: 0.2
+    },
+    5: {
+      level: 5,
+      label: "Awakened",
+      description: "The dungeon is fully awake. Escape is urgent.",
+      encounterDangerBonus: 6,
+      eliteEncounterChanceBonus: 0.25,
+      trapDifficultyBonus: 8,
+      trapDamageBonus: 5,
+      fleeChancePenalty: 0.25,
+      ambushChance: 0.25,
+      extractionComplicationChance: 0.32
+    }
+  }
+} as const;
+
+// ---------------------------------------------------------------------------
+// v0.2: Scouting
+// ---------------------------------------------------------------------------
+
+export const SCOUTING_RULES = {
+  baseDifficulty: 10,
+
+  knowledgeThresholds: {
+    signsOnly: 8,
+    dangerKnown: 12,
+    likelyType: 16,
+    exactType: 21
+  },
+
+  confidenceByKnowledgeLevel: {
+    unknown: 0,
+    signsOnly: 0.35,
+    dangerKnown: 0.5,
+    likelyType: 0.7,
+    exactType: 0.95
+  },
+
+  classBonuses: {
+    warrior: 0,
+    scout: 4,
+    arcanist: 2,
+    warden: 3,
+    devout: 1
+  },
+
+  classSpecialties: {
+    scout: ["trap", "treasure", "footprints"],
+    arcanist: ["arcaneResidue", "curse", "shrine"],
+    warden: ["creature", "fungus", "water", "footprints"],
+    devout: ["undead", "curse", "shrine"],
+    warrior: ["combat", "metal", "scraping"]
+  },
+
+  cartographerServiceBonusByLevel: {
+    0: 0,
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4,
+    5: 5
+  },
+
+  dangerBands: {
+    safe: { min: 0, max: 0 },
+    low: { min: 1, max: 2 },
+    moderate: { min: 3, max: 4 },
+    high: { min: 5, max: 6 },
+    severe: { min: 7, max: 99 }
+  },
+
+  falseSignalBaseChance: 0.08,
+  falseSignalThreatMultiplier: 0.02
+} as const;
+
+// ---------------------------------------------------------------------------
+// v0.2: Extraction
+// ---------------------------------------------------------------------------
+
+export const EXTRACTION_RULES = {
+  variantWeightsTierOne: {
+    stable: 45,
+    delayed: 25,
+    guarded: 12,
+    unstable: 13,
+    burdened: 10
+  },
+
+  delayed: {
+    minTurns: 1,
+    maxTurns: 2,
+    ambushChancePerTurn: 0.08
+  },
+
+  guarded: {
+    tierOneGuardDangerRating: 2
+  },
+
+  unstable: {
+    baseComplicationChance: 0.12,
+    maxComplicationChance: 0.55,
+    complicationThreatIncrease: 10
+  },
+
+  burdened: {
+    weightLimitRatio: 0.75
+  }
+} as const;
+
+// ---------------------------------------------------------------------------
+// v0.2: Room events
+// ---------------------------------------------------------------------------
+
+export const ROOM_EVENT_RULES = {
+  eventRoomChance: 0.18,
+
+  choiceCheck: {
+    d20Sides: 20,
+    naturalSuccess: 20,
+    naturalFailure: 1
+  },
+
+  threatChanges: {
+    minorGood: -3,
+    minorBad: 4,
+    majorBad: 12,
+    noisyAction: 8,
+    forbiddenAction: 15
+  },
+
+  maxEventChoices: 4
+} as const;
+
+// ---------------------------------------------------------------------------
+// v0.2: Search
+// ---------------------------------------------------------------------------
+
+export const SEARCH_RULES = {
+  baseSearchThreatIncrease: 3,
+  repeatSearchThreatIncrease: 5,
+
+  hiddenLootChance: 0.18,
+  hiddenLootScoutBonus: 0.08,
+  hiddenLootHighIntellectBonus: 0.04,
+
+  trapDetectionBaseDifficulty: 12,
+
+  ambushChanceOnSearch: 0.04,
+  ambushThreatMultiplier: 0.025,
+
+  maxSearchesPerRoom: 2
+} as const;
+
+// ---------------------------------------------------------------------------
+// v0.2: Traps
+// ---------------------------------------------------------------------------
+
+export const TRAP_RULES = {
+  trapRoomBaseChance: 0.15,
+
+  detectionDifficultyByTier: {
+    1: 11,
+    2: 13,
+    3: 15,
+    4: 17,
+    5: 19
+  },
+
+  disarmDifficultyByTier: {
+    1: 12,
+    2: 14,
+    3: 16,
+    4: 18,
+    5: 20
+  },
+
+  triggerDamageByTier: {
+    1: { count: 1, sides: 6, modifier: 1 },
+    2: { count: 2, sides: 6, modifier: 1 },
+    3: { count: 2, sides: 8, modifier: 2 },
+    4: { count: 3, sides: 8, modifier: 3 },
+    5: { count: 4, sides: 8, modifier: 4 }
+  },
+
+  threatIncreaseOnTrigger: 12,
+  threatIncreaseOnFailedDetection: 6
+} as const;
+
+// ---------------------------------------------------------------------------
+// v0.2: Dungeon log
+// ---------------------------------------------------------------------------
+
+export const DUNGEON_LOG_RULES = {
+  maxEntries: 80
+} as const;

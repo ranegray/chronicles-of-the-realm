@@ -2,6 +2,7 @@ import type {
   DungeonBiome,
   DungeonRoom,
   DungeonRun,
+  RoomSearchState,
   RoomType
 } from "./types";
 import {
@@ -14,6 +15,8 @@ import { getLootTableForBiome } from "../data/lootTables";
 import { createEmptyInventory } from "./inventory";
 import type { Rng } from "./rng";
 import { createRng, makeId, randomSeed } from "./rng";
+import { createInitialThreatState } from "./threat";
+import { addDungeonLogEntry, createEmptyDungeonLog } from "./dungeonLog";
 
 export interface DungeonGenParams {
   seed?: string;
@@ -65,15 +68,16 @@ export function generateDungeonRun(params: DungeonGenParams = {}): DungeonRun {
 
   const rooms = generateRoomGraph(seed, biome, tier);
   const entrance = rooms.find(r => r.type === "entrance")!;
+  const startedAt = Date.now();
 
-  return {
+  const bareRun: DungeonRun = {
     runId: makeId(rootRng, "run"),
     seed,
     generatorVersion: DUNGEON_GENERATOR_VERSION,
     biome,
     tier,
     status: "active",
-    startedAt: Date.now(),
+    startedAt,
     currentRoomId: entrance.id,
     roomGraph: rooms,
     visitedRoomIds: [entrance.id],
@@ -84,7 +88,28 @@ export function generateDungeonRun(params: DungeonGenParams = {}): DungeonRun {
     xpGained: 0,
     roomsVisitedBeforeDepth: 0,
     roomsCompletedBeforeDepth: 0,
-    dangerLevel: tier
+    dangerLevel: tier,
+    threat: createInitialThreatState(startedAt),
+    knownRoomIntel: {},
+    dungeonLog: createEmptyDungeonLog()
+  };
+
+  return addDungeonLogEntry({
+    run: bareRun,
+    type: "info",
+    message: `You enter the dungeon through the ${entrance.title.toLowerCase()}.`,
+    roomId: entrance.id,
+    now: startedAt
+  });
+}
+
+export function createDefaultSearchState(): RoomSearchState {
+  return {
+    searched: false,
+    searchCount: 0,
+    hiddenLootClaimed: false,
+    trapChecked: false,
+    eventRevealed: false
   };
 }
 
@@ -216,7 +241,8 @@ function buildRoom(
     encounterId,
     lootTableId,
     trapId,
-    extractionPoint
+    extractionPoint,
+    searchState: createDefaultSearchState()
   };
 }
 
