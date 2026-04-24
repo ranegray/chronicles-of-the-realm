@@ -1,14 +1,14 @@
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { DungeonLog } from "../components/DungeonLog";
+import { RoomIntelCard } from "../components/RoomIntelCard";
 import { ThreatMeter } from "../components/ThreatMeter";
 import { useGameStore } from "../store/gameStore";
 import { getRoomById } from "../game/dungeonGenerator";
 import { getBiome } from "../data/biomes";
 import { calculateInventoryWeight } from "../game/inventory";
 import { RUN_RULES } from "../game/constants";
-import type { Character, DungeonRoom, DungeonRun, VillageState } from "../game/types";
-import { getRoomRevealPreview, type RoomRevealPreview } from "../game/reveal";
+import type { DungeonRoom, DungeonRun } from "../game/types";
 import { nextStepToKnownExtraction } from "../game/pathing";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -44,7 +44,6 @@ const TYPE_MARKS: Record<string, string> = {
 export function DungeonScreen() {
   const run = useGameStore(s => s.state.activeRun);
   const player = useGameStore(s => s.state.player);
-  const village = useGameStore(s => s.state.village);
   const moveToRoom = useGameStore(s => s.moveToRoom);
   const search = useGameStore(s => s.searchRoom);
   const loot = useGameStore(s => s.lootRoom);
@@ -135,15 +134,13 @@ export function DungeonScreen() {
             <ul className="adjacent-list">
               {adjacents.map(r => r && (
                 <li key={r.id}>
-                  <Button variant="ghost" onClick={() => moveToRoom(r.id)}>
-                    <span className="exit-direction">{getDirectionLabel(current, r)}</span>
-                    <ExitLabel
-                      room={r}
-                      character={player}
-                      village={village}
-                      isBearingExit={r.id === nearbyExtractionStepId}
-                    />
-                  </Button>
+                  <RoomIntelCard
+                    room={r}
+                    intel={run.knownRoomIntel[r.id]}
+                    direction={getDirectionLabel(current, r)}
+                    onMove={moveToRoom}
+                    isBearingExit={r.id === nearbyExtractionStepId}
+                  />
                 </li>
               ))}
             </ul>
@@ -186,59 +183,6 @@ export function DungeonScreen() {
       </div>
     </div>
   );
-}
-
-function ExitLabel({
-  room,
-  character,
-  village,
-  isBearingExit
-}: {
-  room: DungeonRoom;
-  character: Character;
-  village?: VillageState;
-  isBearingExit: boolean;
-}) {
-  const preview = getRoomRevealPreview({ room, character, village });
-  const bearing = isBearingExit
-    ? <span className="exit-bearing" title="Toward nearest known extraction">→ Exit</span>
-    : null;
-
-  if (room.visited) {
-    return (
-      <>
-        {`${room.title} · ${TYPE_LABELS[room.type] ?? room.type}`}
-        {room.dangerRating > 0 && ` · D${room.dangerRating}`}
-        {bearing}
-      </>
-    );
-  }
-
-  return (
-    <>
-      {describeUnscoutedRoom(room, preview)}
-      {bearing}
-    </>
-  );
-}
-
-function describeUnscoutedRoom(room: DungeonRoom, preview: RoomRevealPreview): string {
-  const fragments: string[] = [];
-  if (preview.knowsType) {
-    fragments.push(TYPE_LABELS[room.type] ?? room.type);
-  } else {
-    fragments.push("Unscouted");
-  }
-  if (preview.knowsDanger) {
-    fragments.push(`Danger ~${room.dangerRating}`);
-  }
-  if (preview.trapWarning && !preview.knowsType) {
-    fragments.push("Trap ahead?");
-  }
-  if (preview.sourceLabel) {
-    fragments.push(`(${preview.sourceLabel})`);
-  }
-  return fragments.join(" · ");
 }
 
 function ExtractionPressureBanner({

@@ -41,6 +41,7 @@ import type { CombatThreatDelta } from "../game/combat";
 import type { DungeonLogEntryType, ThreatChange, ThreatChangeReason } from "../game/types";
 import { applyThreatChange, getThreatLabel } from "../game/threat";
 import { addDungeonLogEntry } from "../game/dungeonLog";
+import { scoutAdjacentRooms } from "../game/scouting";
 import {
   canMerchantUpgrade,
   getBuyPrice,
@@ -330,10 +331,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const activeIds: string[] = questIds ??
       (s.village?.quests.filter(q => q.status === "active").map(q => q.id) ?? []);
 
-    const run = generateDungeonRun({ seed, activeQuestIds: activeIds });
+    let run = generateDungeonRun({ seed, activeQuestIds: activeIds });
     run.raidInventory = s.preparedInventory ?? createEmptyInventory();
     run.loadoutSnapshot = collectLoadoutSnapshot(s.player);
     run.questProgressAtStart = captureQuestProgress(s.village, activeIds);
+    run = scoutFromCurrent(run, s.player, s.village);
     roomScratch.clear();
     const next: GameState = { ...s, activeRun: run, preparedInventory: createEmptyInventory() };
     set({ state: next, screen: "dungeon", lastRoomMessage: `You enter the ${run.biome} (${run.seed}).` });
@@ -402,6 +404,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       threatReason,
       roomId
     ).run;
+
+    updatedRun = scoutFromCurrent(updatedRun, s.player, s.village);
 
     let next: GameState = { ...s, activeRun: updatedRun };
 
@@ -705,7 +709,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const nextTier = run.tier + 1;
     const nextSeed = `${run.seed}:depth:${nextTier}`;
-    const nextRun = generateDungeonRun({
+    let nextRun = generateDungeonRun({
       seed: nextSeed,
       biome: run.biome,
       tier: nextTier,
@@ -721,6 +725,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     nextRun.roomsVisitedBeforeDepth = (run.roomsVisitedBeforeDepth ?? 0) + run.visitedRoomIds.length;
     nextRun.roomsCompletedBeforeDepth = (run.roomsCompletedBeforeDepth ?? 0) + completedThisDepth;
     nextRun.dangerLevel = nextTier;
+    nextRun = scoutFromCurrent(nextRun, s.player, s.village);
     roomScratch.clear();
 
     const next: GameState = {
@@ -1169,7 +1174,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const existing = s.activeRun;
     const activeIds = existing?.activeQuestIds ??
       (s.village?.quests.filter(quest => quest.status === "active").map(quest => quest.id) ?? []);
-    const run = generateDungeonRun({
+    let run = generateDungeonRun({
       seed: randomSeed(),
       biome: existing?.biome,
       tier: existing?.tier ?? 1,
@@ -1179,6 +1184,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     run.loadoutSnapshot = collectLoadoutSnapshot(s.player);
     run.questProgressAtStart = existing?.questProgressAtStart ?? captureQuestProgress(s.village, activeIds);
     run.xpGained = existing?.xpGained ?? 0;
+    run = scoutFromCurrent(run, s.player, s.village);
     roomScratch.clear();
     const next: GameState = {
       ...s,
@@ -1308,6 +1314,18 @@ function applyCombatThreatDeltas(
     next = result.run;
   }
   return next;
+}
+
+function scoutFromCurrent(
+  run: DungeonRun,
+  character: Character | undefined,
+  village: VillageState | undefined,
+  now?: number
+): DungeonRun {
+  if (!character) return run;
+  const knownRoomIntel = scoutAdjacentRooms({ run, character, village, now });
+  if (knownRoomIntel === run.knownRoomIntel) return run;
+  return { ...run, knownRoomIntel };
 }
 
 function collectLoadoutSnapshot(player: Character): ItemInstance[] {

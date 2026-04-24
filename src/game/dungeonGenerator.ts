@@ -2,12 +2,15 @@ import type {
   DungeonBiome,
   DungeonRoom,
   DungeonRun,
+  RoomScoutingProfile,
   RoomSearchState,
+  RoomSignTag,
   RoomType
 } from "./types";
 import {
   DUNGEON_GENERATOR_VERSION,
-  RUN_RULES
+  RUN_RULES,
+  SCOUTING_RULES
 } from "./constants";
 import { getBiome } from "../data/biomes";
 import { getEncountersForBiome } from "../data/encounters";
@@ -17,6 +20,7 @@ import type { Rng } from "./rng";
 import { createRng, makeId, randomSeed } from "./rng";
 import { createInitialThreatState } from "./threat";
 import { addDungeonLogEntry, createEmptyDungeonLog } from "./dungeonLog";
+import { BIOME_SIGN_FLAVOR, ROOM_SIGNS_BY_TYPE } from "../data/roomSigns";
 
 export interface DungeonGenParams {
   seed?: string;
@@ -242,8 +246,34 @@ function buildRoom(
     lootTableId,
     trapId,
     extractionPoint,
-    searchState: createDefaultSearchState()
+    searchState: createDefaultSearchState(),
+    scoutingProfile: computeScoutingProfile(type, biome, dangerRating, extractionPoint)
   };
+}
+
+export function computeScoutingProfile(
+  type: RoomType,
+  biome: DungeonBiome,
+  dangerRating: number,
+  extractionPoint: boolean
+): RoomScoutingProfile {
+  const typeSigns = ROOM_SIGNS_BY_TYPE[type] ?? [];
+  const biomeSigns = BIOME_SIGN_FLAVOR[biome] ?? [];
+  const signs = dedupe<RoomSignTag>([...typeSigns, ...biomeSigns]);
+  return {
+    signs,
+    hiddenDanger: dangerRating >= 3,
+    hasTrapSignature: type === "trap" || type === "lockedChest",
+    hasMagicSignature: type === "shrine" || type === "questObjective" || type === "boss",
+    hasCreatureSigns: type === "combat" || type === "eliteCombat" || type === "boss",
+    hasTreasureSigns: type === "treasure" || type === "lockedChest",
+    hasExtractionSigns: type === "extraction" || extractionPoint,
+    falseSignalChance: SCOUTING_RULES.falseSignalBaseChance
+  };
+}
+
+function dedupe<T>(xs: T[]): T[] {
+  return Array.from(new Set(xs));
 }
 
 export function ensureRequiredRooms(
