@@ -1,0 +1,41 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { defaultGameState, hasSave, loadGame, resetGame, saveGame } from "../game/save";
+
+describe("save", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("hasSave is false initially", () => {
+    expect(hasSave()).toBe(false);
+  });
+
+  it("saves and loads state", () => {
+    const state = { ...defaultGameState(), stash: { items: [], gold: 99 } };
+    saveGame(state);
+    expect(hasSave()).toBe(true);
+    const loaded = loadGame();
+    expect(loaded?.stash.gold).toBe(99);
+  });
+
+  it("resetGame removes save", () => {
+    saveGame(defaultGameState());
+    resetGame();
+    expect(hasSave()).toBe(false);
+    expect(loadGame()).toBeNull();
+  });
+
+  it("migrates old version", () => {
+    const old = { ...defaultGameState(), version: 0 };
+    saveGame(old);
+    const loaded = loadGame();
+    expect(loaded?.version).toBe(1);
+  });
+
+  it("backfills prepared inventory on load", () => {
+    const old = { ...defaultGameState(), preparedInventory: undefined } as unknown as ReturnType<typeof defaultGameState>;
+    saveGame(old);
+    const loaded = loadGame();
+    expect(loaded?.preparedInventory.items).toHaveLength(0);
+  });
+});
