@@ -1,13 +1,10 @@
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
-import { StatBlock } from "../components/StatBlock";
-import { InventoryList } from "../components/InventoryList";
 import { useGameStore } from "../store/gameStore";
 
 export function VillageScreen() {
   const player = useGameStore(s => s.state.player);
   const village = useGameStore(s => s.state.village);
-  const stash = useGameStore(s => s.state.stash);
   const startRun = useGameStore(s => s.startDungeonRun);
   const goToScreen = useGameStore(s => s.goToScreen);
   const openMerchant = useGameStore(s => s.openMerchant);
@@ -33,6 +30,8 @@ export function VillageScreen() {
         <div className="village-actions">
           <Button onClick={() => startRun()}>Enter the Dungeon</Button>
           <Button variant="secondary" onClick={() => goToScreen("stash")}>Inventory</Button>
+          <Button variant="ghost" onClick={() => goToScreen("character")}>Character</Button>
+          <Button variant="ghost" onClick={() => goToScreen("quests")}>Quests</Button>
           <Button variant="ghost" onClick={() => {
             if (confirm("Reset save and return to the title?")) resetSave();
           }}>Reset</Button>
@@ -42,11 +41,12 @@ export function VillageScreen() {
 
       <div className="village-grid">
         <Card title={`${player.name}`} subtitle={`Level ${player.level} ${capitalize(player.ancestryId)} ${capitalize(player.classId)}`}>
-          <StatBlock character={player} />
-        </Card>
-
-        <Card title="Stash" subtitle={`${stash.items.length} item(s) · ${stash.gold} gold`}>
-          <InventoryList inventory={stash} emptyText="Nothing yet. Bring something back." />
+          <div className="status-row status-row-wrap">
+            <span>HP {player.hp}/{player.maxHp}</span>
+            <span>Armor {player.derivedStats.armor}</span>
+            <span>Acc +{player.derivedStats.accuracy}</span>
+            <span>Eva {player.derivedStats.evasion}</span>
+          </div>
         </Card>
 
         <Card title="Quests Available">

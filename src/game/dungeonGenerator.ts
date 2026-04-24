@@ -248,8 +248,10 @@ export function ensureRequiredRooms(
     const idx = findReplaceableIdx(minIdx)!;
     rooms[idx] = buildRoom(rng, biome, tier, "extraction", idx);
   }
-  if (!has("boss") && rng.nextFloat() < RUN_RULES.bossRoomChanceTierOne) {
-    const idx = findReplaceableIdx(Math.max(1, Math.floor(rooms.length * 0.65)), rooms.length - 1, false);
+  const requiresBoss = tier <= RUN_RULES.maxDungeonDepth;
+  if (!has("boss") && (requiresBoss || rng.nextFloat() < RUN_RULES.bossRoomChanceTierOne)) {
+    const idx = findReplaceableIdx(Math.max(1, Math.floor(rooms.length * 0.65)), rooms.length - 1, false) ??
+      (requiresBoss ? findReplaceableIdx(1, rooms.length - 1, false) : undefined);
     if (idx !== undefined) {
       rooms[idx] = buildRoom(rng, biome, tier, "boss", idx);
     }

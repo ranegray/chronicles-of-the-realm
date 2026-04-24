@@ -375,6 +375,8 @@ export type ScreenId =
   | "combat"
   | "runSummary"
   | "stash"
+  | "character"
+  | "quests"
   | "merchant";
 
 export interface CombatState {

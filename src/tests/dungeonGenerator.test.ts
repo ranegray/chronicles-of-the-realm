@@ -29,6 +29,13 @@ describe("dungeonGenerator", () => {
     }
   });
 
+  it("guarantees a boss room through the configured delve depth", () => {
+    for (let tier = 1; tier <= RUN_RULES.maxDungeonDepth; tier++) {
+      const rooms = generateRoomGraph(`boss-depth-${tier}`, "crypt", tier);
+      expect(rooms.some(r => r.type === "boss")).toBe(true);
+    }
+  });
+
   it("can generate deeper floors before dedicated tier tables exist", () => {
     const rooms = generateRoomGraph("depth-two", "sunkenTemple", 2);
     expect(rooms.some(r => r.type === "entrance")).toBe(true);

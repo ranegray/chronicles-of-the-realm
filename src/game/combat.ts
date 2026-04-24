@@ -14,6 +14,7 @@ import type { Rng } from "./rng";
 
 export type CombatAction =
   | { kind: "attack"; targetId: string }
+  | { kind: "powerAttack"; targetId: string }
   | { kind: "defend" }
   | { kind: "useItem"; itemInstanceId: string }
   | { kind: "flee" };
@@ -59,31 +60,37 @@ export function resolvePlayerAction(
   let nextPlayer: Character = { ...player };
   const consumed: string[] = [];
 
-  if (action.kind === "attack") {
+  if (action.kind === "attack" || action.kind === "powerAttack") {
+    const isPowerAttack = action.kind === "powerAttack";
     const target = next.enemies.find(e => e.instanceId === action.targetId && e.hp > 0);
     if (!target) {
       next.log.push("There is no living target.");
       return { combat: next, player: nextPlayer, consumedItems: consumed };
     }
     const roll = rollD20(rng);
-    const accuracy = nextPlayer.derivedStats.accuracy;
+    const accuracy = nextPlayer.derivedStats.accuracy - (isPowerAttack ? 2 : 0);
     const total = roll + accuracy;
     const isCrit = roll === COMBAT_RULES.naturalCrit;
     const isFumble = roll === COMBAT_RULES.naturalFumble;
     const hit = !isFumble && (isCrit || total >= target.evasion);
 
     if (!hit) {
-      next.log.push(`You swing (rolled ${roll}+${accuracy}=${total}) — miss.`);
+      const verb = isPowerAttack ? "overcommit" : "swing";
+      next.log.push(`You ${verb} (rolled ${roll}${formatSigned(accuracy)}=${total}) - miss.`);
     } else {
       const weapon = nextPlayer.equipped.weapon;
       const dmgFormula = weapon ? guessWeaponDice(weapon) : { count: 1, sides: 4 };
       const mightMod = getModifier(nextPlayer.abilityScores.might);
       let damage = rollDice(dmgFormula, rng) + mightMod;
-      if (isCrit) damage *= COMBAT_RULES.critMultiplier;
+      if (isPowerAttack) damage += 2 + Math.floor(nextPlayer.level / 2);
+      const gearCrit = !isCrit && nextPlayer.derivedStats.critChance > 0 &&
+        rng.nextInt(1, 100) <= nextPlayer.derivedStats.critChance;
+      if (isCrit || gearCrit) damage *= COMBAT_RULES.critMultiplier;
       damage = Math.max(1, damage - target.armor);
       target.hp = Math.max(0, target.hp - damage);
-      const critTxt = isCrit ? " (crit!)" : "";
-      next.log.push(`You strike ${target.name} for ${damage}${critTxt}.`);
+      const critTxt = isCrit || gearCrit ? " (crit!)" : "";
+      const verb = isPowerAttack ? "hammer" : "strike";
+      next.log.push(`You ${verb} ${target.name} for ${damage}${critTxt}.`);
       if (target.hp <= 0) next.log.push(`${target.name} falls.`);
     }
     next.playerDefending = false;
@@ -200,4 +207,8 @@ function guessWeaponDice(weapon: ItemInstance): { count: number; sides: number }
   if (weapon.tags?.includes("bow")) return { count: 1, sides: 8 };
   if (weapon.tags?.includes("magic")) return { count: 1, sides: 6 };
   return { count: 1, sides: 6 };
+}
+
+function formatSigned(value: number): string {
+  return value >= 0 ? `+${value}` : String(value);
 }

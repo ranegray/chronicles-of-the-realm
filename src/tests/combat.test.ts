@@ -33,6 +33,15 @@ describe("combat", () => {
     expect(result.combat.log.length).toBeGreaterThan(initial.log.length);
   });
 
+  it("power strike is a heavier attack option", () => {
+    const enc = getEncounter("enc_crypt_rats");
+    const player = buildPlayer();
+    const initial = startCombat(enc, createRng("power"), "room1");
+    const target = initial.enemies[0]!;
+    const result = resolvePlayerAction(initial, player, { kind: "powerAttack", targetId: target.instanceId }, createRng("power-action"));
+    expect(result.combat.log.length).toBeGreaterThan(initial.log.length);
+  });
+
   it("eventually concludes a fight", () => {
     const enc = getEncounter("enc_crypt_rats");
     const player = buildPlayer();

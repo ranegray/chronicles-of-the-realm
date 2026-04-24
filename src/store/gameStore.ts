@@ -34,6 +34,7 @@ import { getClass } from "../data/classes";
 import { startCombat as startCombatBase, resolvePlayerAction, type CombatAction } from "../game/combat";
 import { applyAbandonPenalty, applyDeathPenalty, applyExtractionRewards, applyXpAndLevel, type DeathSummary, type ExtractionRewardSummary } from "../game/progression";
 import { recalculateCharacterStats } from "../game/characterMath";
+import { RUN_RULES } from "../game/constants";
 import {
   canMerchantUpgrade,
   getBuyPrice,
@@ -93,10 +94,16 @@ export interface GameStore {
   attemptExtract: () => void;
   descendDungeon: () => void;
   takeItemFromRoom: (item: ItemInstance) => void;
+  useRaidConsumable: (itemInstanceId: string) => void;
+  equipItemFromRaid: (itemInstanceId: string, preferredSlot?: EquipmentSlotId) => void;
+  unequipItemToRaid: (slot: EquipmentSlotId) => void;
+  dropRaidItem: (itemInstanceId: string) => void;
 
   // Combat
   engageCurrentRoomCombat: () => void;
   performCombatAction: (action: CombatAction) => void;
+  useCombatInventoryItem: (itemInstanceId: string) => void;
+  performAutoCombat: () => void;
   closeCombatVictory: () => void;
   closeCombatFlee: () => void;
 
@@ -394,6 +401,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const rng = createRng(`search:${run.seed}:${room.id}`);
     const items: ItemInstance[] = [];
     let gold = 0;
+    if (room.type === "npcEvent") {
+      scratch.searched = true;
+      roomScratch.set(room.id, scratch);
+      const resolved = resolveVoiceRoom(s, run, room, rng);
+      set({ state: resolved.state, lastRoomMessage: resolved.message });
+      persist(resolved.state);
+      return;
+    }
+    if (room.type === "questObjective") {
+      scratch.searched = true;
+      roomScratch.set(room.id, scratch);
+      const resolved = resolveQuestObjectiveRoom(s, run, room, rng);
+      set({ state: resolved.state, lastRoomMessage: resolved.message });
+      persist(resolved.state);
+      return;
+    }
     if (room.lootTableId) {
       const count = room.type === "lockedChest" ? 2 : 1;
       items.push(...generateLootForRoomLootTableId(room.lootTableId, rng, count));
@@ -508,6 +531,113 @@ export const useGameStore = create<GameStore>((set, get) => ({
     persist(next);
   },
 
+  useRaidConsumable: itemInstanceId => {
+    const s = get().state;
+    if (!s.activeRun || !s.player) return;
+    const item = s.activeRun.raidInventory.items.find(i => i.instanceId === itemInstanceId);
+    if (!item) return;
+    const heal = getConsumableHealAmount(item);
+    if (heal <= 0) {
+      set({ lastRoomMessage: `${item.name} cannot be used here.` });
+      return;
+    }
+    if (s.player.hp >= s.player.maxHp) {
+      set({ lastRoomMessage: `${s.player.name} is already at full health.` });
+      return;
+    }
+    const player = {
+      ...s.player,
+      hp: Math.min(s.player.maxHp, s.player.hp + heal),
+      wounded: undefined
+    };
+    const run = {
+      ...s.activeRun,
+      raidInventory: removeItem(s.activeRun.raidInventory, itemInstanceId, 1)
+    };
+    const next: GameState = { ...s, player, activeRun: run };
+    set({ state: next, lastRoomMessage: `${item.name} restored ${heal} HP.` });
+    persist(next);
+  },
+
+  equipItemFromRaid: (itemInstanceId, preferredSlot) => {
+    const s = get().state;
+    if (!s.activeRun || !s.player) return;
+    const item = s.activeRun.raidInventory.items.find(i => i.instanceId === itemInstanceId);
+    if (!item) return;
+    let slot = preferredSlot ?? slotForItem(item);
+    if (!slot) {
+      set({ lastRoomMessage: `${item.name} cannot be equipped.` });
+      return;
+    }
+    if (item.category === "trinket" && !preferredSlot) {
+      slot = s.player.equipped.trinket1 ? "trinket2" : "trinket1";
+    }
+    if (item.category === "trinket" && slot !== "trinket1" && slot !== "trinket2") {
+      set({ lastRoomMessage: `${item.name} needs a trinket slot.` });
+      return;
+    }
+
+    const oldItem = s.player.equipped[slot];
+    let raidInventory = removeItem(s.activeRun.raidInventory, itemInstanceId, item.quantity);
+    if (oldItem) {
+      const nextWeight = calculateInventoryWeight(raidInventory) + oldItem.weight * oldItem.quantity;
+      if (nextWeight > s.player.derivedStats.carryCapacity) {
+        set({ lastRoomMessage: `No room in the raid pack for ${oldItem.name}.` });
+        return;
+      }
+      raidInventory = addItem(raidInventory, oldItem);
+    }
+
+    const player = recalculatePlayer({
+      ...s.player,
+      equipped: { ...s.player.equipped, [slot]: item }
+    });
+    const run = {
+      ...s.activeRun,
+      raidInventory,
+      loadoutSnapshot: collectLoadoutSnapshot(player)
+    };
+    const next: GameState = { ...s, player, activeRun: run };
+    set({ state: next, lastRoomMessage: `${item.name} equipped.` });
+    persist(next);
+  },
+
+  unequipItemToRaid: slot => {
+    const s = get().state;
+    if (!s.activeRun || !s.player) return;
+    const item = s.player.equipped[slot];
+    if (!item) return;
+    const nextWeight = calculateInventoryWeight(s.activeRun.raidInventory) + item.weight * item.quantity;
+    if (nextWeight > s.player.derivedStats.carryCapacity) {
+      set({ lastRoomMessage: `No room in the raid pack for ${item.name}.` });
+      return;
+    }
+    const equipped = { ...s.player.equipped, [slot]: undefined };
+    const player = recalculatePlayer({ ...s.player, equipped });
+    const run = {
+      ...s.activeRun,
+      raidInventory: addItem(s.activeRun.raidInventory, item),
+      loadoutSnapshot: collectLoadoutSnapshot(player)
+    };
+    const next: GameState = { ...s, player, activeRun: run };
+    set({ state: next, lastRoomMessage: `${item.name} moved to the raid pack.` });
+    persist(next);
+  },
+
+  dropRaidItem: itemInstanceId => {
+    const s = get().state;
+    if (!s.activeRun) return;
+    const item = s.activeRun.raidInventory.items.find(i => i.instanceId === itemInstanceId);
+    if (!item) return;
+    const run = {
+      ...s.activeRun,
+      raidInventory: removeItem(s.activeRun.raidInventory, itemInstanceId, item.quantity)
+    };
+    const next: GameState = { ...s, activeRun: run };
+    set({ state: next, lastRoomMessage: `${item.name} left behind.` });
+    persist(next);
+  },
+
   attemptExtract: () => {
     const s = get().state;
     if (!s.activeRun || !s.player || !s.village) return;
@@ -544,6 +674,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const run = s.activeRun;
     const room = getRoomById(run.roomGraph, run.currentRoomId);
     if (!room || room.type !== "boss" || !room.completed) return;
+    if (run.tier >= RUN_RULES.maxDungeonDepth) {
+      set({ lastRoomMessage: "The stair falls away into sealed black stone. This is as deep as the delve goes for now." });
+      return;
+    }
 
     const nextTier = run.tier + 1;
     const nextSeed = `${run.seed}:depth:${nextTier}`;
@@ -620,6 +754,51 @@ export const useGameStore = create<GameStore>((set, get) => ({
     persist(nextState);
 
     if (result.combat.over) {
+      handleCombatOutcome(get, set);
+    }
+  },
+
+  useCombatInventoryItem: itemInstanceId => {
+    get().performCombatAction({ kind: "useItem", itemInstanceId });
+    const activeCombat = get().state.activeCombat;
+    if (activeCombat) {
+      set({ screen: "combat" });
+    }
+  },
+
+  performAutoCombat: () => {
+    const s = get().state;
+    let combat = s.activeCombat;
+    let player = s.player;
+    if (!player || !combat || combat.over) return;
+
+    const maxSteps = 12;
+    let stopReason: string | undefined;
+    for (let step = 0; step < maxSteps && !combat.over; step++) {
+      if (player.hp <= Math.ceil(player.maxHp * 0.35)) {
+        stopReason = "Auto combat stops while you still have a chance to recover.";
+        break;
+      }
+      const target = combat.enemies.find(e => e.hp > 0);
+      if (!target) break;
+      const rng = createRng(`combat:${s.activeRun?.seed ?? "x"}:${combat.encounterId}:${combat.turn}:auto:${step}`);
+      const result = resolvePlayerAction(combat, player, { kind: "attack", targetId: target.instanceId }, rng, s.activeRun?.raidInventory.items ?? []);
+      combat = result.combat;
+      player = result.player;
+    }
+
+    if (!combat.over && !stopReason) {
+      stopReason = "Auto combat pauses so you can reassess.";
+    }
+    if (stopReason) {
+      combat = { ...combat, log: [...combat.log, stopReason] };
+    }
+
+    const nextState: GameState = { ...s, player, activeCombat: combat };
+    set({ state: nextState });
+    persist(nextState);
+
+    if (combat.over) {
       handleCombatOutcome(get, set);
     }
   },
@@ -703,7 +882,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       next = { ...next, player: xpd };
     }
     const lootText = lootMessages.length > 0 ? ` Found: ${lootMessages.join(", ")}.` : "";
-    const descendText = room.type === "boss" ? " A stair descends beyond the chamber." : "";
+    const descendText = room.type === "boss" && run.tier < RUN_RULES.maxDungeonDepth
+      ? " A stair descends beyond the chamber."
+      : room.type === "boss"
+        ? " No stair opens below this final depth."
+        : "";
     set({ state: next, screen: "dungeon", lastRoomMessage: `Victory! You gained ${xpGain} XP.${lootText}${descendText}` });
     persist(next);
   },
@@ -939,6 +1122,66 @@ function recalculatePlayer(character: Character): Character {
     getAncestry(character.ancestryId),
     getClass(character.classId)
   );
+}
+
+function resolveVoiceRoom(
+  state: GameState,
+  run: DungeonRun,
+  room: DungeonRoom,
+  rng: Rng
+): { state: GameState; message: string } {
+  const completedRun = completeRoom(run, room.id);
+  if (state.player && state.player.hp < state.player.maxHp && rng.nextFloat() < 0.65) {
+    const heal = rng.nextInt(4, 8) + run.tier;
+    const player: Character = {
+      ...state.player,
+      hp: Math.min(state.player.maxHp, state.player.hp + heal),
+      wounded: undefined
+    };
+    return {
+      state: { ...state, player, activeRun: completedRun },
+      message: `The voice steadies your breathing. ${player.name} recovers ${heal} HP.`
+    };
+  }
+
+  const gold = rollGold(rng, run.tier);
+  const nextRun: DungeonRun = {
+    ...completedRun,
+    raidInventory: { ...completedRun.raidInventory, gold: completedRun.raidInventory.gold + gold }
+  };
+  return {
+    state: { ...state, activeRun: nextRun },
+    message: `The voice names a loose stone. Behind it, you find ${gold} gold.`
+  };
+}
+
+function resolveQuestObjectiveRoom(
+  state: GameState,
+  run: DungeonRun,
+  room: DungeonRoom,
+  rng: Rng
+): { state: GameState; message: string } {
+  const proof = instanceFromTemplateId("quest_lost_sign", rng, 1);
+  const nextRun: DungeonRun = {
+    ...completeRoom(run, room.id),
+    raidInventory: addItem(run.raidInventory, proof)
+  };
+  let next: GameState = { ...state, activeRun: nextRun };
+  next = notifyQuestEvent(next, { kind: "itemRetrieved", templateId: proof.templateId, biome: room.biome });
+  next = notifyQuestEvent(next, { kind: "signFound", biome: room.biome });
+  return {
+    state: next,
+    message: `You recover ${proof.name}. It should satisfy someone back in the village.`
+  };
+}
+
+function completeRoom(run: DungeonRun, roomId: string): DungeonRun {
+  return {
+    ...run,
+    roomGraph: run.roomGraph.map(r =>
+      r.id === roomId ? { ...r, completed: true } : r
+    )
+  };
 }
 
 function recoverPlayerAfterDeath(player: Character, summary: DeathSummary): Character {

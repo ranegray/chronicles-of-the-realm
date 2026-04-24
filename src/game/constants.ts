@@ -28,6 +28,7 @@ export const RUN_RULES = {
   minExtractionRooms: 1,
   baseExtractionRoomChance: 0.12,
   bossRoomChanceTierOne: 0.15,
+  maxDungeonDepth: 3,
   deathLosesRaidInventory: true,
   deathLosesLoadout: true
 };

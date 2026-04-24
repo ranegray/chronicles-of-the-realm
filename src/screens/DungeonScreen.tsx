@@ -1,9 +1,10 @@
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
-import { InventoryList } from "../components/InventoryList";
 import { useGameStore } from "../store/gameStore";
 import { getRoomById } from "../game/dungeonGenerator";
 import { getBiome } from "../data/biomes";
+import { calculateInventoryWeight } from "../game/inventory";
+import { RUN_RULES } from "../game/constants";
 import type { DungeonRoom, DungeonRun } from "../game/types";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -47,6 +48,7 @@ export function DungeonScreen() {
   const abandon = useGameStore(s => s.abandonRun);
   const lastMessage = useGameStore(s => s.lastRoomMessage);
   const engage = useGameStore(s => s.engageCurrentRoomCombat);
+  const goToScreen = useGameStore(s => s.goToScreen);
 
   if (!run || !player) return <div className="screen">No active run.</div>;
   const current = getRoomById(run.roomGraph, run.currentRoomId);
@@ -57,6 +59,8 @@ export function DungeonScreen() {
     .map(id => getRoomById(run.roomGraph, id))
     .filter(Boolean) as ReturnType<typeof getRoomById>[];
   const exitCount = Math.min(adjacents.length, 4);
+  const raidWeight = calculateInventoryWeight(run.raidInventory);
+  const carryCapacity = player.derivedStats.carryCapacity;
 
   return (
     <div className="screen dungeon-screen">
@@ -93,8 +97,11 @@ export function DungeonScreen() {
             {current.extractionPoint && (
               <Button onClick={extract}>Extract</Button>
             )}
-            {current.type === "boss" && current.completed && (
+            {current.type === "boss" && current.completed && run.tier < RUN_RULES.maxDungeonDepth && (
               <Button variant="secondary" onClick={descend}>Descend</Button>
+            )}
+            {current.type === "boss" && current.completed && run.tier >= RUN_RULES.maxDungeonDepth && (
+              <span className="muted small">No deeper stair opens.</span>
             )}
             {current.type === "questObjective" && (
               <Button onClick={search}>Investigate</Button>
@@ -121,17 +128,19 @@ export function DungeonScreen() {
           )}
         </Card>
 
-        <Card title="Adventurer" subtitle={`HP ${player.hp} / ${player.maxHp}`}>
-          <div className="status-row">
+        <Card title="Status" subtitle={`HP ${player.hp} / ${player.maxHp}`}>
+          <div className="status-row status-row-wrap">
             <span>Armor {player.derivedStats.armor}</span>
             <span>Acc +{player.derivedStats.accuracy}</span>
             <span>Eva {player.derivedStats.evasion}</span>
+            <span>Pack {raidWeight}/{carryCapacity}</span>
+            <span>{run.raidInventory.gold} g</span>
           </div>
-          <p className="muted">Carry: {Math.round(player.derivedStats.carryCapacity)}</p>
-        </Card>
-
-        <Card title="Raid Pack" subtitle={`${run.raidInventory.gold} g`}>
-          <InventoryList inventory={run.raidInventory} capacity={player.derivedStats.carryCapacity} emptyText="Empty for now." />
+          <div className="room-actions">
+            <Button variant="secondary" onClick={() => goToScreen("character")}>Character</Button>
+            <Button variant="secondary" onClick={() => goToScreen("stash")}>Inventory</Button>
+            <Button variant="ghost" onClick={() => goToScreen("quests")}>Quests</Button>
+          </div>
         </Card>
 
         <Card title="Dungeon Map" subtitle={`${run.visitedRoomIds.length}/${run.roomGraph.length} rooms charted`}>

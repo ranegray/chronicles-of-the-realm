@@ -8,6 +8,7 @@ export function CombatScreen() {
   const player = useGameStore(s => s.state.player);
   const run = useGameStore(s => s.state.activeRun);
   const performAction = useGameStore(s => s.performCombatAction);
+  const performAutoCombat = useGameStore(s => s.performAutoCombat);
   const closeVictory = useGameStore(s => s.closeCombatVictory);
   const closeFlee = useGameStore(s => s.closeCombatFlee);
   const [showItems, setShowItems] = useState(false);
@@ -42,7 +43,7 @@ export function CombatScreen() {
         </Card>
 
         <Card title="Combat Log">
-          <ul className="combat-log">
+          <ul className="combat-log" aria-live="polite">
             {combat.log.slice(-12).map((line, i) => <li key={i}>{line}</li>)}
           </ul>
         </Card>
@@ -55,7 +56,13 @@ export function CombatScreen() {
                   Attack {livingEnemies[0]!.name}
                 </Button>
               )}
+              {livingEnemies[0] && (
+                <Button variant="secondary" onClick={() => performAction({ kind: "powerAttack", targetId: livingEnemies[0]!.instanceId })}>
+                  Power Strike
+                </Button>
+              )}
               <Button variant="secondary" onClick={() => performAction({ kind: "defend" })}>Defend</Button>
+              <Button variant="secondary" onClick={performAutoCombat}>Auto</Button>
               <Button variant="ghost" onClick={() => setShowItems(s => !s)}>Use Item</Button>
               <Button variant="danger" onClick={() => performAction({ kind: "flee" })}>Flee</Button>
             </>
