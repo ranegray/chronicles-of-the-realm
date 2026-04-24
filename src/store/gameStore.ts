@@ -29,7 +29,7 @@ import { addItem, calculateInventoryWeight, createEmptyInventory, instanceFromTe
 import { getConsumableHealFormula, rollConsumableHealAmount } from "../game/itemEffects";
 import { generateLootForRoomLootTableId, rollGold } from "../game/lootGenerator";
 import { getLootTableForBiome } from "../data/lootTables";
-import { getEncounter } from "../data/encounters";
+import { getEncounter, getEncountersForBiome } from "../data/encounters";
 import { getEnemy } from "../data/enemies";
 import { getAncestry } from "../data/ancestries";
 import { getClass } from "../data/classes";
@@ -40,13 +40,13 @@ import { recalculateCharacterStats } from "../game/characterMath";
 import { RUN_RULES, THREAT_RULES } from "../game/constants";
 import type { CombatThreatDelta } from "../game/combat";
 import type { DungeonLogEntryType, ThreatChange, ThreatChangeReason } from "../game/types";
-import { applyThreatChange, getThreatLabel } from "../game/threat";
+import { applyThreatChange, getThreatLabel, getThreatModifiers } from "../game/threat";
 import { addDungeonLogEntry } from "../game/dungeonLog";
 import { scoutAdjacentRooms } from "../game/scouting";
 import { searchCurrentRoom } from "../game/search";
 import { disarmTrap as disarmTrapCheck, triggerTrap } from "../game/traps";
 import { resolveEventChoice } from "../game/roomEvents";
-import { activateExtraction as activateExtractionFlow, canAttemptExtraction, resolveExtractionTurn } from "../game/extraction";
+import { activateExtraction as activateExtractionFlow, canAttemptExtraction, pickGuardEncounter, resolveExtractionTurn } from "../game/extraction";
 import type { ExtractionActivationResult } from "../game/extraction";
 import {
   canMerchantUpgrade,
@@ -449,14 +449,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Trap rooms and general "look-for-hidden" rooms go through the new search system.
     if (isNewSearchRoomType(room.type)) {
       const searchResult = searchCurrentRoom({ run, character: s.player });
-      let nextRun = searchResult.run;
+      const nextRun = searchResult.run;
       const nextPlayer: Character = searchResult.character;
-      const next: GameState = { ...s, activeRun: nextRun, player: nextPlayer };
-      set({ state: next, lastRoomMessage: searchResult.result.message });
-      persist(next);
+      const nextState: GameState = { ...s, activeRun: nextRun, player: nextPlayer };
       if (searchResult.result.type === "ambush") {
-        maybeStartCombatForRoom(get, set, getRoomById(nextRun.roomGraph, room.id)!);
+        const ambushRng = createRng(`ambush:${nextRun.seed}:${room.id}:${Date.now()}`);
+        const encId = pickGuardEncounter(nextRun.biome, nextRun.tier, ambushRng);
+        if (encId) {
+          const enc = getEncounter(encId);
+          const combat = startCombatBase(enc, ambushRng, room.id);
+          const combatState: GameState = { ...nextState, activeCombat: combat };
+          set({ state: combatState, screen: "combat", lastRoomMessage: searchResult.result.message });
+          saveGame(combatState);
+          return;
+        }
       }
+      set({ state: nextState, lastRoomMessage: searchResult.result.message });
+      persist(nextState);
       if (nextPlayer.hp <= 0) {
         finishRunWithDeath(get, set, nextRun, nextPlayer);
       }
@@ -1077,6 +1086,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       : room.type === "boss"
         ? " No stair opens below this final depth."
         : "";
+    if (next.activeRun) {
+      const now = Date.now();
+      const logMessage = isExtractionGuardWin
+        ? `Guard down at the extraction. +${xpGain} XP${lootMessages.length > 0 ? `, ${lootMessages.join(", ")}` : ""}.`
+        : `Victory: ${enc.name}. +${xpGain} XP${lootMessages.length > 0 ? `, ${lootMessages.join(", ")}` : ""}.`;
+      const loggedRun = addDungeonLogEntry({
+        run: next.activeRun, type: "combat", now, roomId: room.id,
+        message: logMessage
+      });
+      next = { ...next, activeRun: loggedRun };
+    }
     set({ state: next, screen: "dungeon", lastRoomMessage: `Victory! You gained ${xpGain} XP.${lootText}${descendText}` });
     persist(next);
   },
@@ -1584,7 +1604,12 @@ function finishRunWithDeath(
   player: Character
 ) {
   const s = get().state;
-  const { run: deadRun, summary } = applyDeathPenalty(run);
+  const now = Date.now();
+  const runWithLog = addDungeonLogEntry({
+    run, type: "danger", now, roomId: run.currentRoomId,
+    message: `${player.name} falls here. The dungeon keeps the raid pack.`
+  });
+  const { run: deadRun, summary } = applyDeathPenalty(runWithLog);
   const recoveredPlayer = recoverPlayerAfterDeath(player, summary);
   const runSummary = buildRunSummary({
     run: deadRun,
@@ -1703,10 +1728,24 @@ function maybeStartCombatForRoom(
   room: DungeonRoom
 ) {
   if (!room.encounterId) return;
-  const enc = getEncounter(room.encounterId);
+  const state = get().state;
+  const run = state.activeRun;
   const rng = createRng(`enc:${room.id}:${Date.now()}`);
+  let encounterId = room.encounterId;
+  if (run) {
+    const modifiers = getThreatModifiers(run.threat.level);
+    const eliteChance = modifiers.eliteEncounterChanceBonus ?? 0;
+    if (eliteChance > 0 && rng.nextFloat() < eliteChance) {
+      const pool = getEncountersForBiome(run.biome, run.tier).filter(e => e.dangerRating >= 2);
+      if (pool.length > 0) {
+        const entries = pool.map(e => ({ value: e.id, weight: e.weight }));
+        encounterId = rng.pickWeighted(entries);
+      }
+    }
+  }
+  const enc = getEncounter(encounterId);
   const combat = startCombatBase(enc, rng, room.id);
-  const next: GameState = { ...get().state, activeCombat: combat };
+  const next: GameState = { ...state, activeCombat: combat };
   set({ state: next, screen: "combat" });
   saveGame(next);
 }

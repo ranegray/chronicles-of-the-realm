@@ -122,7 +122,7 @@ export function DungeonScreen() {
           <div className="room-actions">
             {current.activeEvent && !current.activeEvent.resolved ? null : (
             <>
-            {(current.type === "treasure" || current.type === "lockedChest" || current.type === "shrine") && (
+            {(current.type === "treasure" || current.type === "lockedChest" || current.type === "shrine") && !current.activeEvent && (
               <>
                 <Button onClick={search}>Search</Button>
                 <Button variant="secondary" onClick={loot}>Take All</Button>

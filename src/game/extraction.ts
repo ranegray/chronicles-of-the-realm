@@ -119,7 +119,7 @@ function buildExtractionPoint(params: {
   }
 }
 
-function pickGuardEncounter(biome: DungeonBiome, tier: number, rng: Rng): string {
+export function pickGuardEncounter(biome: DungeonBiome, tier: number, rng: Rng): string {
   const pool = getEncountersForBiome(biome, tier).filter(e =>
     e.dangerRating >= EXTRACTION_RULES.guarded.tierOneGuardDangerRating
   );
