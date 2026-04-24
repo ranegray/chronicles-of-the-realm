@@ -10,6 +10,7 @@ import type {
   ItemInstance,
   Quest,
   QuestEvent,
+  RoomType,
   RunSummary,
   ScreenId,
   VillageState
@@ -42,6 +43,8 @@ import type { DungeonLogEntryType, ThreatChange, ThreatChangeReason } from "../g
 import { applyThreatChange, getThreatLabel } from "../game/threat";
 import { addDungeonLogEntry } from "../game/dungeonLog";
 import { scoutAdjacentRooms } from "../game/scouting";
+import { searchCurrentRoom } from "../game/search";
+import { disarmTrap as disarmTrapCheck, triggerTrap } from "../game/traps";
 import {
   canMerchantUpgrade,
   getBuyPrice,
@@ -97,6 +100,7 @@ export interface GameStore {
   // Dungeon actions
   moveToRoom: (roomId: string) => void;
   searchRoom: () => void;
+  disarmTrap: () => void;
   lootRoom: () => void;
   attemptExtract: () => void;
   descendDungeon: () => void;
@@ -423,12 +427,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ state: next, lastRoomMessage: undefined });
     persist(next);
 
-    if (target.type === "trap" && !target.completed) {
-      resolveTrapRoom(get, set, roomId);
-      return;
-    }
-
-    // Auto-trigger encounters on entering a combat room
+    // Auto-trigger encounters on entering a combat room.
+    // Trap rooms no longer fire on entry — search to detect/disarm/trigger.
     if ((target.type === "combat" || target.type === "boss" || target.type === "eliteCombat") && !target.completed) {
       maybeStartCombatForRoom(get, set, target);
     }
@@ -436,10 +436,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   searchRoom: () => {
     const s = get().state;
-    if (!s.activeRun) return;
+    if (!s.activeRun || !s.player) return;
     const run = s.activeRun;
     const room = getRoomById(run.roomGraph, run.currentRoomId);
     if (!room) return;
+
+    // Trap rooms and general "look-for-hidden" rooms go through the new search system.
+    if (isNewSearchRoomType(room.type)) {
+      const searchResult = searchCurrentRoom({ run, character: s.player });
+      let nextRun = searchResult.run;
+      const nextPlayer: Character = searchResult.character;
+      const next: GameState = { ...s, activeRun: nextRun, player: nextPlayer };
+      set({ state: next, lastRoomMessage: searchResult.result.message });
+      persist(next);
+      if (searchResult.result.type === "ambush") {
+        maybeStartCombatForRoom(get, set, getRoomById(nextRun.roomGraph, room.id)!);
+      }
+      if (nextPlayer.hp <= 0) {
+        finishRunWithDeath(get, set, nextRun, nextPlayer);
+      }
+      return;
+    }
+
     const scratch = roomScratch.get(room.id) ?? {};
     if (scratch.searched) {
       set({ lastRoomMessage: "You have searched here already." });
@@ -487,6 +505,59 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? "Nothing of worth in this room."
           : `Found ${items.length} item(s)${gold > 0 ? ` and ${gold} gold` : ""}.`
     });
+  },
+
+  disarmTrap: () => {
+    const s = get().state;
+    if (!s.activeRun || !s.player) return;
+    const run = s.activeRun;
+    const room = getRoomById(run.roomGraph, run.currentRoomId);
+    if (!room || !room.activeTrap) return;
+    if (!room.activeTrap.detected || room.activeTrap.disarmed || room.activeTrap.triggered) return;
+
+    const rng = createRng(`disarm:${run.seed}:${room.id}:${room.searchState?.searchCount ?? 0}`);
+    const result = disarmTrapCheck({ run, character: s.player, trap: room.activeTrap, rng });
+
+    let nextRun = run;
+    let nextPlayer: Character = s.player;
+    const now = Date.now();
+
+    if (result.disarmed) {
+      nextRun = {
+        ...nextRun,
+        roomGraph: nextRun.roomGraph.map(r =>
+          r.id === room.id
+            ? { ...r, activeTrap: { ...r.activeTrap!, disarmed: true }, completed: true }
+            : r
+        )
+      };
+      nextRun = addDungeonLogEntry({
+        run: nextRun, type: "trap", now, roomId: room.id,
+        message: result.message
+      });
+    } else if (result.triggered) {
+      const freshTrap = getRoomById(nextRun.roomGraph, room.id)?.activeTrap!;
+      const trig = triggerTrap({
+        run: nextRun, character: nextPlayer, room, trap: freshTrap, rng, now
+      });
+      nextRun = trig.run;
+      nextPlayer = trig.character;
+      nextRun = {
+        ...nextRun,
+        roomGraph: nextRun.roomGraph.map(r =>
+          r.id === room.id
+            ? { ...r, activeTrap: { ...r.activeTrap!, triggered: true, detected: true }, completed: true }
+            : r
+        )
+      };
+    }
+
+    const next: GameState = { ...s, activeRun: nextRun, player: nextPlayer };
+    set({ state: next, lastRoomMessage: result.message });
+    persist(next);
+    if (nextPlayer.hp <= 0) {
+      finishRunWithDeath(get, set, nextRun, nextPlayer);
+    }
   },
 
   lootRoom: () => {
@@ -1521,58 +1592,12 @@ function finishRunWithExtraction(
   persist(next);
 }
 
-function resolveTrapRoom(
-  get: () => GameStore,
-  set: (partial: Partial<GameStore>) => void,
-  roomId: string
-) {
-  const s = get().state;
-  const run = s.activeRun;
-  const player = s.player;
-  if (!run || !player) return;
-  const room = getRoomById(run.roomGraph, roomId);
-  if (!room || room.type !== "trap" || room.completed) return;
+const NEW_SEARCH_ROOM_TYPES: RoomType[] = [
+  "trap", "combat", "eliteCombat", "empty", "extraction", "boss"
+];
 
-  const rng = createRng(`trap:${run.seed}:${room.id}`);
-  const roll = rng.nextInt(1, 20);
-  const total = roll + player.derivedStats.trapSense;
-  const dc = 13 + run.tier + room.dangerRating;
-  let damage = 0;
-  let message = "";
-
-  if (total >= dc + 4) {
-    message = `${room.trapId ?? "The trap"} is spotted and disarmed before it bites.`;
-  } else if (total >= dc) {
-    damage = rng.nextInt(2, 5) + run.tier;
-    message = `${room.trapId ?? "The trap"} grazes you for ${damage} damage.`;
-  } else {
-    damage = rng.nextInt(6, 10) + run.tier + room.dangerRating;
-    message = `${room.trapId ?? "The trap"} catches you cleanly for ${damage} damage.`;
-  }
-
-  const nextPlayer: Character = {
-    ...player,
-    hp: Math.max(0, player.hp - damage)
-  };
-  const updatedRun: DungeonRun = {
-    ...run,
-    roomGraph: run.roomGraph.map(r =>
-      r.id === room.id ? { ...r, completed: true } : r
-    )
-  };
-
-  if (nextPlayer.hp <= 0) {
-    finishRunWithDeath(get, set, updatedRun, nextPlayer);
-    return;
-  }
-
-  const next: GameState = {
-    ...s,
-    player: nextPlayer,
-    activeRun: updatedRun
-  };
-  set({ state: next, lastRoomMessage: `${message} Roll ${roll} + Trap Sense ${player.derivedStats.trapSense} vs ${dc}.` });
-  persist(next);
+function isNewSearchRoomType(type: RoomType): boolean {
+  return NEW_SEARCH_ROOM_TYPES.includes(type);
 }
 
 function maybeStartCombatForRoom(

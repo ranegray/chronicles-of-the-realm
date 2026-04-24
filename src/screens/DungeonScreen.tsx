@@ -8,8 +8,10 @@ import { getRoomById } from "../game/dungeonGenerator";
 import { getBiome } from "../data/biomes";
 import { calculateInventoryWeight } from "../game/inventory";
 import { RUN_RULES } from "../game/constants";
-import type { DungeonRoom, DungeonRun } from "../game/types";
+import type { ActiveTrap, DungeonRoom, DungeonRun } from "../game/types";
 import { nextStepToKnownExtraction } from "../game/pathing";
+import { SEARCH_RULES } from "../game/constants";
+import { getTrapTemplate } from "../data/trapTables";
 
 const TYPE_LABELS: Record<string, string> = {
   entrance: "Entrance",
@@ -46,6 +48,7 @@ export function DungeonScreen() {
   const player = useGameStore(s => s.state.player);
   const moveToRoom = useGameStore(s => s.moveToRoom);
   const search = useGameStore(s => s.searchRoom);
+  const disarm = useGameStore(s => s.disarmTrap);
   const loot = useGameStore(s => s.lootRoom);
   const extract = useGameStore(s => s.attemptExtract);
   const descend = useGameStore(s => s.descendDungeon);
@@ -111,6 +114,15 @@ export function DungeonScreen() {
             {(current.type === "combat" || current.type === "boss" || current.type === "eliteCombat") && !current.completed && (
               <Button onClick={engage}>Engage</Button>
             )}
+            {(current.type === "trap" || current.type === "empty" ||
+              (current.completed && (current.type === "combat" || current.type === "eliteCombat" || current.type === "boss")) ||
+              current.type === "extraction"
+            ) && canStillSearch(current) && (
+              <Button onClick={search}>{searchLabelFor(current)}</Button>
+            )}
+            {current.activeTrap?.detected && !current.activeTrap.disarmed && !current.activeTrap.triggered && (
+              <Button variant="secondary" onClick={disarm}>Disarm Trap</Button>
+            )}
             {current.extractionPoint && (
               <Button onClick={extract}>Extract</Button>
             )}
@@ -127,6 +139,9 @@ export function DungeonScreen() {
               <Button onClick={search}>Listen</Button>
             )}
           </div>
+          {current.activeTrap && (
+            <TrapStatus trap={current.activeTrap} />
+          )}
         </Card>
 
         <Card title="Exits" subtitle={`${exitCount}/4 attached rooms`}>
@@ -183,6 +198,41 @@ export function DungeonScreen() {
       </div>
     </div>
   );
+}
+
+function canStillSearch(room: DungeonRoom): boolean {
+  const count = room.searchState?.searchCount ?? 0;
+  return count < SEARCH_RULES.maxSearchesPerRoom;
+}
+
+function searchLabelFor(room: DungeonRoom): string {
+  if (room.activeTrap?.detected && !room.activeTrap.disarmed && !room.activeTrap.triggered) {
+    return "Search Again";
+  }
+  if (room.type === "trap") return "Search for Traps";
+  return "Search";
+}
+
+function TrapStatus({ trap }: { trap: ActiveTrap }) {
+  const template = tryTrapTemplate(trap.trapId);
+  if (trap.triggered) {
+    return <p className="warn">The {template?.name.toLowerCase() ?? "trap"} has been sprung.</p>;
+  }
+  if (trap.disarmed) {
+    return <p className="msg">The {template?.name.toLowerCase() ?? "trap"} is defused.</p>;
+  }
+  if (trap.detected) {
+    return (
+      <p className="warn">
+        {template?.name ?? "A trap"} — detected. Try to disarm, or leave it to rest.
+      </p>
+    );
+  }
+  return null;
+}
+
+function tryTrapTemplate(id: string) {
+  try { return getTrapTemplate(id); } catch { return undefined; }
 }
 
 function ExtractionPressureBanner({

@@ -21,6 +21,7 @@ import { createRng, makeId, randomSeed } from "./rng";
 import { createInitialThreatState } from "./threat";
 import { addDungeonLogEntry, createEmptyDungeonLog } from "./dungeonLog";
 import { BIOME_SIGN_FLAVOR, ROOM_SIGNS_BY_TYPE } from "../data/roomSigns";
+import { generateTrapForRoom } from "./traps";
 
 export interface DungeonGenParams {
   seed?: string;
@@ -158,6 +159,7 @@ function buildRoom(
   let encounterId: string | undefined;
   let lootTableId: string | undefined;
   let trapId: string | undefined;
+  let activeTrap: DungeonRoom["activeTrap"] | undefined;
   let extractionPoint = false;
 
   switch (type) {
@@ -192,7 +194,18 @@ function buildRoom(
       break;
     case "trap": {
       title = "Trap Room";
-      trapId = rng.pickOne(biomeInfo.trapNames);
+      const trap = generateTrapForRoom({
+        room: { id: "" } as DungeonRoom,
+        biome,
+        tier,
+        rng
+      });
+      if (trap) {
+        activeTrap = trap;
+        trapId = trap.trapId;
+      } else {
+        trapId = rng.pickOne(biomeInfo.trapNames);
+      }
       dangerRating = 2;
       break;
     }
@@ -232,8 +245,9 @@ function buildRoom(
       break;
   }
 
+  const id = `room_${idx}_${makeId(rng, "r")}`;
   return {
-    id: `room_${idx}_${makeId(rng, "r")}`,
+    id,
     type,
     biome,
     title,
@@ -245,6 +259,7 @@ function buildRoom(
     encounterId,
     lootTableId,
     trapId,
+    activeTrap: activeTrap ? { ...activeTrap, roomId: id } : undefined,
     extractionPoint,
     searchState: createDefaultSearchState(),
     scoutingProfile: computeScoutingProfile(type, biome, dangerRating, extractionPoint)

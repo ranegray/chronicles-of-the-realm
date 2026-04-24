@@ -59,8 +59,11 @@ describe("risk/reward simulation", () => {
     });
 
     expect(extracted.length).toBeGreaterThanOrEqual(15);
-    expect(withDecision.length).toBeGreaterThanOrEqual(15);
-    expect(nearDeath.length + deaths.length).toBeGreaterThanOrEqual(8);
+    expect(withDecision.length).toBeGreaterThanOrEqual(10);
+    // v0.2: trap rooms are walk-through-safe, so risk mostly comes from combat.
+    // The warrior-in-crypt scenario is robust enough to rarely flirt with death
+    // on a mindless walkthrough; tension now lives in searching/threat/events.
+    expect(nearDeath.length + deaths.length).toBeGreaterThanOrEqual(2);
     expect(avgRooms).toBeGreaterThanOrEqual(5);
     expect(avgValue).toBeGreaterThanOrEqual(25);
   });
@@ -147,17 +150,10 @@ function processRoom(args: {
   }
 
   if (room.type === "trap") {
-    const rng = createRng(`sim-trap:${args.run.seed}:${room.id}`);
-    const roll = rng.nextInt(1, 20);
-    const total = roll + args.player.derivedStats.trapSense;
-    const dc = 13 + args.run.tier + room.dangerRating;
-    const damage = total >= dc + 4
-      ? 0
-      : total >= dc
-        ? rng.nextInt(2, 5) + args.run.tier
-        : rng.nextInt(6, 10) + args.run.tier + room.dangerRating;
+    // v0.2: trap rooms no longer auto-trigger on entry. The simulated delver
+    // doesn't search here, so the room is walked through safely.
     return {
-      player: { ...args.player, hp: Math.max(0, args.player.hp - damage) },
+      player: args.player,
       raidInventory: args.raidInventory,
       run: completeRoom(args.run, room.id)
     };
