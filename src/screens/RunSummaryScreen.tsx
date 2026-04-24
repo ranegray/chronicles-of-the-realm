@@ -37,6 +37,17 @@ export function RunSummaryScreen() {
         </div>
       </Card>
 
+      {summary.reason === "dead" && (
+        <Card title="What Might Have Been" variant="warm">
+          <p className="muted">Next time is made from this.</p>
+          <div className="summary-stat-grid">
+            <SummaryStat label="Raid value lost" value={summary.raidValueLost} />
+            <SummaryStat label="Total value lost" value={summary.itemValueLost + summary.goldLost} />
+          </div>
+          <p>{describeDeathExtraction(summary)}</p>
+        </Card>
+      )}
+
       <Card title="Loot Extracted">
         <ItemList
           items={summary.lootExtracted}
@@ -111,4 +122,19 @@ function ItemList({ items, empty }: { items: RunSummary["lootExtracted"]; empty:
       {items.map(item => <ItemCard key={item.instanceId} item={item} compact />)}
     </div>
   );
+}
+
+function describeDeathExtraction(summary: RunSummary): string {
+  const dist = summary.deathExtractionDistance;
+  if (dist === undefined) {
+    return "No extraction existed that could have saved this run.";
+  }
+  if (dist === 0) {
+    return "You fell on the extraction stair itself.";
+  }
+  const knownPart = summary.deathExtractionKnown
+    ? "An extraction you had already scouted"
+    : "An extraction you hadn't found yet";
+  const roomWord = dist === 1 ? "room" : "rooms";
+  return `${knownPart} was ${dist} ${roomWord} away.`;
 }

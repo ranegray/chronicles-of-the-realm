@@ -8,6 +8,7 @@ import type {
   VillageState
 } from "./types";
 import type { DeathSummary, ExtractionRewardSummary } from "./progression";
+import { extractionDistances } from "./pathing";
 
 interface BuildRunSummaryArgs {
   run: DungeonRun;
@@ -29,6 +30,17 @@ export function buildRunSummary({
   const lootExtracted = extraction?.itemsSecured ?? [];
   const lootLost = death?.raidItemsLost ?? [];
   const gearLost = death?.gearLost ?? [];
+  const itemValueLost = getInventoryValue(lootLost) + getInventoryValue(gearLost);
+  const raidValueLost = getInventoryValue(lootLost) + (death?.goldLost ?? 0);
+
+  let deathExtractionDistance: number | undefined;
+  let deathExtractionKnown: boolean | undefined;
+  if (reason === "dead") {
+    const { absolute, knownVisited } = extractionDistances(run, run.currentRoomId);
+    deathExtractionDistance = absolute;
+    deathExtractionKnown = knownVisited !== undefined;
+  }
+
   return {
     id: `${run.runId}:${Date.now()}`,
     runId: run.runId,
@@ -48,6 +60,10 @@ export function buildRunSummary({
     goldLost: death?.goldLost ?? 0,
     xpGained: run.xpGained ?? extraction?.xpGained ?? 0,
     itemValueExtracted: getInventoryValue(lootExtracted),
+    itemValueLost,
+    raidValueLost,
+    deathExtractionDistance,
+    deathExtractionKnown,
     questProgress: getQuestProgress(run, village),
     questsCompleted: extraction?.questsCompleted ?? getCompletedRunQuests(run, village),
     questRewards: extraction?.questRewards ?? [],

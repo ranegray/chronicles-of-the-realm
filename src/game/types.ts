@@ -406,6 +406,10 @@ export interface RunSummary {
   goldLost: number;
   xpGained: number;
   itemValueExtracted: number;
+  itemValueLost: number;
+  raidValueLost: number;
+  deathExtractionDistance?: number;
+  deathExtractionKnown?: boolean;
   questProgress: QuestProgressSummary[];
   questsCompleted: Quest[];
   questRewards: ItemInstance[];

@@ -269,6 +269,36 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
   color: var(--accent-2);
   font-weight: 600;
 }
+.run-pressure-banner {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--warn);
+  background: linear-gradient(90deg, rgba(230, 134, 60, 0.16), rgba(230, 134, 60, 0.04));
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  box-shadow: 0 0 0 1px rgba(230, 134, 60, 0.25) inset;
+}
+.run-pressure-banner strong { color: var(--warn); letter-spacing: 0.02em; }
+.run-pressure-banner span { color: var(--text-dim); }
+.extraction-urgent {
+  color: var(--warn);
+  font-weight: 600;
+}
+.exit-bearing {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(108, 174, 108, 0.15);
+  border: 1px solid rgba(108, 174, 108, 0.45);
+  color: var(--good);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 
 .adjacent-list { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 4px; }
 .adjacent-list .btn {

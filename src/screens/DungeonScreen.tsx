@@ -5,7 +5,9 @@ import { getRoomById } from "../game/dungeonGenerator";
 import { getBiome } from "../data/biomes";
 import { calculateInventoryWeight } from "../game/inventory";
 import { RUN_RULES } from "../game/constants";
-import type { DungeonRoom, DungeonRun } from "../game/types";
+import type { Character, DungeonRoom, DungeonRun, VillageState } from "../game/types";
+import { getRoomRevealPreview, type RoomRevealPreview } from "../game/reveal";
+import { nextStepToKnownExtraction } from "../game/pathing";
 
 const TYPE_LABELS: Record<string, string> = {
   entrance: "Entrance",
@@ -40,6 +42,7 @@ const TYPE_MARKS: Record<string, string> = {
 export function DungeonScreen() {
   const run = useGameStore(s => s.state.activeRun);
   const player = useGameStore(s => s.state.player);
+  const village = useGameStore(s => s.state.village);
   const moveToRoom = useGameStore(s => s.moveToRoom);
   const search = useGameStore(s => s.searchRoom);
   const loot = useGameStore(s => s.lootRoom);
@@ -70,6 +73,8 @@ export function DungeonScreen() {
       ? "Extraction here"
       : `Extraction ${extractionDistance} room${extractionDistance === 1 ? "" : "s"} back`;
   const woundedWithLoot = player.hp <= Math.floor(player.maxHp * 0.75) && packValue >= 18;
+  const nearbyExtractionStepId = nextStepToKnownExtraction(run, current.id);
+  const pressureActive = woundedWithLoot && extractionDistance !== undefined && extractionDistance <= 2;
 
   return (
     <div className="screen dungeon-screen">
@@ -128,8 +133,12 @@ export function DungeonScreen() {
                 <li key={r.id}>
                   <Button variant="ghost" onClick={() => moveToRoom(r.id)}>
                     <span className="exit-direction">{getDirectionLabel(current, r)}</span>
-                    {r.visited ? `${r.title} · ${TYPE_LABELS[r.type] ?? r.type}` : "Unscouted room"}
-                    {r.dangerRating > 0 && r.visited && ` · D${r.dangerRating}`}
+                    <ExitLabel
+                      room={r}
+                      character={player}
+                      village={village}
+                      isBearingExit={r.id === nearbyExtractionStepId}
+                    />
                   </Button>
                 </li>
               ))}
@@ -146,10 +155,15 @@ export function DungeonScreen() {
             <span>{run.raidInventory.gold} g</span>
             <span>Value {packValue}</span>
             <span>{unchartedRooms} uncharted</span>
-            <span>{extractionText}</span>
+            <span className={pressureActive ? "extraction-urgent" : undefined}>{extractionText}</span>
           </div>
-          {woundedWithLoot && extractionDistance !== undefined && extractionDistance <= 2 && unchartedRooms > 0 && (
-            <p className="run-pressure">Bloodied, packed, and close to an exit.</p>
+          {pressureActive && (
+            <ExtractionPressureBanner
+              hp={player.hp}
+              maxHp={player.maxHp}
+              packValue={packValue}
+              extractionDistance={extractionDistance!}
+            />
           )}
           <div className="room-actions">
             <Button variant="secondary" onClick={() => goToScreen("character")}>Character</Button>
@@ -162,6 +176,84 @@ export function DungeonScreen() {
           <DungeonMap run={run} current={current} onMove={moveToRoom} />
         </Card>
       </div>
+    </div>
+  );
+}
+
+function ExitLabel({
+  room,
+  character,
+  village,
+  isBearingExit
+}: {
+  room: DungeonRoom;
+  character: Character;
+  village?: VillageState;
+  isBearingExit: boolean;
+}) {
+  const preview = getRoomRevealPreview({ room, character, village });
+  const bearing = isBearingExit
+    ? <span className="exit-bearing" title="Toward nearest known extraction">→ Exit</span>
+    : null;
+
+  if (room.visited) {
+    return (
+      <>
+        {`${room.title} · ${TYPE_LABELS[room.type] ?? room.type}`}
+        {room.dangerRating > 0 && ` · D${room.dangerRating}`}
+        {bearing}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {describeUnscoutedRoom(room, preview)}
+      {bearing}
+    </>
+  );
+}
+
+function describeUnscoutedRoom(room: DungeonRoom, preview: RoomRevealPreview): string {
+  const fragments: string[] = [];
+  if (preview.knowsType) {
+    fragments.push(TYPE_LABELS[room.type] ?? room.type);
+  } else {
+    fragments.push("Unscouted");
+  }
+  if (preview.knowsDanger) {
+    fragments.push(`Danger ~${room.dangerRating}`);
+  }
+  if (preview.trapWarning && !preview.knowsType) {
+    fragments.push("Trap ahead?");
+  }
+  if (preview.sourceLabel) {
+    fragments.push(`(${preview.sourceLabel})`);
+  }
+  return fragments.join(" · ");
+}
+
+function ExtractionPressureBanner({
+  hp,
+  maxHp,
+  packValue,
+  extractionDistance
+}: {
+  hp: number;
+  maxHp: number;
+  packValue: number;
+  extractionDistance: number;
+}) {
+  const hpPct = Math.round((hp / maxHp) * 100);
+  const subject = extractionDistance === 0
+    ? "Stand on the stair and leave."
+    : extractionDistance === 1
+      ? "The exit is one room away."
+      : `The exit is ${extractionDistance} rooms away.`;
+  return (
+    <div className="run-pressure-banner" role="status" aria-live="polite">
+      <strong>Bloodied and packed.</strong>
+      <span> HP {hpPct}%. Raid value {packValue}. {subject} Push or leave?</span>
     </div>
   );
 }
