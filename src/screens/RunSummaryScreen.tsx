@@ -1,78 +1,114 @@
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { ItemCard } from "../components/ItemCard";
+import type { RunSummary } from "../game/types";
 import { useGameStore } from "../store/gameStore";
 
 export function RunSummaryScreen() {
-  const extraction = useGameStore(s => s.lastExtractionSummary);
-  const death = useGameStore(s => s.lastDeathSummary);
+  const summary = useGameStore(s => s.state.lastRunSummary);
   const goToScreen = useGameStore(s => s.goToScreen);
 
-  if (extraction) {
+  if (!summary) {
     return (
       <div className="screen summary-screen">
-        <h2>Extraction Successful</h2>
-        <p>You walk back into the village with what you carried.</p>
-        <Card title="Loot Secured">
-          {extraction.itemsSecured.length === 0 ? <em>You came back empty-handed but alive.</em> :
-            <div className="inv-items">
-              {extraction.itemsSecured.map(i => <ItemCard key={i.instanceId} item={i} compact />)}
-            </div>
-          }
-        </Card>
-        <Card title="Rewards">
-          <p>+{extraction.goldGained} gold</p>
-          <p>+{extraction.xpGained} XP</p>
-        </Card>
-        <Card title="Quests Completed">
-          {extraction.questsCompleted.length === 0 ? <em>No quest progress this delve.</em> :
-            <ul className="quest-list">
-              {extraction.questsCompleted.map(q => <li key={q.id}>{q.title}</li>)}
-            </ul>
-          }
-          {extraction.questsCompleted.length > 0 && (
-            <p className="muted">Return to the quest giver to turn these in.</p>
-          )}
-        </Card>
-        {extraction.unlocksApplied.length > 0 && (
-          <Card title="Village Progress">
-            <ul>{extraction.unlocksApplied.map((u, i) => <li key={i}>{u}</li>)}</ul>
-          </Card>
-        )}
-        <div className="summary-actions">
-          <Button onClick={() => goToScreen("village")}>Return to Village</Button>
-        </div>
+        <p>No run summary to show.</p>
+        <Button onClick={() => goToScreen("village")}>Back</Button>
       </div>
     );
   }
 
-  if (death) {
-    return (
-      <div className="screen summary-screen">
-        <h2>The Dungeon Keeps What It Took</h2>
-        <p>Your carried raid pack is gone. If the dungeon took you, your equipped loadout is gone too.</p>
-        <Card title="Lost">
-          {death.itemsLost.length === 0 ? <em>Nothing to lose, this time.</em> : (
-            <div className="inv-items">
-              {death.itemsLost.map(i => <ItemCard key={i.instanceId} item={i} compact />)}
-            </div>
-          )}
-          <p>{death.goldLost > 0 && `Lost ${death.goldLost} gold from the raid pack.`}</p>
-        </Card>
-        <Card title="Stash">
-          <p>The stash in the village remains. Begin again when you are ready.</p>
-        </Card>
-        <div className="summary-actions">
-          <Button onClick={() => goToScreen("village")}>Return to Village</Button>
-        </div>
-      </div>
-    );
-  }
+  const success = summary.reason === "extracted" || summary.reason === "debugExtracted";
 
   return (
     <div className="screen summary-screen">
-      <p>No run summary to show.</p>
-      <Button onClick={() => goToScreen("village")}>Back</Button>
+      <header className="screen-header">
+        <div>
+          <h2>{success ? "Run Extracted" : summary.reason === "dead" ? "Run Lost" : "Run Abandoned"}</h2>
+          <p className="muted">{summary.reasonText}</p>
+        </div>
+      </header>
+
+      <Card title="Run Result" subtitle={`${summary.roomsVisited} rooms visited · ${summary.roomsCompleted} cleared`}>
+        <div className="summary-stat-grid">
+          <SummaryStat label="Gold gained" value={summary.goldGained} />
+          <SummaryStat label="Gold lost" value={summary.goldLost} />
+          <SummaryStat label="XP gained" value={summary.xpGained} />
+          <SummaryStat label="Item value out" value={summary.itemValueExtracted} />
+        </div>
+      </Card>
+
+      <Card title="Loot Extracted">
+        <ItemList
+          items={summary.lootExtracted}
+          empty="Nothing extracted. The village stash did not grow."
+        />
+      </Card>
+
+      <Card title="Loot Lost">
+        <ItemList
+          items={summary.lootLost}
+          empty="No raid-pack loot was lost."
+        />
+      </Card>
+
+      <Card title="Gear Lost">
+        <ItemList
+          items={summary.gearLost}
+          empty="No equipped gear was lost."
+        />
+      </Card>
+
+      <Card title="Quest Progress">
+        {summary.questProgress.length === 0 ? (
+          <em>No tracked quest progress this run.</em>
+        ) : (
+          <ul className="quest-list">
+            {summary.questProgress.map(quest => (
+              <li key={quest.questId}>
+                <strong>{quest.title}</strong>
+                <div className="muted">
+                  {quest.beforeCount} → {quest.afterCount} / {quest.requiredCount} · {quest.status}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {summary.questsCompleted.length > 0 && (
+          <p className="msg">{summary.questsCompleted.length} quest{summary.questsCompleted.length === 1 ? "" : "s"} ready to turn in.</p>
+        )}
+      </Card>
+
+      <Card title="NPC Unlocks">
+        {summary.unlocksApplied.length === 0 ? (
+          <em>No village unlocks applied from this run.</em>
+        ) : (
+          <ul className="quest-list">
+            {summary.unlocksApplied.map((unlock, index) => <li key={index}>{unlock}</li>)}
+          </ul>
+        )}
+      </Card>
+
+      <div className="summary-actions">
+        <Button onClick={() => goToScreen("village")}>Return to Village</Button>
+      </div>
+    </div>
+  );
+}
+
+function SummaryStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="summary-stat">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ItemList({ items, empty }: { items: RunSummary["lootExtracted"]; empty: string }) {
+  if (items.length === 0) return <em>{empty}</em>;
+  return (
+    <div className="inv-items">
+      {items.map(item => <ItemCard key={item.instanceId} item={item} compact />)}
     </div>
   );
 }

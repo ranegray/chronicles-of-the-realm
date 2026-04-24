@@ -3,7 +3,7 @@ import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { ItemCard } from "../components/ItemCard";
 import { calculateInventoryWeight } from "../game/inventory";
-import { getConsumableHealAmount } from "../game/itemEffects";
+import { getConsumableHealFormula } from "../game/itemEffects";
 import type { EquipmentSlots, ItemInstance } from "../game/types";
 import { useGameStore } from "../store/gameStore";
 
@@ -104,7 +104,7 @@ export function StashScreen() {
                       item={item}
                       actions={
                         <>
-                          {item.category === "consumable" && (
+                          {getConsumableHealFormula(item) && (
                             <Button variant="ghost" onClick={() => useStashItem(item.instanceId)}>Use</Button>
                           )}
                           {canEquip(item) && (
@@ -137,7 +137,7 @@ export function StashScreen() {
                         ? <CombatItemActions item={item} onUse={() => useCombatItem(item.instanceId)} />
                         : (
                           <>
-                            {item.category === "consumable" && (
+                            {getConsumableHealFormula(item) && (
                               <Button variant="ghost" onClick={() => useRaidItem(item.instanceId)}>Use</Button>
                             )}
                             {canEquip(item) && (
@@ -175,7 +175,7 @@ function canEquip(item: ItemInstance): boolean {
 }
 
 function CombatItemActions({ item, onUse }: { item: ItemInstance; onUse: () => void }) {
-  if (getConsumableHealAmount(item) > 0) {
+  if (getConsumableHealFormula(item)) {
     return <Button variant="ghost" onClick={onUse}>Use</Button>;
   }
   return <span className="muted small">Not usable in combat</span>;

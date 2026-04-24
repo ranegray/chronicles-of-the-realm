@@ -10,6 +10,7 @@ import type {
   ItemInstance,
   Quest,
   QuestEvent,
+  RunSummary,
   ScreenId,
   VillageState
 } from "../game/types";
@@ -24,7 +25,7 @@ import { applyQuestEventToList } from "../game/questGenerator";
 import { generateDungeonRun, getRoomById } from "../game/dungeonGenerator";
 import { defaultGameState, loadGame, resetGame, saveGame } from "../game/save";
 import { addItem, calculateInventoryWeight, createEmptyInventory, instanceFromTemplateId, removeItem } from "../game/inventory";
-import { getConsumableHealAmount } from "../game/itemEffects";
+import { getConsumableHealFormula, rollConsumableHealAmount } from "../game/itemEffects";
 import { generateLootForRoomLootTableId, rollGold } from "../game/lootGenerator";
 import { getLootTableForBiome } from "../data/lootTables";
 import { getEncounter } from "../data/encounters";
@@ -33,6 +34,7 @@ import { getAncestry } from "../data/ancestries";
 import { getClass } from "../data/classes";
 import { startCombat as startCombatBase, resolvePlayerAction, type CombatAction } from "../game/combat";
 import { applyAbandonPenalty, applyDeathPenalty, applyExtractionRewards, applyXpAndLevel, type DeathSummary, type ExtractionRewardSummary } from "../game/progression";
+import { appendRunSummary, buildRunSummary } from "../game/runSummary";
 import { recalculateCharacterStats } from "../game/characterMath";
 import { RUN_RULES } from "../game/constants";
 import {
@@ -117,6 +119,15 @@ export interface GameStore {
   sellStashItem: (itemInstanceId: string) => void;
   upgradeEquippedItem: (slot: EquipmentSlotId) => void;
   claimQuestReward: (questId: string) => void;
+
+  // Dev tools
+  debugGenerateDungeonSeed: () => void;
+  debugGiveGold: () => void;
+  debugHealPlayer: () => void;
+  debugSpawnTestLoot: () => void;
+  debugKillPlayer: () => void;
+  debugForceExtraction: () => void;
+  debugCompleteQuest: () => void;
 }
 
 interface RoomScratch {
@@ -145,7 +156,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   boot: () => {
     const loaded = loadGame();
     if (loaded) {
-      set({ state: loaded });
+      set({ state: loaded, screen: getScreenForLoadedState(loaded) });
     }
   },
 
@@ -318,6 +329,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const run = generateDungeonRun({ seed, activeQuestIds: activeIds });
     run.raidInventory = s.preparedInventory ?? createEmptyInventory();
     run.loadoutSnapshot = collectLoadoutSnapshot(s.player);
+    run.questProgressAtStart = captureQuestProgress(s.village, activeIds);
     roomScratch.clear();
     const next: GameState = { ...s, activeRun: run, preparedInventory: createEmptyInventory() };
     set({ state: next, screen: "dungeon", lastRoomMessage: `You enter the ${run.biome} (${run.seed}).` });
@@ -329,13 +341,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!s.activeRun) return;
     const { run, summary } = applyAbandonPenalty(s.activeRun);
     const player = s.player ? { ...s.player, hp: s.player.maxHp, wounded: undefined } : s.player;
+    const runSummary = buildRunSummary({
+      run,
+      village: s.village,
+      reason: "abandoned",
+      reasonText: "You abandoned the delve and lost the raid pack.",
+      death: summary
+    });
     const next: GameState = {
       ...s,
       player,
       activeRun: undefined,
-      completedRuns: [...s.completedRuns, run]
+      completedRuns: [...s.completedRuns, run],
+      lastRunSummary: runSummary,
+      runSummaries: appendRunSummary(s.runSummaries, runSummary)
     };
-    set({ state: next, lastDeathSummary: summary, screen: "runSummary" });
+    set({ state: next, lastDeathSummary: summary, lastExtractionSummary: undefined, screen: "runSummary" });
     persist(next);
   },
 
@@ -536,8 +557,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!s.activeRun || !s.player) return;
     const item = s.activeRun.raidInventory.items.find(i => i.instanceId === itemInstanceId);
     if (!item) return;
-    const heal = getConsumableHealAmount(item);
-    if (heal <= 0) {
+    const healFormula = getConsumableHealFormula(item);
+    if (!healFormula) {
       set({ lastRoomMessage: `${item.name} cannot be used here.` });
       return;
     }
@@ -545,6 +566,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({ lastRoomMessage: `${s.player.name} is already at full health.` });
       return;
     }
+    const rng = createRng(`raidItem:${s.activeRun.runId}:${item.instanceId}:${Date.now()}`);
+    const heal = rollConsumableHealAmount(item, rng);
     const player = {
       ...s.player,
       hp: Math.min(s.player.maxHp, s.player.hp + heal),
@@ -644,28 +667,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const run = s.activeRun;
     const room = getRoomById(run.roomGraph, run.currentRoomId);
     if (!room || !room.extractionPoint) return;
-
-    const rng = createRng(`extract:${run.seed}`);
-    const result = applyExtractionRewards({
-      player: s.player,
-      village: s.village,
-      stash: s.stash,
-      run,
-      rng
-    });
-    const finishedRun: DungeonRun = { ...run, status: "extracted", raidInventory: createEmptyInventory() };
-    let leveledPlayer = applyXpAndLevel(result.player);
-
-    const next: GameState = {
-      ...s,
-      player: leveledPlayer,
-      village: result.village,
-      stash: result.stash,
-      activeRun: undefined,
-      completedRuns: [...s.completedRuns, finishedRun]
-    };
-    set({ state: next, lastExtractionSummary: result.summary, screen: "runSummary" });
-    persist(next);
+    finishRunWithExtraction(get, set, run, "extracted", "You extracted from a marked exit with the loot you carried.");
   },
 
   descendDungeon: () => {
@@ -687,8 +689,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       tier: nextTier,
       activeQuestIds: run.activeQuestIds
     });
+    const completedThisDepth = run.roomGraph.filter(room => room.completed).length;
+    nextRun.runId = run.runId;
+    nextRun.startedAt = run.startedAt;
     nextRun.raidInventory = run.raidInventory;
     nextRun.loadoutSnapshot = run.loadoutSnapshot;
+    nextRun.questProgressAtStart = run.questProgressAtStart;
+    nextRun.xpGained = run.xpGained;
+    nextRun.roomsVisitedBeforeDepth = (run.roomsVisitedBeforeDepth ?? 0) + run.visitedRoomIds.length;
+    nextRun.roomsCompletedBeforeDepth = (run.roomsCompletedBeforeDepth ?? 0) + completedThisDepth;
     nextRun.dangerLevel = nextTier;
     roomScratch.clear();
 
@@ -881,6 +890,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const xpd: Character = { ...next.player, xp: next.player.xp + xpGain };
       next = { ...next, player: xpd };
     }
+    if (next.activeRun) {
+      next = { ...next, activeRun: { ...next.activeRun, xpGained: (next.activeRun.xpGained ?? 0) + xpGain } };
+    }
     const lootText = lootMessages.length > 0 ? ` Found: ${lootMessages.join(", ")}.` : "";
     const descendText = room.type === "boss" && run.tier < RUN_RULES.maxDungeonDepth
       ? " A stair descends beyond the chamber."
@@ -903,8 +915,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!s.player) return;
     const item = s.stash.items.find(i => i.instanceId === itemInstanceId);
     if (!item) return;
-    const heal = getConsumableHealAmount(item);
-    if (heal <= 0) {
+    const healFormula = getConsumableHealFormula(item);
+    if (!healFormula) {
       set({ lastVillageMessage: `${item.name} cannot be used here.` });
       return;
     }
@@ -912,6 +924,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({ lastVillageMessage: `${s.player.name} is already at full health.` });
       return;
     }
+    const rng = createRng(`stashItem:${item.instanceId}:${Date.now()}`);
+    const heal = rollConsumableHealAmount(item, rng);
     const player = { ...s.player, hp: Math.min(s.player.maxHp, s.player.hp + heal), wounded: undefined };
     const next: GameState = {
       ...s,
@@ -1101,6 +1115,100 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const next: GameState = { ...s, player: playerWithXp, village, stash };
     set({ state: next, lastVillageMessage: `${quest.title} turned in.` });
     persist(next);
+  },
+
+  debugGenerateDungeonSeed: () => {
+    const s = get().state;
+    if (!s.player) return;
+    const existing = s.activeRun;
+    const activeIds = existing?.activeQuestIds ??
+      (s.village?.quests.filter(quest => quest.status === "active").map(quest => quest.id) ?? []);
+    const run = generateDungeonRun({
+      seed: randomSeed(),
+      biome: existing?.biome,
+      tier: existing?.tier ?? 1,
+      activeQuestIds: activeIds
+    });
+    run.raidInventory = existing?.raidInventory ?? s.preparedInventory ?? createEmptyInventory();
+    run.loadoutSnapshot = collectLoadoutSnapshot(s.player);
+    run.questProgressAtStart = existing?.questProgressAtStart ?? captureQuestProgress(s.village, activeIds);
+    run.xpGained = existing?.xpGained ?? 0;
+    roomScratch.clear();
+    const next: GameState = {
+      ...s,
+      activeRun: run,
+      activeCombat: undefined,
+      preparedInventory: existing ? s.preparedInventory : createEmptyInventory()
+    };
+    set({ state: next, screen: "dungeon", lastRoomMessage: `Dev: generated dungeon seed ${run.seed}.` });
+    persist(next);
+  },
+
+  debugGiveGold: () => {
+    const s = get().state;
+    const next: GameState = { ...s, stash: { ...s.stash, gold: s.stash.gold + 100 } };
+    set({ state: next, lastVillageMessage: "Dev: added 100 gold." });
+    persist(next);
+  },
+
+  debugHealPlayer: () => {
+    const s = get().state;
+    if (!s.player) return;
+    const player: Character = { ...s.player, hp: s.player.maxHp, wounded: undefined };
+    const next: GameState = { ...s, player };
+    set({ state: next, lastRoomMessage: "Dev: player healed.", lastVillageMessage: "Dev: player healed." });
+    persist(next);
+  },
+
+  debugSpawnTestLoot: () => {
+    const s = get().state;
+    const rng = createRng(`debugLoot:${Date.now()}`);
+    const item = instanceFromTemplateId("weapon_keen_dagger", rng, 1);
+    const potion = instanceFromTemplateId("consumable_strong_draught", rng, 2);
+    const gold = 25;
+    const targetRun = s.activeRun;
+    if (targetRun) {
+      const raidInventory = addItem(addItem({ ...targetRun.raidInventory, gold: targetRun.raidInventory.gold + gold }, item), potion);
+      const next: GameState = { ...s, activeRun: { ...targetRun, raidInventory } };
+      set({ state: next, lastRoomMessage: "Dev: spawned test loot in the raid pack." });
+      persist(next);
+      return;
+    }
+    const stash = addItem(addItem({ ...s.stash, gold: s.stash.gold + gold }, item), potion);
+    const next: GameState = { ...s, stash };
+    set({ state: next, lastVillageMessage: "Dev: spawned test loot in the stash." });
+    persist(next);
+  },
+
+  debugKillPlayer: () => {
+    const s = get().state;
+    if (!s.activeRun || !s.player) return;
+    finishRunWithDeath(get, set, s.activeRun, { ...s.player, hp: 0 });
+  },
+
+  debugForceExtraction: () => {
+    const s = get().state;
+    if (!s.activeRun) return;
+    finishRunWithExtraction(get, set, s.activeRun, "debugExtracted", "Dev tools forced extraction from the current room.");
+  },
+
+  debugCompleteQuest: () => {
+    const s = get().state;
+    if (!s.village) return;
+    const quest = s.village.quests.find(q => q.status === "active") ??
+      s.village.quests.find(q => q.status === "available");
+    if (!quest) {
+      set({ lastVillageMessage: "Dev: no open quest to complete." });
+      return;
+    }
+    const quests = s.village.quests.map(q =>
+      q.id === quest.id
+        ? { ...q, status: "completed" as const, currentCount: q.requiredCount }
+        : q
+    );
+    const next: GameState = { ...s, village: { ...s.village, quests } };
+    set({ state: next, lastVillageMessage: `Dev: completed ${quest.title}.` });
+    persist(next);
   }
 }));
 
@@ -1109,6 +1217,22 @@ function collectLoadoutSnapshot(player: Character): ItemInstance[] {
   return [slots.weapon, slots.offhand, slots.armor, slots.trinket1, slots.trinket2].filter(
     Boolean
   ) as ItemInstance[];
+}
+
+function captureQuestProgress(village: VillageState | undefined, questIds: string[]): Record<string, number> {
+  if (!village) return {};
+  return Object.fromEntries(
+    village.quests
+      .filter(quest => questIds.includes(quest.id))
+      .map(quest => [quest.id, quest.currentCount])
+  );
+}
+
+function getScreenForLoadedState(state: GameState): ScreenId {
+  if (!state.player) return "mainMenu";
+  if (state.activeCombat && !state.activeCombat.over) return "combat";
+  if (state.activeRun?.status === "active") return "dungeon";
+  return "village";
 }
 
 function getActiveMerchant(store: GameStore) {
@@ -1219,14 +1343,65 @@ function finishRunWithDeath(
   const s = get().state;
   const { run: deadRun, summary } = applyDeathPenalty(run);
   const recoveredPlayer = recoverPlayerAfterDeath(player, summary);
+  const runSummary = buildRunSummary({
+    run: deadRun,
+    village: s.village,
+    reason: "dead",
+    reasonText: "You died in the dungeon and lost the raid pack plus unprotected equipped gear.",
+    death: summary
+  });
   const next: GameState = {
     ...s,
     player: recoveredPlayer,
     activeRun: undefined,
     activeCombat: undefined,
-    completedRuns: [...s.completedRuns, deadRun]
+    completedRuns: [...s.completedRuns, deadRun],
+    lastRunSummary: runSummary,
+    runSummaries: appendRunSummary(s.runSummaries, runSummary)
   };
-  set({ state: next, lastDeathSummary: summary, screen: "runSummary" });
+  set({ state: next, lastDeathSummary: summary, lastExtractionSummary: undefined, screen: "runSummary" });
+  persist(next);
+}
+
+function finishRunWithExtraction(
+  get: () => GameStore,
+  set: (partial: Partial<GameStore>) => void,
+  run: DungeonRun,
+  reason: "extracted" | "debugExtracted",
+  reasonText: string
+) {
+  const s = get().state;
+  if (!s.player || !s.village) return;
+  const rng = createRng(`extract:${run.seed}:${reason}`);
+  const result = applyExtractionRewards({
+    player: s.player,
+    village: s.village,
+    stash: s.stash,
+    run,
+    rng
+  });
+  const finishedRun: DungeonRun = { ...run, status: "extracted", raidInventory: createEmptyInventory() };
+  const leveledPlayer = applyXpAndLevel(result.player);
+  const runSummary = buildRunSummary({
+    run,
+    village: result.village,
+    reason,
+    reasonText,
+    extraction: result.summary
+  });
+
+  const next: GameState = {
+    ...s,
+    player: leveledPlayer,
+    village: result.village,
+    stash: result.stash,
+    activeRun: undefined,
+    activeCombat: undefined,
+    completedRuns: [...s.completedRuns, finishedRun],
+    lastRunSummary: runSummary,
+    runSummaries: appendRunSummary(s.runSummaries, runSummary)
+  };
+  set({ state: next, lastExtractionSummary: result.summary, lastDeathSummary: undefined, screen: "runSummary" });
   persist(next);
 }
 

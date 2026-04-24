@@ -34,7 +34,7 @@ export function applyExtractionRewards(args: {
   const { player, village, run, rng } = args;
   const summary: ExtractionRewardSummary = {
     goldGained: 0,
-    xpGained: 0,
+    xpGained: run.xpGained,
     itemsSecured: [...run.raidInventory.items],
     questsCompleted: [],
     questRewards: [],
@@ -56,7 +56,6 @@ export function applyExtractionRewards(args: {
 
   // Add gold and xp to player, and heal on safe return
   let nextPlayer: Character = { ...player };
-  nextPlayer.xp += summary.xpGained;
   nextPlayer.hp = nextPlayer.maxHp;
   if (nextPlayer.wounded) nextPlayer = { ...nextPlayer, wounded: undefined };
 
@@ -69,12 +68,18 @@ export function applyExtractionRewards(args: {
 
 export interface DeathSummary {
   itemsLost: ItemInstance[];
+  raidItemsLost: ItemInstance[];
+  gearLost: ItemInstance[];
   goldLost: number;
 }
 
 export function applyDeathPenalty(run: DungeonRun): { run: DungeonRun; summary: DeathSummary } {
+  const raidItemsLost = [...run.raidInventory.items];
+  const gearLost = run.loadoutSnapshot.filter(i => !i.protected);
   const summary: DeathSummary = {
-    itemsLost: [...run.raidInventory.items, ...run.loadoutSnapshot.filter(i => !i.protected)],
+    itemsLost: [...raidItemsLost, ...gearLost],
+    raidItemsLost,
+    gearLost,
     goldLost: run.raidInventory.gold
   };
   const next: DungeonRun = {
@@ -87,8 +92,11 @@ export function applyDeathPenalty(run: DungeonRun): { run: DungeonRun; summary: 
 }
 
 export function applyAbandonPenalty(run: DungeonRun): { run: DungeonRun; summary: DeathSummary } {
+  const raidItemsLost = [...run.raidInventory.items];
   const summary: DeathSummary = {
-    itemsLost: [...run.raidInventory.items],
+    itemsLost: raidItemsLost,
+    raidItemsLost,
+    gearLost: [],
     goldLost: run.raidInventory.gold
   };
   const next: DungeonRun = {

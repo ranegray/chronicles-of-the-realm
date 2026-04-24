@@ -61,6 +61,15 @@ export function DungeonScreen() {
   const exitCount = Math.min(adjacents.length, 4);
   const raidWeight = calculateInventoryWeight(run.raidInventory);
   const carryCapacity = player.derivedStats.carryCapacity;
+  const packValue = calculateInventoryValue(run.raidInventory);
+  const unchartedRooms = run.roomGraph.filter(room => !run.visitedRoomIds.includes(room.id)).length;
+  const extractionDistance = nearestKnownExtractionDistance(run, current.id);
+  const extractionText = extractionDistance === undefined
+    ? "No known extraction"
+    : extractionDistance === 0
+      ? "Extraction here"
+      : `Extraction ${extractionDistance} room${extractionDistance === 1 ? "" : "s"} back`;
+  const woundedWithLoot = player.hp <= Math.floor(player.maxHp * 0.75) && packValue >= 18;
 
   return (
     <div className="screen dungeon-screen">
@@ -135,7 +144,13 @@ export function DungeonScreen() {
             <span>Eva {player.derivedStats.evasion}</span>
             <span>Pack {raidWeight}/{carryCapacity}</span>
             <span>{run.raidInventory.gold} g</span>
+            <span>Value {packValue}</span>
+            <span>{unchartedRooms} uncharted</span>
+            <span>{extractionText}</span>
           </div>
+          {woundedWithLoot && extractionDistance !== undefined && extractionDistance <= 2 && unchartedRooms > 0 && (
+            <p className="run-pressure">Bloodied, packed, and close to an exit.</p>
+          )}
           <div className="room-actions">
             <Button variant="secondary" onClick={() => goToScreen("character")}>Character</Button>
             <Button variant="secondary" onClick={() => goToScreen("stash")}>Inventory</Button>
@@ -293,6 +308,31 @@ function buildRoomPositions(rooms: DungeonRoom[]): Map<string, MapPosition> {
     });
   });
   return positions;
+}
+
+function calculateInventoryValue(inv: DungeonRun["raidInventory"]): number {
+  return inv.gold + inv.items.reduce((sum, item) => sum + item.value * item.quantity, 0);
+}
+
+function nearestKnownExtractionDistance(run: DungeonRun, currentRoomId: string): number | undefined {
+  const queue: Array<{ id: string; distance: number }> = [{ id: currentRoomId, distance: 0 }];
+  const seen = new Set<string>([currentRoomId]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const room = getRoomById(run.roomGraph, current.id);
+    if (!room) continue;
+    if (room.extractionPoint && run.visitedRoomIds.includes(room.id)) {
+      return current.distance;
+    }
+    for (const connectedId of room.connectedRoomIds) {
+      if (seen.has(connectedId) || !run.visitedRoomIds.includes(connectedId)) continue;
+      seen.add(connectedId);
+      queue.push({ id: connectedId, distance: current.distance + 1 });
+    }
+  }
+
+  return undefined;
 }
 
 function getMapBounds(

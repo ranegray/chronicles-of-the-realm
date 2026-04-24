@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { defaultGameState, hasSave, loadGame, resetGame, saveGame } from "../game/save";
+import { STORAGE_KEY } from "../game/constants";
 
 describe("save", () => {
   beforeEach(() => {
@@ -37,5 +38,24 @@ describe("save", () => {
     saveGame(old);
     const loaded = loadGame();
     expect(loaded?.preparedInventory.items).toHaveLength(0);
+  });
+
+  it("backfills run summaries on load", () => {
+    const old = { ...defaultGameState(), runSummaries: undefined } as unknown as ReturnType<typeof defaultGameState>;
+    saveGame(old);
+    const loaded = loadGame();
+    expect(loaded?.runSummaries).toEqual([]);
+  });
+
+  it("ignores invalid save JSON gracefully", () => {
+    localStorage.setItem(STORAGE_KEY, "{broken");
+    expect(hasSave()).toBe(false);
+    expect(loadGame()).toBeNull();
+  });
+
+  it("ignores structurally invalid saves gracefully", () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, stash: "bad" }));
+    expect(hasSave()).toBe(false);
+    expect(loadGame()).toBeNull();
   });
 });

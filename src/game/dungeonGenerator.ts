@@ -35,8 +35,11 @@ const NON_ENTRANCE_TYPES: RoomType[] = [
   "combat",
   "combat",
   "combat",
+  "eliteCombat",
+  "eliteCombat",
   "treasure",
   "treasure",
+  "trap",
   "trap",
   "shrine",
   "npcEvent",
@@ -77,6 +80,10 @@ export function generateDungeonRun(params: DungeonGenParams = {}): DungeonRun {
     raidInventory: createEmptyInventory(),
     loadoutSnapshot: [],
     activeQuestIds: params.activeQuestIds ?? [],
+    questProgressAtStart: {},
+    xpGained: 0,
+    roomsVisitedBeforeDepth: 0,
+    roomsCompletedBeforeDepth: 0,
     dangerLevel: tier
   };
 }
@@ -243,8 +250,15 @@ export function ensureRequiredRooms(
     const idx = findReplaceableIdx()!;
     rooms[idx] = buildRoom(rng, biome, tier, "treasure", idx);
   }
-  if (!has("extraction")) {
-    const minIdx = Math.max(2, Math.floor(rooms.length * 0.6));
+  const extractionCount = () => rooms.filter(r => r.type === "extraction").length;
+  if (extractionCount() < 1) {
+    const minIdx = Math.max(2, Math.floor(rooms.length * 0.28));
+    const maxIdx = Math.max(minIdx, Math.floor(rooms.length * 0.45));
+    const idx = findReplaceableIdx(minIdx, maxIdx)!;
+    rooms[idx] = buildRoom(rng, biome, tier, "extraction", idx);
+  }
+  if (extractionCount() < 2 && rooms.length >= 12) {
+    const minIdx = Math.max(3, Math.floor(rooms.length * 0.58));
     const idx = findReplaceableIdx(minIdx)!;
     rooms[idx] = buildRoom(rng, biome, tier, "extraction", idx);
   }

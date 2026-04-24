@@ -9,7 +9,7 @@ import { COMBAT_RULES } from "./constants";
 import { rollD20, rollDice } from "./dice";
 import { buildEncounterEnemies } from "./encounterGenerator";
 import { getModifier } from "./characterMath";
-import { getConsumableHealAmount } from "./itemEffects";
+import { rollConsumableHealAmount } from "./itemEffects";
 import type { Rng } from "./rng";
 
 export type CombatAction =
@@ -80,8 +80,7 @@ export function resolvePlayerAction(
     } else {
       const weapon = nextPlayer.equipped.weapon;
       const dmgFormula = weapon ? guessWeaponDice(weapon) : { count: 1, sides: 4 };
-      const mightMod = getModifier(nextPlayer.abilityScores.might);
-      let damage = rollDice(dmgFormula, rng) + mightMod;
+      let damage = rollDice(dmgFormula, rng) + getDamageBonus(nextPlayer, weapon);
       if (isPowerAttack) damage += 2 + Math.floor(nextPlayer.level / 2);
       const gearCrit = !isCrit && nextPlayer.derivedStats.critChance > 0 &&
         rng.nextInt(1, 100) <= nextPlayer.derivedStats.critChance;
@@ -102,9 +101,14 @@ export function resolvePlayerAction(
     if (!item || item.category !== "consumable") {
       next.log.push("You fumble for nothing.");
     } else {
-      const heal = getConsumableHealAmount(item);
+      const heal = rollConsumableHealAmount(item, rng);
       if (heal > 0) {
         const newHp = Math.min(nextPlayer.maxHp, nextPlayer.hp + heal);
+        if (newHp === nextPlayer.hp) {
+          next.log.push(`${nextPlayer.name} is already at full health.`);
+          next.playerDefending = false;
+          return { combat: next, player: nextPlayer, consumedItems: consumed };
+        }
         nextPlayer = { ...nextPlayer, hp: newHp };
         next.log.push(`You drink ${item.name} (+${heal} HP).`);
         consumed.push(item.instanceId);
@@ -207,6 +211,13 @@ function guessWeaponDice(weapon: ItemInstance): { count: number; sides: number }
   if (weapon.tags?.includes("bow")) return { count: 1, sides: 8 };
   if (weapon.tags?.includes("magic")) return { count: 1, sides: 6 };
   return { count: 1, sides: 6 };
+}
+
+function getDamageBonus(player: Character, weapon?: ItemInstance): number {
+  if (weapon?.tags?.includes("magic")) {
+    return Math.max(0, player.derivedStats.magicPower);
+  }
+  return getModifier(player.abilityScores.might);
 }
 
 function formatSigned(value: number): string {

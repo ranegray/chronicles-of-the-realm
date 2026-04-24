@@ -210,10 +210,48 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
   flex-wrap: wrap; margin-bottom: 18px;
 }
 .village-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.village-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+.village-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.85fr) minmax(360px, 1.15fr);
+  gap: 12px;
+  align-items: start;
+}
+.village-services { grid-column: 1 / -1; }
+.village-status-list {
+  display: grid;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 0.94rem;
+}
 .quest-list, .npc-list { list-style: none; padding-left: 0; }
 .quest-list li, .npc-list li { padding: 8px 0; border-bottom: 1px solid var(--line); }
 .quest-list li:last-child, .npc-list li:last-child { border-bottom: none; }
+.quest-list-compact li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.service-list {
+  list-style: none;
+  padding-left: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 8px 14px;
+}
+.service-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 800px) {
+  .village-grid { grid-template-columns: 1fr; }
+  .quest-list-compact li,
+  .service-list li { grid-template-columns: 1fr; }
+}
 
 /* Dungeon */
 .dungeon-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
@@ -224,6 +262,12 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
 .dungeon-grid .card:nth-child(4) { grid-area: map; }
 @media (max-width: 800px) {
   .dungeon-grid { grid-template-columns: 1fr; grid-template-areas: "current" "adj" "player" "map"; }
+}
+.run-pressure {
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+  color: var(--accent-2);
+  font-weight: 600;
 }
 
 .adjacent-list { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -416,6 +460,20 @@ button.map-room:hover {
 .item-rarity-tag { font-size: 0.75rem; text-transform: capitalize; color: var(--text-muted); }
 .item-desc { color: var(--text-dim); font-size: 0.88rem; margin: 4px 0; }
 .item-meta { display: flex; gap: 10px; color: var(--text-muted); font-size: 0.78rem; }
+.item-effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}
+.item-effects span {
+  border: 1px solid rgba(216, 178, 92, 0.22);
+  border-radius: 4px;
+  padding: 2px 5px;
+  color: var(--accent-2);
+  background: rgba(216, 178, 92, 0.07);
+  font-size: 0.76rem;
+}
 .item-rarity-common .item-name { color: var(--rarity-common); }
 .item-rarity-uncommon .item-name { color: var(--rarity-uncommon); }
 .item-rarity-rare .item-name { color: var(--rarity-rare); }
@@ -444,6 +502,21 @@ button.map-room:hover {
 }
 .summary-screen { max-width: 800px; }
 .summary-actions { margin-top: 16px; }
+.summary-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+.summary-stat {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.summary-stat span { color: var(--text-dim); }
 .equipment-grid { display: grid; gap: 8px; }
 .equipment-slot {
   background: var(--bg-2);
@@ -482,4 +555,54 @@ button.map-room:hover {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 12px;
+}
+
+/* Dev tools */
+.dev-panel {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 50;
+  width: min(520px, calc(100vw - 24px));
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid rgba(216, 178, 92, 0.28);
+  border-radius: 6px;
+  background: rgba(15, 15, 18, 0.96);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+}
+.dev-panel summary {
+  cursor: pointer;
+  padding: 8px 10px;
+  color: var(--accent-2);
+  font-weight: 700;
+}
+.dev-panel-body {
+  border-top: 1px solid var(--line);
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+.dev-actions,
+.dev-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dev-metrics span {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-dim);
+  padding: 3px 6px;
+  font-size: 0.78rem;
+}
+.dev-save-json {
+  width: 100%;
+  min-height: 220px;
+  background: #0a0b0d;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  font: 0.78rem ui-monospace, Menlo, monospace;
 }

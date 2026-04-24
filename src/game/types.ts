@@ -271,6 +271,10 @@ export interface DungeonRun {
   raidInventory: Inventory;
   loadoutSnapshot: ItemInstance[];
   activeQuestIds: string[];
+  questProgressAtStart: Record<string, number>;
+  xpGained: number;
+  roomsVisitedBeforeDepth: number;
+  roomsCompletedBeforeDepth: number;
   dangerLevel: number;
 }
 
@@ -363,7 +367,49 @@ export interface GameState {
   activeRun?: DungeonRun;
   activeCombat?: CombatState;
   completedRuns: DungeonRun[];
+  runSummaries: RunSummary[];
+  lastRunSummary?: RunSummary;
   settings: GameSettings;
+}
+
+export type RunEndReason =
+  | "extracted"
+  | "dead"
+  | "abandoned"
+  | "debugExtracted";
+
+export interface QuestProgressSummary {
+  questId: string;
+  title: string;
+  beforeCount: number;
+  afterCount: number;
+  requiredCount: number;
+  status: QuestStatus;
+}
+
+export interface RunSummary {
+  id: string;
+  runId: string;
+  seed: string;
+  biome: DungeonBiome;
+  tier: number;
+  startedAt: number;
+  endedAt: number;
+  reason: RunEndReason;
+  reasonText: string;
+  roomsVisited: number;
+  roomsCompleted: number;
+  lootExtracted: ItemInstance[];
+  lootLost: ItemInstance[];
+  gearLost: ItemInstance[];
+  goldGained: number;
+  goldLost: number;
+  xpGained: number;
+  itemValueExtracted: number;
+  questProgress: QuestProgressSummary[];
+  questsCompleted: Quest[];
+  questRewards: ItemInstance[];
+  unlocksApplied: string[];
 }
 
 export type ScreenId =

@@ -12,11 +12,13 @@ import { MerchantScreen } from "./screens/MerchantScreen";
 import { CharacterScreen } from "./screens/CharacterScreen";
 import { QuestScreen } from "./screens/QuestScreen";
 import { GlobalNav, shouldShowGlobalNav } from "./components/GlobalNav";
+import { DevPanel } from "./components/DevPanel";
 
 export default function App() {
   const screen = useGameStore(s => s.screen);
   const hasPlayer = useGameStore(s => Boolean(s.state.player));
   const boot = useGameStore(s => s.boot);
+  const isDev = Boolean((import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV);
 
   useEffect(() => {
     boot();
@@ -36,6 +38,7 @@ export default function App() {
       {screen === "character" && <CharacterScreen />}
       {screen === "quests" && <QuestScreen />}
       {screen === "merchant" && <MerchantScreen />}
+      {isDev && <DevPanel />}
     </div>
   );
 }
