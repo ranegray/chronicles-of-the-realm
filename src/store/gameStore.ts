@@ -40,7 +40,7 @@ import { recalculateCharacterStats } from "../game/characterMath";
 import { RUN_RULES, THREAT_RULES } from "../game/constants";
 import type { CombatThreatDelta } from "../game/combat";
 import type { DungeonLogEntryType, ThreatChange, ThreatChangeReason } from "../game/types";
-import { applyThreatChange, getThreatLabel, getThreatModifiers } from "../game/threat";
+import { applyThreatChange, getThreatModifiers } from "../game/threat";
 import { addDungeonLogEntry } from "../game/dungeonLog";
 import { scoutAdjacentRooms } from "../game/scouting";
 import { searchCurrentRoom } from "../game/search";
@@ -1543,12 +1543,7 @@ function applyRunThreat(
 }
 
 function formatThreatLogMessage(change: ThreatChange): string {
-  const sign = change.amount >= 0 ? "+" : "";
-  const base = `${change.message} (${sign}${change.amount})`;
-  if (change.newLevel !== change.previousLevel) {
-    return `${base} — Threat level now ${getThreatLabel(change.newLevel)} [${change.newLevel}].`;
-  }
-  return base;
+  return change.message.replace(/\s*\(\d+\)\.?$/, ".");
 }
 
 function logInRun(

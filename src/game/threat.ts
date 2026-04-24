@@ -101,13 +101,22 @@ function defaultChangeMessage(
   previousLevel: ThreatLevel,
   newLevel: ThreatLevel
 ): string {
-  const direction = amount >= 0 ? "rises" : "settles";
   const base = describeReason(reason);
   if (newLevel !== previousLevel) {
-    const label = getThreatLabel(newLevel);
-    return `${base} Threat ${direction} to ${label} (${newLevel}).`;
+    return `${base} ${transitionPhrase(previousLevel, newLevel)}`;
   }
-  return `${base} Threat ${direction} by ${Math.abs(amount)}.`;
+  return base;
+}
+
+function transitionPhrase(prev: ThreatLevel, next: ThreatLevel): string {
+  if (next > prev) {
+    if (next >= 5) return "The dungeon wakes fully.";
+    if (next >= 4) return "You are being hunted.";
+    if (next >= 3) return "Footsteps you don't own, drawing closer.";
+    if (next >= 2) return "The halls begin to stir.";
+    return "Something is listening now.";
+  }
+  return "The quiet creeps back in.";
 }
 
 function describeReason(reason: ThreatChangeReason): string {

@@ -18,17 +18,36 @@ export function CharacterScreen() {
 
   if (!player) return <div className="screen">No character.</div>;
 
+  const hpPct = Math.round((player.hp / player.maxHp) * 100);
+
   return (
     <div className="screen character-screen">
-      <header className="screen-header">
-        <div>
-          <h2>{player.name}</h2>
-          <p className="muted">Level {player.level} {capitalize(player.ancestryId)} {capitalize(player.classId)}</p>
+      <header className="character-hero">
+        <div className="character-hero-main">
+          <span className="character-hero-eyebrow">Level {player.level} {capitalize(player.ancestryId)} {capitalize(player.classId)}</span>
+          <h1>{player.name}</h1>
+          <div className="character-hero-hp">
+            <div className={`hp-bar ${hpPct <= 25 ? "hp-bar-low" : hpPct <= 50 ? "hp-bar-mid" : ""}`} style={{ maxWidth: 320 }}>
+              <div className="hp-bar-fill" style={{ width: `${hpPct}%` }} />
+              <span className="hp-bar-label">HP {player.hp} / {player.maxHp}</span>
+            </div>
+            <span className="muted small">{player.xp} XP</span>
+          </div>
         </div>
+        {run && (
+          <div className="character-hero-delve">
+            <span className="delve-hero-place-name">On Delve</span>
+            <div className="character-delve-meta">
+              <span><em>Depth</em> {run.tier}</span>
+              <span><em>Charted</em> {run.visitedRoomIds.length} / {run.roomGraph.length}</span>
+              <span><em>Carried</em> {run.raidInventory.gold} g</span>
+            </div>
+          </div>
+        )}
       </header>
 
       <div className="character-grid">
-        <Card title="Stats" subtitle={`${player.xp} XP`}>
+        <Card title="Stats">
           <StatBlock character={player} />
         </Card>
 
@@ -41,20 +60,12 @@ export function CharacterScreen() {
                   <div className="equipment-slot-header">
                     <strong>{EQUIPMENT_LABELS[slot]}</strong>
                   </div>
-                  {item ? <ItemCard item={item} compact /> : <em>Empty</em>}
+                  {item ? <ItemCard item={item} compact /> : <em className="muted">Empty</em>}
                 </div>
               );
             })}
           </div>
         </Card>
-
-        {run && (
-          <Card title="Current Delve" subtitle={`Depth ${run.tier}`}>
-            <p className="muted">Biome: {run.biome}</p>
-            <p className="muted">Rooms charted: {run.visitedRoomIds.length} / {run.roomGraph.length}</p>
-            <p className="muted">Carried gold: {run.raidInventory.gold}</p>
-          </Card>
-        )}
       </div>
     </div>
   );

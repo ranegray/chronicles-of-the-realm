@@ -2,8 +2,10 @@ import type { ReactNode } from "react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { ItemCard } from "../components/ItemCard";
+import { RunPreparationPanel } from "../components/RunPreparationPanel";
 import { calculateInventoryWeight } from "../game/inventory";
 import { getConsumableHealFormula } from "../game/itemEffects";
+import { getAvailableRunPreparationOptions } from "../game/runPreparation";
 import type { EquipmentSlots, ItemInstance } from "../game/types";
 import { useGameStore } from "../store/gameStore";
 
@@ -33,6 +35,8 @@ export function StashScreen() {
   const unequipToRaid = useGameStore(s => s.unequipItemToRaid);
   const dropRaidItem = useGameStore(s => s.dropRaidItem);
   const useCombatItem = useGameStore(s => s.useCombatInventoryItem);
+  const purchasePreparation = useGameStore(s => s.purchaseRunPreparation);
+  const state = useGameStore(s => s.state);
 
   const mode = activeCombat ? "combat" : activeRun ? "dungeon" : "village";
   const message = mode === "village" ? villageMessage : dungeonMessage;
@@ -49,11 +53,24 @@ export function StashScreen() {
 
   return (
     <div className="screen stash-screen">
-      <header className="screen-header">
-        <div>
-          <h2>{title}</h2>
+      <header className="stash-hero">
+        <div className="stash-hero-main">
+          <span className="stash-hero-eyebrow">{mode === "combat" ? "In Combat" : mode === "dungeon" ? "On Delve" : "Village"}</span>
+          <h1>{title}</h1>
           <p className="muted">{subtitle}</p>
         </div>
+        {player && mode === "village" && (
+          <div className="stash-hero-meta">
+            <span><em>Stash</em> {stash.gold}g</span>
+            <span><em>Packed</em> {calculateInventoryWeight(preparedInventory)} / {player.derivedStats.carryCapacity}</span>
+          </div>
+        )}
+        {player && activeRun && mode !== "village" && (
+          <div className="stash-hero-meta">
+            <span><em>Carried</em> {activeRun.raidInventory.gold}g</span>
+            <span><em>Pack</em> {calculateInventoryWeight(activeRun.raidInventory)} / {player.derivedStats.carryCapacity}</span>
+          </div>
+        )}
       </header>
       {message && <p className="msg">{message}</p>}
       <div className="stash-grid">
@@ -117,6 +134,15 @@ export function StashScreen() {
                   ))}
                 </div>
               )}
+            </Card>
+
+            <Card title="Run Preparations" subtitle="One-run advantages from village services">
+              <RunPreparationPanel
+                options={getAvailableRunPreparationOptions({ gameState: state })}
+                selectedPreparations={state.pendingRunPreparations ?? []}
+                npcs={state.village?.npcs ?? []}
+                onPurchase={(optionId, npcId) => purchasePreparation(npcId, optionId)}
+              />
             </Card>
           </>
         )}

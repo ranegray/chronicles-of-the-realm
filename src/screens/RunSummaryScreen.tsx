@@ -18,24 +18,24 @@ export function RunSummaryScreen() {
   }
 
   const success = summary.reason === "extracted" || summary.reason === "debugExtracted";
+  const title = success ? "Run Extracted" : summary.reason === "dead" ? "Run Lost" : "Run Abandoned";
+  const state = success ? "success" : summary.reason === "dead" ? "lost" : "abandoned";
 
   return (
     <div className="screen summary-screen">
-      <header className="screen-header">
-        <div>
-          <h2>{success ? "Run Extracted" : summary.reason === "dead" ? "Run Lost" : "Run Abandoned"}</h2>
+      <header className={`summary-hero summary-hero-${state}`}>
+        <div className="summary-hero-main">
+          <span className="summary-hero-eyebrow">{summary.roomsVisited} rooms · {summary.roomsCompleted} cleared</span>
+          <h1>{title}</h1>
           <p className="muted">{summary.reasonText}</p>
         </div>
-      </header>
-
-      <Card title="Run Result" subtitle={`${summary.roomsVisited} rooms visited · ${summary.roomsCompleted} cleared`}>
-        <div className="summary-stat-grid">
+        <div className="summary-hero-stats">
           <SummaryStat label="Gold gained" value={summary.goldGained} />
-          <SummaryStat label="Gold lost" value={summary.goldLost} />
           <SummaryStat label="XP gained" value={summary.xpGained} />
-          <SummaryStat label="Item value out" value={summary.itemValueExtracted} />
+          <SummaryStat label="Items out" value={summary.itemValueExtracted} />
+          <SummaryStat label="Gold lost" value={summary.goldLost} />
         </div>
-      </Card>
+      </header>
 
       {summary.reason === "dead" && (
         <Card title="What Might Have Been" variant="warm">

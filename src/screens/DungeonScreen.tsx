@@ -3,18 +3,18 @@ import { Card } from "../components/Card";
 import { DungeonLog } from "../components/DungeonLog";
 import { EventChoicePanel } from "../components/EventChoicePanel";
 import { ExtractionPanel } from "../components/ExtractionPanel";
-import { RoomIntelCard } from "../components/RoomIntelCard";
-import { ThreatMeter } from "../components/ThreatMeter";
+import { Tooltip } from "../components/Tooltip";
 import { useGameStore } from "../store/gameStore";
 import { getRoomById } from "../game/dungeonGenerator";
 import { getBiome } from "../data/biomes";
 import { calculateInventoryWeight } from "../game/inventory";
 import { RUN_RULES } from "../game/constants";
-import type { ActiveTrap, DungeonRoom, DungeonRun } from "../game/types";
-import { nextStepToKnownExtraction } from "../game/pathing";
+import { getThreatLabel } from "../game/threat";
+import type { ActiveTrap, DungeonRoom, DungeonRun, RoomSignTag, ScoutedRoomInfo } from "../game/types";
 import { SEARCH_RULES } from "../game/constants";
 import { getTrapTemplate } from "../data/trapTables";
 import { getEventTemplate } from "../data/eventTemplates";
+import { describeSign } from "../data/roomSigns";
 
 const TYPE_LABELS: Record<string, string> = {
   entrance: "Entrance",
@@ -60,38 +60,29 @@ export function DungeonScreen() {
   const abandon = useGameStore(s => s.abandonRun);
   const lastMessage = useGameStore(s => s.lastRoomMessage);
   const engage = useGameStore(s => s.engageCurrentRoomCombat);
-  const goToScreen = useGameStore(s => s.goToScreen);
 
   if (!run || !player) return <div className="screen">No active run.</div>;
   const current = getRoomById(run.roomGraph, run.currentRoomId);
   if (!current) return <div className="screen">Lost in the dark…</div>;
 
   const biome = getBiome(run.biome);
-  const adjacents = current.connectedRoomIds
-    .map(id => getRoomById(run.roomGraph, id))
-    .filter(Boolean) as ReturnType<typeof getRoomById>[];
-  const exitCount = Math.min(adjacents.length, 4);
+  const exitCount = Math.min(current.connectedRoomIds.length, 4);
   const raidWeight = calculateInventoryWeight(run.raidInventory);
   const carryCapacity = player.derivedStats.carryCapacity;
   const packValue = calculateInventoryValue(run.raidInventory);
   const unchartedRooms = run.roomGraph.filter(room => !run.visitedRoomIds.includes(room.id)).length;
-  const extractionDistance = nearestKnownExtractionDistance(run, current.id);
-  const extractionText = extractionDistance === undefined
-    ? "No known extraction"
-    : extractionDistance === 0
-      ? "Extraction here"
-      : `Extraction ${extractionDistance} room${extractionDistance === 1 ? "" : "s"} back`;
-  const woundedWithLoot = player.hp <= Math.floor(player.maxHp * 0.75) && packValue >= 18;
-  const nearbyExtractionStepId = nextStepToKnownExtraction(run, current.id);
-  const pressureActive = woundedWithLoot && extractionDistance !== undefined && extractionDistance <= 2;
+
+  const threatMood = getThreatLabel(run.threat.level);
 
   return (
     <div className="screen dungeon-screen">
       <header className="dungeon-header">
-        <div>
-          <h2>{biome.name}</h2>
+        <div className="dungeon-header-title">
+          <span className="dungeon-header-eyebrow" title={`Seed: ${run.seed}`}>
+            Depth {run.tier} · {biome.name} · <span className={`dungeon-header-mood dungeon-header-mood-${run.threat.level}`}>{threatMood}</span>
+          </span>
+          <h2>{current.title}</h2>
           <p className="muted">{biome.description}</p>
-          <p className="muted small">Seed: <code>{run.seed}</code> · Tier {run.tier}</p>
         </div>
         <div className="dungeon-actions">
           <Button variant="danger" onClick={() => {
@@ -100,13 +91,27 @@ export function DungeonScreen() {
         </div>
       </header>
 
-      <ThreatMeter threat={run.threat} />
+      <div className="dungeon-hud">
+        <div className="dungeon-hud-hp">
+          <span className="dungeon-hud-label">HP</span>
+          <div className="hp-bar hp-bar-compact" style={{ width: 160 }}>
+            <div
+              className="hp-bar-fill"
+              style={{ width: `${Math.round((player.hp / player.maxHp) * 100)}%` }}
+            />
+            <span className="hp-bar-label">{player.hp} / {player.maxHp}</span>
+          </div>
+        </div>
+        <span className="dungeon-hud-chip"><em>Pack</em> {raidWeight}/{carryCapacity}</span>
+        <span className="dungeon-hud-chip"><em>Gold</em> {run.raidInventory.gold}</span>
+        <span className="dungeon-hud-chip"><em>Value</em> {packValue}</span>
+        <span className="dungeon-hud-chip"><em>Uncharted</em> {unchartedRooms}</span>
+      </div>
 
-      <div className="dungeon-grid">
-        <Card title={current.title} subtitle={`Danger ${current.dangerRating} · Exits ${exitCount}/4`} variant={current.dangerRating > 2 ? "danger" : "default"}>
+      <div className="dungeon-grid dungeon-grid-noexits">
+        <Card title={current.title} subtitle={`${TYPE_LABELS[current.type] ?? current.type} · Danger ${current.dangerRating} · ${exitCount}/4 exits`} variant={current.dangerRating > 2 ? "danger" : "default"}>
           <p>{current.description}</p>
-          <p className="muted">Type: {TYPE_LABELS[current.type] ?? current.type}</p>
-          {current.trapId && <p className="warn">Trap: {current.trapId}</p>}
+          {current.trapId && <p className="warn">Trap detected: {current.trapId}</p>}
           {lastMessage && <p className="msg">{lastMessage}</p>}
 
           {current.activeEvent && (
@@ -172,51 +177,7 @@ export function DungeonScreen() {
           )}
         </Card>
 
-        <Card title="Exits" subtitle={`${exitCount}/4 attached rooms`}>
-          {adjacents.length === 0 ? <em>Dead end.</em> : (
-            <ul className="adjacent-list">
-              {adjacents.map(r => r && (
-                <li key={r.id}>
-                  <RoomIntelCard
-                    room={r}
-                    intel={run.knownRoomIntel[r.id]}
-                    direction={getDirectionLabel(current, r)}
-                    onMove={moveToRoom}
-                    isBearingExit={r.id === nearbyExtractionStepId}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card title="Status" subtitle={`HP ${player.hp} / ${player.maxHp}`}>
-          <div className="status-row status-row-wrap">
-            <span>Armor {player.derivedStats.armor}</span>
-            <span>Acc +{player.derivedStats.accuracy}</span>
-            <span>Eva {player.derivedStats.evasion}</span>
-            <span>Pack {raidWeight}/{carryCapacity}</span>
-            <span>{run.raidInventory.gold} g</span>
-            <span>Value {packValue}</span>
-            <span>{unchartedRooms} uncharted</span>
-            <span className={pressureActive ? "extraction-urgent" : undefined}>{extractionText}</span>
-          </div>
-          {pressureActive && (
-            <ExtractionPressureBanner
-              hp={player.hp}
-              maxHp={player.maxHp}
-              packValue={packValue}
-              extractionDistance={extractionDistance!}
-            />
-          )}
-          <div className="room-actions">
-            <Button variant="secondary" onClick={() => goToScreen("character")}>Character</Button>
-            <Button variant="secondary" onClick={() => goToScreen("stash")}>Inventory</Button>
-            <Button variant="ghost" onClick={() => goToScreen("quests")}>Quests</Button>
-          </div>
-        </Card>
-
-        <Card title="Dungeon Map" subtitle={`${run.visitedRoomIds.length}/${run.roomGraph.length} rooms charted`}>
+        <Card title="Dungeon Map" subtitle={`${run.visitedRoomIds.length}/${run.roomGraph.length} rooms charted · Hover for intel`}>
           <DungeonMap run={run} current={current} onMove={moveToRoom} />
         </Card>
 
@@ -280,28 +241,65 @@ function fallbackDefinition(id: string) {
   };
 }
 
-function ExtractionPressureBanner({
-  hp,
-  maxHp,
-  packValue,
-  extractionDistance
+const DANGER_BAND_LABELS: Record<string, string> = {
+  safe: "Safe",
+  low: "Low",
+  moderate: "Moderate",
+  high: "High",
+  severe: "Severe",
+  unknown: "Unknown"
+};
+
+function RoomTooltip({
+  room,
+  intel,
+  isVisited,
+  isCurrent,
+  direction
 }: {
-  hp: number;
-  maxHp: number;
-  packValue: number;
-  extractionDistance: number;
+  room: DungeonRoom;
+  intel?: ScoutedRoomInfo;
+  isVisited: boolean;
+  isCurrent: boolean;
+  direction: string;
 }) {
-  const hpPct = Math.round((hp / maxHp) * 100);
-  const subject = extractionDistance === 0
-    ? "Stand on the stair and leave."
-    : extractionDistance === 1
-      ? "The exit is one room away."
-      : `The exit is ${extractionDistance} rooms away.`;
+  const title = isVisited
+    ? `${room.title}`
+    : intel?.shownType
+      ? TYPE_LABELS[intel.shownType] ?? "Unknown"
+      : intel && intel.likelyTypes.length > 0
+        ? `Maybe ${intel.likelyTypes.map(t => TYPE_LABELS[t] ?? t).slice(0, 2).join(" or ")}`
+        : "Unscouted passage";
+  const rows: Array<{ label: string; value: string }> = [];
+  if (direction) rows.push({ label: "Bearing", value: direction });
+  if (isVisited) {
+    rows.push({ label: "Type", value: TYPE_LABELS[room.type] ?? room.type });
+    if (room.dangerRating > 0) rows.push({ label: "Danger", value: `${room.dangerRating}` });
+  } else if (intel) {
+    if (intel.dangerBand !== "unknown") {
+      rows.push({ label: "Danger", value: DANGER_BAND_LABELS[intel.dangerBand] ?? intel.dangerBand });
+    }
+    if (intel.signs.length > 0) {
+      rows.push({
+        label: "Signs",
+        value: intel.signs.map((sign: RoomSignTag) => describeSign(sign)).join(", ")
+      });
+    }
+  }
   return (
-    <div className="run-pressure-banner" role="status" aria-live="polite">
-      <strong>Bloodied and packed.</strong>
-      <span> HP {hpPct}%. Raid value {packValue}. {subject} Push or leave?</span>
-    </div>
+    <>
+      <span className="tooltip-title">{title}</span>
+      {isCurrent && <span className="tooltip-row muted small">You are here.</span>}
+      {rows.map(r => (
+        <span className="tooltip-row" key={r.label}><em>{r.label}</em> {r.value}</span>
+      ))}
+      {!isVisited && !intel && (
+        <span className="tooltip-row muted small">No intel yet.</span>
+      )}
+      {isVisited && room.description && (
+        <span className="tooltip-row muted small">{room.description}</span>
+      )}
+    </>
   );
 }
 
@@ -386,34 +384,41 @@ function DungeonMap({ run, current, onMove }: DungeonMapProps) {
             canTravel ? "map-room-travel" : ""
           ].filter(Boolean).join(" ");
           const label = isVisited ? TYPE_MARKS[room.type] ?? "?" : "?";
-          const title = isVisited
-            ? `${room.title} (${TYPE_LABELS[room.type] ?? room.type})`
-            : "Unscouted room";
+          const direction = getDirectionLabel(current, room);
+          const intel = run.knownRoomIntel[room.id];
+          const tooltipContent = (
+            <RoomTooltip
+              room={room}
+              intel={intel}
+              isVisited={isVisited}
+              isCurrent={room.id === current.id}
+              direction={room.id === current.id ? "Here" : direction}
+            />
+          );
 
-          if (canTravel) {
-            return (
-              <button
-                key={room.id}
-                type="button"
-                className={className}
-                style={{ gridColumn: col, gridRow: row }}
-                onClick={() => onMove(room.id)}
-                title={title}
-              >
-                {label}
-              </button>
-            );
-          }
-
-          return (
-            <div
-              key={room.id}
+          const tile = canTravel ? (
+            <button
+              type="button"
               className={className}
-              style={{ gridColumn: col, gridRow: row }}
-              title={title}
+              onClick={() => onMove(room.id)}
             >
               {label}
-            </div>
+            </button>
+          ) : (
+            <div className={className}>{label}</div>
+          );
+
+          return (
+            <Tooltip
+              key={room.id}
+              content={tooltipContent}
+              placement="top"
+              as="div"
+              className="map-room-anchor"
+              style={{ gridColumn: col, gridRow: row }}
+            >
+              {tile}
+            </Tooltip>
           );
         })}
       </div>
@@ -451,27 +456,6 @@ function buildRoomPositions(rooms: DungeonRoom[]): Map<string, MapPosition> {
 
 function calculateInventoryValue(inv: DungeonRun["raidInventory"]): number {
   return inv.gold + inv.items.reduce((sum, item) => sum + item.value * item.quantity, 0);
-}
-
-function nearestKnownExtractionDistance(run: DungeonRun, currentRoomId: string): number | undefined {
-  const queue: Array<{ id: string; distance: number }> = [{ id: currentRoomId, distance: 0 }];
-  const seen = new Set<string>([currentRoomId]);
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const room = getRoomById(run.roomGraph, current.id);
-    if (!room) continue;
-    if (room.extractionPoint && run.visitedRoomIds.includes(room.id)) {
-      return current.distance;
-    }
-    for (const connectedId of room.connectedRoomIds) {
-      if (seen.has(connectedId) || !run.visitedRoomIds.includes(connectedId)) continue;
-      seen.add(connectedId);
-      queue.push({ id: connectedId, distance: current.distance + 1 });
-    }
-  }
-
-  return undefined;
 }
 
 function getMapBounds(
