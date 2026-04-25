@@ -7,6 +7,7 @@ export function DevPanel() {
   const [showJson, setShowJson] = useState(false);
   const state = useGameStore(s => s.state);
   const newGame = useGameStore(s => s.newGame);
+  const updateSettings = useGameStore(s => s.updateSettings);
   const debugGenerateDungeonSeed = useGameStore(s => s.debugGenerateDungeonSeed);
   const debugGiveGold = useGameStore(s => s.debugGiveGold);
   const debugHealPlayer = useGameStore(s => s.debugHealPlayer);
@@ -23,6 +24,14 @@ export function DevPanel() {
       <summary>Dev</summary>
       <div className="dev-panel-body">
         <div className="dev-actions">
+          <label className="dev-toggle">
+            <input
+              type="checkbox"
+              checked={!state.settings.audioMuted}
+              onChange={event => updateSettings({ audioMuted: !event.currentTarget.checked })}
+            />
+            SFX
+          </label>
           <Button
             variant="danger"
             onClick={() => {

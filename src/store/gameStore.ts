@@ -88,6 +88,7 @@ import { learnTalent as learnTalentBase } from "../game/talents";
 import { previewEquipmentChange as previewEquipmentChangeBase } from "../game/equipment";
 import { addItemState, removeItemState } from "../game/itemStates";
 import { resolveCombatAction as resolveCombatActionBase } from "../game/combatActions";
+import { playSfx, setAudioMuted } from "../game/audio";
 
 export interface GameStore {
   screen: ScreenId;
@@ -224,6 +225,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   boot: () => {
     const loaded = loadGame();
     if (loaded) {
+      setAudioMuted(loaded.settings.audioMuted);
       set({ state: loaded, screen: getScreenForLoadedState(loaded) });
     }
   },
@@ -233,6 +235,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   resetSave: () => {
     resetGame();
     roomScratch.clear();
+    setAudioMuted(false);
     set({
       screen: "mainMenu",
       state: defaultGameState(),
@@ -249,6 +252,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     resetGame();
     roomScratch.clear();
     const fresh = defaultGameState();
+    setAudioMuted(fresh.settings.audioMuted);
     set({
       state: fresh,
       draft: null,
@@ -292,6 +296,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ...get().state,
       settings: { ...get().state.settings, ...partial }
     };
+    if (partial.audioMuted !== undefined) setAudioMuted(partial.audioMuted);
     set({ state: next });
     persist(next);
   },
@@ -556,11 +561,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const combatState: GameState = { ...nextState, activeCombat: combat };
           set({ state: combatState, screen: "combat", lastRoomMessage: searchResult.result.message });
           saveGame(combatState);
+          playSfx("threat");
           return;
         }
       }
       set({ state: nextState, lastRoomMessage: searchResult.result.message });
       persist(nextState);
+      if (nextRun.threat.points > run.threat.points) playSfx("threat");
+      if (searchResult.result.type === "hiddenLoot") playSfx("loot");
       if (nextPlayer.hp <= 0) {
         finishRunWithDeath(get, set, nextRun, nextPlayer);
       }
@@ -623,6 +631,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? "Nothing of worth in this room."
           : `Found ${items.length} item(s)${gold > 0 ? ` and ${gold} gold` : ""}${Object.keys(materials).length > 0 ? " and materials" : ""}.`
     });
+    if (items.length > 0 || gold > 0 || Object.keys(materials).length > 0) playSfx("loot");
   },
 
   disarmTrap: () => {
@@ -673,6 +682,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const next: GameState = { ...s, activeRun: nextRun, player: nextPlayer };
     set({ state: next, lastRoomMessage: result.message });
     persist(next);
+    playSfx(result.disarmed ? "loot" : result.triggered ? "threat" : "miss");
     if (nextPlayer.hp <= 0) {
       finishRunWithDeath(get, set, nextRun, nextPlayer);
     }
@@ -692,6 +702,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const next: GameState = { ...s, activeRun: result.run, player: result.character };
     set({ state: next, lastRoomMessage: result.resultMessage });
     persist(next);
+    if (result.run.threat.points > run.threat.points) playSfx("threat");
     if (result.character.hp <= 0) {
       finishRunWithDeath(get, set, result.run, result.character);
     }
@@ -757,6 +768,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           : "Loot and materials taken into your raid pack."
     });
     persist(next);
+    if (items.length > 0 || gold > 0 || Object.keys(materials).length > 0) playSfx("loot");
   },
 
   takeItemFromRoom: (item: ItemInstance) => {
@@ -792,6 +804,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     set({ state: next, lastRoomMessage: `You pocket the ${item.name}.` });
     persist(next);
+    playSfx("loot");
   },
 
   useRaidConsumable: itemInstanceId => {
@@ -822,6 +835,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const next: GameState = { ...s, player, activeRun: run };
     set({ state: next, lastRoomMessage: `${item.name} restored ${heal} HP.` });
     persist(next);
+    playSfx("heal");
   },
 
   equipItemFromRaid: (itemInstanceId, preferredSlot) => {
@@ -865,6 +879,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const next: GameState = { ...s, player, activeRun: run };
     set({ state: next, lastRoomMessage: `${item.name} equipped.` });
     persist(next);
+    playSfx("equip");
   },
 
   unequipItemToRaid: slot => {
@@ -901,6 +916,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const next: GameState = { ...s, activeRun: run };
     set({ state: next, lastRoomMessage: `${item.name} left behind.` });
     persist(next);
+    playSfx("miss");
   },
 
   attemptExtract: () => {
@@ -986,6 +1002,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastRoomMessage: `You descend below the boss chamber. Depth ${nextTier} begins. Local threat falls back, but delve strain rises to ${getDelveStrainLabel(nextRun.delveStrain.level)}.`
     });
     persist(next);
+    playSfx("descend");
   },
 
   engageCurrentRoomCombat: () => {
@@ -1048,6 +1065,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const nextState: GameState = { ...s, player: nextPlayer, activeRun: nextRun, activeCombat: result.combat };
     set({ state: nextState });
     persist(nextState);
+    playCombatSfx({ before: combat, after: result.combat, playerBefore: s.player, playerAfter: nextPlayer });
 
     if (result.combat.over) {
       handleCombatOutcome(get, set);
@@ -1105,6 +1123,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const nextState: GameState = { ...s, player, activeCombat: combat, activeRun: run };
     set({ state: nextState });
     persist(nextState);
+    playCombatSfx({ before: s.activeCombat, after: combat, playerBefore: s.player, playerAfter: player });
 
     if (combat.over) {
       handleCombatOutcome(get, set);
@@ -1239,6 +1258,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     set({ state: next, screen: "dungeon", lastRoomMessage: `Victory! You gained ${xpGain} XP.${lootText}${descendText}` });
     persist(next);
+    playSfx(lootMessages.length > 0 ? "loot" : "hit");
   },
 
   closeCombatFlee: () => {
@@ -1246,6 +1266,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const next: GameState = { ...s, activeCombat: undefined };
     set({ state: next, screen: "dungeon", lastRoomMessage: "You broke away. The room is still dangerous." });
     persist(next);
+    playSfx("flee");
   },
 
   useStashConsumable: itemInstanceId => {
@@ -1272,6 +1293,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
     set({ state: next, lastVillageMessage: `${item.name} restored ${heal} HP.` });
     persist(next);
+    playSfx("heal");
   },
 
   equipItemFromStash: (itemInstanceId, preferredSlot) => {
@@ -1302,6 +1324,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const next: GameState = { ...s, player, stash };
     set({ state: next, lastVillageMessage: `${item.name} equipped.` });
     persist(next);
+    playSfx("equip");
   },
 
   unequipItemToStash: slot => {
@@ -1845,11 +1868,49 @@ function applyRunThreat(
     roomId,
     now: change.timestamp
   });
+  if (amount > 0) playSfx("threat");
   return { run: updated, change };
 }
 
 function formatThreatLogMessage(change: ThreatChange): string {
   return change.message.replace(/\s*\(\d+\)\.?$/, ".");
+}
+
+function playCombatSfx(params: {
+  before?: CombatState;
+  after: CombatState;
+  playerBefore?: Character;
+  playerAfter?: Character;
+}): void {
+  const { before, after, playerBefore, playerAfter } = params;
+  const previousLogLength = before?.log.length ?? 0;
+  const newLines = after.log.slice(previousLogLength);
+  const text = newLines.join(" ").toLowerCase();
+
+  if (text.includes("(crit")) {
+    playSfx("crit");
+    return;
+  }
+  if (text.includes("drink") || (playerBefore && playerAfter && playerAfter.hp > playerBefore.hp)) {
+    playSfx("heal");
+    return;
+  }
+  if (after.outcome === "fled" || text.includes("break away")) {
+    playSfx("flee");
+    return;
+  }
+  if (text.includes("miss") || text.includes("stumble")) {
+    playSfx("miss");
+    return;
+  }
+  if (
+    text.includes("strike") ||
+    text.includes("hammer") ||
+    text.includes("falls") ||
+    (playerBefore && playerAfter && playerAfter.hp < playerBefore.hp)
+  ) {
+    playSfx("hit");
+  }
 }
 
 function logInRun(
@@ -2047,6 +2108,7 @@ function finishRunWithDeath(
   };
   set({ state: next, lastDeathSummary: summary, lastExtractionSummary: undefined, screen: "runSummary" });
   persist(next);
+  playSfx("death");
 }
 
 function finishRunWithExtraction(
@@ -2089,6 +2151,7 @@ function finishRunWithExtraction(
   };
   set({ state: next, lastExtractionSummary: result.summary, lastDeathSummary: undefined, screen: "runSummary" });
   persist(next);
+  playSfx("extract");
 }
 
 function handleExtractionResult(
@@ -2125,6 +2188,7 @@ function handleExtractionResult(
     nextState = { ...nextState, activeCombat: combat };
     set({ state: nextState, screen: "combat", lastRoomMessage: result.message });
     saveGame(nextState);
+    playSfx("threat");
     return;
   }
 

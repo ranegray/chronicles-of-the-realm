@@ -1863,6 +1863,20 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   flex-wrap: wrap;
   gap: 6px;
 }
+.dev-toggle {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-dim);
+  display: inline-flex;
+  font-size: 0.82rem;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 8px;
+}
+.dev-toggle input {
+  accent-color: var(--accent-2);
+}
 .dev-metrics span {
   border: 1px solid var(--line);
   border-radius: 4px;

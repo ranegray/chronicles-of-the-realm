@@ -1010,6 +1010,7 @@ export interface PreparedRunModifier {
 export interface GameSettings {
   onboardingComplete: boolean;
   textSpeed: "slow" | "normal" | "fast";
+  audioMuted: boolean;
 }
 
 export interface GameState {

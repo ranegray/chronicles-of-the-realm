@@ -39,7 +39,8 @@ export function defaultGameState(): GameState {
     pendingRunPreparations: [],
     settings: {
       onboardingComplete: false,
-      textSpeed: "normal"
+      textSpeed: "normal",
+      audioMuted: false
     }
   };
 }
