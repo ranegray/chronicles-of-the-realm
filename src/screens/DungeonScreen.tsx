@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { DungeonLog } from "../components/DungeonLog";
@@ -61,6 +62,24 @@ export function DungeonScreen() {
   const lastMessage = useGameStore(s => s.lastRoomMessage);
   const engage = useGameStore(s => s.engageCurrentRoomCombat);
 
+  // Threat-rise glow: pulse the mood word for ~1.8s when threat level climbs.
+  const threatLevel = run?.threat.level ?? 0;
+  const prevThreat = useRef<number | null>(null);
+  const [moodRising, setMoodRising] = useState(false);
+  useEffect(() => {
+    if (prevThreat.current === null) {
+      prevThreat.current = threatLevel;
+      return;
+    }
+    if (threatLevel > prevThreat.current) {
+      setMoodRising(true);
+      const t = window.setTimeout(() => setMoodRising(false), 1800);
+      prevThreat.current = threatLevel;
+      return () => window.clearTimeout(t);
+    }
+    prevThreat.current = threatLevel;
+  }, [threatLevel]);
+
   if (!run || !player) return <div className="screen">No active run.</div>;
   const current = getRoomById(run.roomGraph, run.currentRoomId);
   if (!current) return <div className="screen">Lost in the dark…</div>;
@@ -73,13 +92,15 @@ export function DungeonScreen() {
   const unchartedRooms = run.roomGraph.filter(room => !run.visitedRoomIds.includes(room.id)).length;
 
   const threatMood = getThreatLabel(run.threat.level);
+  const lowHp = player.hp / player.maxHp <= 0.25;
 
   return (
     <div className="screen dungeon-screen">
+      {lowHp && <div className="low-hp-vignette" aria-hidden="true" />}
       <header className="dungeon-header">
         <div className="dungeon-header-title">
           <span className="dungeon-header-eyebrow" title={`Seed: ${run.seed}`}>
-            Depth {run.tier} · {biome.name} · <span className={`dungeon-header-mood dungeon-header-mood-${run.threat.level}`}>{threatMood}</span>
+            Depth {run.tier} · {biome.name} · <span className={`dungeon-header-mood dungeon-header-mood-${run.threat.level}${moodRising ? " dungeon-header-mood-rising" : ""}`}>{threatMood}</span>
           </span>
           <h2>{current.title}</h2>
           <p className="muted">{biome.description}</p>

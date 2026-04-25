@@ -37,6 +37,7 @@ export function RunSummaryScreen() {
         </div>
       </header>
 
+      <div className="summary-scroll">
       {summary.reason === "dead" && (
         <Card title="What Might Have Been" variant="warm">
           <p className="muted">Next time is made from this.</p>
@@ -98,6 +99,7 @@ export function RunSummaryScreen() {
           </ul>
         )}
       </Card>
+      </div>
 
       <div className="summary-actions">
         <Button onClick={() => goToScreen("village")}>Return to Village</Button>
