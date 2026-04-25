@@ -11,9 +11,9 @@ export function buildEnemyInstance(enemyId: string, rng: Rng, depthTier = 1): En
   const hpBonus = depthBonus * DEPTH_RULES.enemyScaling.hpPerDepth;
   const damageBonus = Math.floor(depthBonus / DEPTH_RULES.enemyScaling.damageEveryDepth);
   const name = depthTier >= 7
-    ? `Depth-worn ${def.name}`
+    ? `${deepEnemyPrefix(def.biome)} ${def.name}`
     : depthTier >= 4
-      ? `Hardened ${def.name}`
+      ? `${seasonedEnemyPrefix(def.biome)} ${def.name}`
       : def.name;
   return {
     instanceId: makeId(rng, "enemy"),
@@ -29,6 +29,28 @@ export function buildEnemyInstance(enemyId: string, rng: Rng, depthTier = 1): En
       modifier: (def.damageDice.modifier ?? 0) + damageBonus
     }
   };
+}
+
+function seasonedEnemyPrefix(biome: ReturnType<typeof getEnemy>["biome"]): string {
+  switch (biome) {
+    case "crypt": return "Grave-worn";
+    case "goblinWarrens": return "Scarred";
+    case "fungalCaverns": return "Sporegrown";
+    case "ruinedKeep": return "Oath-marked";
+    case "oldMine": return "Blackvein";
+    case "sunkenTemple": return "Saltbound";
+  }
+}
+
+function deepEnemyPrefix(biome: ReturnType<typeof getEnemy>["biome"]): string {
+  switch (biome) {
+    case "crypt": return "Sepulcher";
+    case "goblinWarrens": return "Deep-warren";
+    case "fungalCaverns": return "Mycelial";
+    case "ruinedKeep": return "Oathbound";
+    case "oldMine": return "Coalblind";
+    case "sunkenTemple": return "Drowned";
+  }
 }
 
 export function buildEncounterEnemies(

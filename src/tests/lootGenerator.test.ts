@@ -42,6 +42,12 @@ describe("lootGenerator", () => {
     const b = generateLootForTable(table, createRng("same"), 5);
     expect(a.map(i => i.templateId)).toEqual(b.map(i => i.templateId));
   });
+
+  it("biases deeper loot toward equipment", () => {
+    const shallow = countEquipment("oldMine", 1);
+    const deep = countEquipment("oldMine", 6);
+    expect(deep).toBeGreaterThan(shallow);
+  });
 });
 
 function countRarities(tier: number): Record<string, number> {
@@ -52,4 +58,14 @@ function countRarities(tier: number): Record<string, number> {
     counts[rar] = (counts[rar] ?? 0) + 1;
   }
   return counts;
+}
+
+function countEquipment(biome: "oldMine", tier: number): number {
+  const table = getLootTableForBiome(biome, tier);
+  const items = generateLootForTable(table, createRng(`equipment-depth-${tier}`), 300, {
+    biome,
+    tier,
+    source: "treasure"
+  });
+  return items.filter(item => ["weapon", "armor", "shield", "trinket"].includes(item.category)).length;
 }

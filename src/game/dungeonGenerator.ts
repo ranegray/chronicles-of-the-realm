@@ -161,7 +161,7 @@ function buildRoom(
   idx: number
 ): DungeonRoom {
   const biomeInfo = getBiome(biome);
-  const desc = rng.pickOne(biomeInfo.roomDescriptions);
+  const baseDescription = rng.pickOne(biomeInfo.roomDescriptions);
 
   let title = "";
   let dangerRating = 1;
@@ -177,7 +177,7 @@ function buildRoom(
       dangerRating = 0;
       break;
     case "combat": {
-      title = "Combat Room";
+      title = rng.pickOne(["Guarded Hall", "Broken Watch", "Stalking Ground"]);
       const encounters = getEncountersForBiome(biome, tier);
       const enc = rng.pickWeighted(encounters.map(e => ({ value: e, weight: e.weight })));
       encounterId = enc.id;
@@ -185,7 +185,7 @@ function buildRoom(
       break;
     }
     case "eliteCombat": {
-      title = "Elite Combat";
+      title = rng.pickOne(["Hard Crossing", "Old Killing Floor", "Held Chamber"]);
       const encounters = getEncountersForBiome(biome, tier);
       const harder = encounters
         .filter(e => e.dangerRating >= 2)
@@ -197,12 +197,12 @@ function buildRoom(
       break;
     }
     case "treasure":
-      title = "Treasure";
+      title = rng.pickOne(["Old Cache", "Forgotten Stores", "Sealed Cache"]);
       lootTableId = getLootTableForBiome(biome, tier).id;
       dangerRating = 1;
       break;
     case "trap": {
-      title = "Trap Room";
+      title = rng.pickOne(["Unsteady Passage", "Worked Floor", "Wrong Turn"]);
       const trap = generateTrapForRoom({
         room: { id: "" } as DungeonRoom,
         biome,
@@ -219,11 +219,11 @@ function buildRoom(
       break;
     }
     case "shrine":
-      title = "Shrine";
+      title = rng.pickOne(["Quiet Shrine", "Old Offering Place", "Worn Altar"]);
       dangerRating = 0;
       break;
     case "npcEvent":
-      title = "Lone Voice";
+      title = rng.pickOne(["Lone Voice", "Waiting Stranger", "Still Figure"]);
       dangerRating = 1;
       break;
     case "questObjective":
@@ -231,7 +231,7 @@ function buildRoom(
       dangerRating = 1;
       break;
     case "lockedChest":
-      title = "Locked Chest";
+      title = rng.pickOne(["Locked Coffer", "Ironbound Chest", "Sealed Coffer"]);
       lootTableId = getLootTableForBiome(biome, tier).id;
       dangerRating = 1;
       break;
@@ -241,7 +241,7 @@ function buildRoom(
       extractionPoint = true;
       break;
     case "boss": {
-      title = "Boss Chamber";
+      title = rng.pickOne(["Deep Threshold", "Claimed Hall", "Last Door"]);
       const encounters = getEncountersForBiome(biome, tier);
       const enc = rng.pickWeighted(encounters.map(e => ({ value: e, weight: e.weight })));
       encounterId = enc.id;
@@ -249,7 +249,7 @@ function buildRoom(
       break;
     }
     case "empty":
-      title = "Quiet Hall";
+      title = rng.pickOne(["Quiet Hall", "Hushed Passage", "Cold Turning"]);
       dangerRating = 0;
       break;
   }
@@ -266,7 +266,7 @@ function buildRoom(
     type,
     biome,
     title,
-    description: desc,
+    description: describeRoomAtDepth({ baseDescription, type, biome, tier, dangerRating: scaledDanger, rng }),
     dangerRating: scaledDanger,
     connectedRoomIds: [],
     visited: false,
@@ -282,6 +282,95 @@ function buildRoom(
   };
   const activeEvent = maybeGenerateEvent({ room: bareRoom, biome, tier, rng });
   return activeEvent ? { ...bareRoom, activeEvent } : bareRoom;
+}
+
+function describeRoomAtDepth(params: {
+  baseDescription: string;
+  type: RoomType;
+  biome: DungeonBiome;
+  tier: number;
+  dangerRating: number;
+  rng: Rng;
+}): string {
+  const { baseDescription, type, biome, tier, dangerRating, rng } = params;
+  const details: string[] = [baseDescription];
+  if (tier >= 4) {
+    details.push(rng.pickOne(depthPressureDetails(biome)));
+  }
+  if (tier >= 7) {
+    details.push(rng.pickOne(deepPressureDetails(type, dangerRating)));
+  }
+  return details.join(" ");
+}
+
+function depthPressureDetails(biome: DungeonBiome): string[] {
+  switch (biome) {
+    case "crypt":
+      return [
+        "The stone is cold enough to ache through leather.",
+        "Old names have been scratched out and written again lower on the wall.",
+        "Fine grey dust shifts without a draft."
+      ];
+    case "goblinWarrens":
+      return [
+        "Fresh brace-work has been jammed into older, narrower cuts.",
+        "The tunnel has been used recently, and in a hurry.",
+        "Grease smoke clings low to the ceiling."
+      ];
+    case "fungalCaverns":
+      return [
+        "The caps here lean toward you before settling back.",
+        "Spores drift in slow sheets whenever your boot moves.",
+        "The floor gives softly, as if something underneath exhales."
+      ];
+    case "ruinedKeep":
+      return [
+        "The stones carry faint bootfalls that do not match yours.",
+        "Old banners stir although the room has no wind.",
+        "A command half-remembered seems to hang in the air."
+      ];
+    case "oldMine":
+      return [
+        "The timbers complain under a weight above you.",
+        "Black water beads on the walls and runs upward in places.",
+        "Distant picks strike once, then stop."
+      ];
+    case "sunkenTemple":
+      return [
+        "Salt crusts the seams in thick white veins.",
+        "Water whispers somewhere behind the stone.",
+        "The air tastes briny and old enough to swallow."
+      ];
+  }
+}
+
+function deepPressureDetails(type: RoomType, dangerRating: number): string[] {
+  if (type === "treasure" || type === "lockedChest") {
+    return [
+      "Whatever was hidden here was hidden from more than thieves.",
+      "The prize feels watched before it is even touched.",
+      "A careful hand left old warnings beneath the dust."
+    ];
+  }
+  if (type === "extraction") {
+    return [
+      "The way out is real, but it no longer feels close.",
+      "Every sound from above arrives thin and delayed.",
+      "The passage back seems to narrow when you look away."
+    ];
+  }
+  if (dangerRating >= 3 || type === "combat" || type === "eliteCombat" || type === "boss") {
+    return [
+      "Something has worn a patient path through this room.",
+      "The quiet here is practiced, not empty.",
+      "Marks on the floor show where others tried to stand their ground."
+    ];
+  }
+  return [
+    "The silence has weight now.",
+    "Even the dust seems reluctant to settle.",
+    "The room waits longer than it should."
+  ];
 }
 
 function maybeGenerateEvent(params: {

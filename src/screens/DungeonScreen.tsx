@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { DungeonLog } from "../components/DungeonLog";
@@ -11,7 +10,6 @@ import { getRoomById } from "../game/dungeonGenerator";
 import { getBiome } from "../data/biomes";
 import { calculateInventoryWeight } from "../game/inventory";
 import { SEARCH_RULES } from "../game/constants";
-import { getDelveStrainLabel, getThreatLabel } from "../game/threat";
 import type { ActiveTrap, DungeonRoom, DungeonRun, RoomSignTag, ScoutedRoomInfo } from "../game/types";
 import type { ItemWithV4Fields } from "../components/v04UiTypes";
 import { getTrapTemplate } from "../data/trapTables";
@@ -22,7 +20,7 @@ const TYPE_LABELS: Record<string, string> = {
   entrance: "Entrance",
   combat: "Combat",
   eliteCombat: "Elite",
-  treasure: "Treasure",
+  treasure: "Cache",
   trap: "Trap",
   shrine: "Shrine",
   npcEvent: "Voice",
@@ -63,24 +61,6 @@ export function DungeonScreen() {
   const lastMessage = useGameStore(s => s.lastRoomMessage);
   const engage = useGameStore(s => s.engageCurrentRoomCombat);
 
-  // Threat-rise glow: pulse the mood word for ~1.8s when threat level climbs.
-  const threatLevel = run?.threat.level ?? 0;
-  const prevThreat = useRef<number | null>(null);
-  const [moodRising, setMoodRising] = useState(false);
-  useEffect(() => {
-    if (prevThreat.current === null) {
-      prevThreat.current = threatLevel;
-      return;
-    }
-    if (threatLevel > prevThreat.current) {
-      setMoodRising(true);
-      const t = window.setTimeout(() => setMoodRising(false), 1800);
-      prevThreat.current = threatLevel;
-      return () => window.clearTimeout(t);
-    }
-    prevThreat.current = threatLevel;
-  }, [threatLevel]);
-
   if (!run || !player) return <div className="screen">No active run.</div>;
   const current = getRoomById(run.roomGraph, run.currentRoomId);
   if (!current) return <div className="screen">Lost in the dark…</div>;
@@ -96,17 +76,23 @@ export function DungeonScreen() {
     ...run.raidInventory.items
   ].filter(item => (((item as ItemWithV4Fields).states ?? []).filter(state => state.id !== "normal").length > 0));
 
-  const threatMood = getThreatLabel(run.threat.level);
-  const strainMood = getDelveStrainLabel(run.delveStrain.level);
   const lowHp = player.hp / player.maxHp <= 0.25;
+  const roomHasLootFlow = (current.type === "treasure" || current.type === "lockedChest" || current.type === "shrine") && !current.activeEvent && !current.completed;
+  const roomLootSearched = Boolean(current.searchState?.searched);
+  const lootSearchLabel = current.type === "lockedChest"
+    ? "Work the Lock"
+    : current.type === "shrine"
+      ? "Examine"
+      : "Search";
+  const depthTone = run.tier >= 7 ? "deep" : run.tier >= 4 ? "lower" : "upper";
 
   return (
-    <div className="screen dungeon-screen">
+    <div className={`screen dungeon-screen dungeon-screen-${depthTone}`}>
       {lowHp && <div className="low-hp-vignette" aria-hidden="true" />}
       <header className="dungeon-header">
         <div className="dungeon-header-title">
           <span className="dungeon-header-eyebrow" title={`Seed: ${run.seed}`}>
-            Depth {run.tier} · {biome.name} · Alert <span className={`dungeon-header-mood dungeon-header-mood-${run.threat.level}${moodRising ? " dungeon-header-mood-rising" : ""}`}>{threatMood}</span> · Strain {strainMood}
+            Depth {run.tier} · {biome.name}
           </span>
           <h2>{current.title}</h2>
           <p className="muted">{biome.description}</p>
@@ -133,8 +119,6 @@ export function DungeonScreen() {
         <span className="dungeon-hud-chip"><em>Gold</em> {run.raidInventory.gold}</span>
         <span className="dungeon-hud-chip"><em>Value</em> {packValue}</span>
         <span className="dungeon-hud-chip"><em>Uncharted</em> {unchartedRooms}</span>
-        <span className="dungeon-hud-chip"><em>Alert</em> {run.threat.points}</span>
-        <span className="dungeon-hud-chip"><em>Strain</em> {run.delveStrain.points}</span>
       </div>
 
       <div className="dungeon-grid dungeon-grid-noexits">
@@ -156,9 +140,11 @@ export function DungeonScreen() {
           <div className="room-actions">
             {current.activeEvent && !current.activeEvent.resolved ? null : (
             <>
-            {(current.type === "treasure" || current.type === "lockedChest" || current.type === "shrine") && !current.activeEvent && (
+            {roomHasLootFlow && !roomLootSearched && (
+              <Button onClick={search}>{lootSearchLabel}</Button>
+            )}
+            {roomHasLootFlow && roomLootSearched && (
               <>
-                <Button onClick={search}>Search</Button>
                 <Button variant="secondary" onClick={loot}>Take All</Button>
               </>
             )}

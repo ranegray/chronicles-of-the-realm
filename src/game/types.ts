@@ -1058,6 +1058,8 @@ export interface RunSummary {
   lootExtracted: ItemInstance[];
   lootLost: ItemInstance[];
   gearLost: ItemInstance[];
+  materialsExtracted: MaterialVault;
+  materialsLost: MaterialVault;
   goldGained: number;
   goldLost: number;
   xpGained: number;

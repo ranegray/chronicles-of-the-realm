@@ -1,6 +1,7 @@
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { ItemTooltip } from "../components/ItemTooltip";
+import { MaterialInventory } from "../components/MaterialInventory";
 import type { RunSummary } from "../game/types";
 import { useGameStore } from "../store/gameStore";
 
@@ -18,17 +19,19 @@ export function RunSummaryScreen() {
   }
 
   const success = summary.reason === "extracted" || summary.reason === "debugExtracted";
-  const title = success ? "Run Extracted" : summary.reason === "dead" ? "Run Lost" : "Run Abandoned";
+  const title = success ? "Returned Alive" : summary.reason === "dead" ? "Lost Below" : "Run Abandoned";
   const state = success ? "success" : summary.reason === "dead" ? "lost" : "abandoned";
   const protectedItems = getDynamicItemList(summary, "protectedItems", "protectedReturned", "returnedToStash");
   const brokenItems = getDynamicItemList(summary, "brokenItems", "gearBroken", "broken");
+  const outcomeText = describeRunOutcome(summary, protectedItems.length, brokenItems.length);
 
   return (
     <div className="screen summary-screen">
       <header className={`summary-hero summary-hero-${state}`}>
         <div className="summary-hero-main">
-          <span className="summary-hero-eyebrow">{summary.roomsVisited} rooms · {summary.roomsCompleted} cleared</span>
+          <span className="summary-hero-eyebrow">Depth {summary.tier} · {summary.roomsVisited} rooms · {summary.roomsCompleted} cleared</span>
           <h1>{title}</h1>
+          <p>{outcomeText}</p>
           <p className="muted">{summary.reasonText}</p>
         </div>
         <div className="summary-hero-stats">
@@ -41,8 +44,8 @@ export function RunSummaryScreen() {
 
       <div className="summary-scroll">
       {summary.reason === "dead" && (
-        <Card title="What Might Have Been" variant="warm">
-          <p className="muted">Next time is made from this.</p>
+        <Card title="The Way Out" variant="warm">
+          <p className="muted">The last route tells you what the next delve must survive.</p>
           <div className="summary-stat-grid">
             <SummaryStat label="Raid value lost" value={summary.raidValueLost} />
             <SummaryStat label="Total value lost" value={summary.itemValueLost + summary.goldLost} />
@@ -51,21 +54,31 @@ export function RunSummaryScreen() {
         </Card>
       )}
 
-      <Card title="Loot Extracted">
+      <Card title="What Came Home">
+        {hasMaterials(summary.materialsExtracted) && (
+          <div className="summary-materials">
+            <MaterialInventory materials={summary.materialsExtracted} compact />
+          </div>
+        )}
         <ItemList
           items={summary.lootExtracted}
-          empty="Nothing extracted. The village stash did not grow."
+          empty={hasMaterials(summary.materialsExtracted) ? "No item loot came home." : "Nothing extracted. The village stash did not grow."}
         />
       </Card>
 
-      <Card title="Loot Lost">
+      <Card title="What Stayed Below">
+        {hasMaterials(summary.materialsLost) && (
+          <div className="summary-materials">
+            <MaterialInventory materials={summary.materialsLost} compact />
+          </div>
+        )}
         <ItemList
           items={summary.lootLost}
-          empty="No raid-pack loot was lost."
+          empty={hasMaterials(summary.materialsLost) ? "No item loot was lost." : "No raid-pack loot was lost."}
         />
       </Card>
 
-      <Card title="Gear Lost">
+      <Card title="Gear Left Behind">
         <ItemList
           items={summary.gearLost}
           empty="No equipped gear was lost."
@@ -73,7 +86,7 @@ export function RunSummaryScreen() {
       </Card>
 
       {(protectedItems.length > 0 || brokenItems.length > 0) && (
-        <Card title="Special Item Outcomes" subtitle="v0.4 gear-state resolution">
+        <Card title="Item Fate">
           {protectedItems.length > 0 && (
             <>
               <h4 className="good">Protected</h4>
@@ -136,6 +149,10 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
   );
 }
 
+function hasMaterials(materials: RunSummary["materialsExtracted"]): boolean {
+  return Object.values(materials ?? {}).some(amount => amount && amount > 0);
+}
+
 function ItemList({ items, empty }: { items: RunSummary["lootExtracted"]; empty: string }) {
   if (items.length === 0) return <em>{empty}</em>;
   return (
@@ -152,6 +169,31 @@ function getDynamicItemList(summary: RunSummary, ...keys: string[]): RunSummary[
     if (Array.isArray(value)) return value as RunSummary["lootExtracted"];
   }
   return [];
+}
+
+function describeRunOutcome(summary: RunSummary, protectedCount: number, brokenCount: number): string {
+  if (summary.reason === "extracted" || summary.reason === "debugExtracted") {
+    const itemWord = summary.lootExtracted.length === 1 ? "item" : "items";
+    const materialCount = countMaterials(summary.materialsExtracted);
+    const materialWord = materialCount === 1 ? "material" : "materials";
+    return summary.lootExtracted.length > 0 || summary.goldGained > 0 || materialCount > 0
+      ? `You made it back with ${summary.goldGained} gold, ${summary.lootExtracted.length} ${itemWord}, and ${materialCount} ${materialWord}.`
+      : "You made it back alive, but the pack came home light.";
+  }
+  if (summary.reason === "dead") {
+    const protectedText = protectedCount > 0
+      ? ` ${protectedCount} protected item${protectedCount === 1 ? "" : "s"} found the way home.`
+      : "";
+    const brokenText = brokenCount > 0
+      ? ` ${brokenCount} fragile item${brokenCount === 1 ? "" : "s"} broke below.`
+      : "";
+    return `The dungeon kept the raid pack.${protectedText}${brokenText}`;
+  }
+  return "You turned back before the delve could be settled.";
+}
+
+function countMaterials(materials: RunSummary["materialsExtracted"]): number {
+  return Object.values(materials ?? {}).reduce((sum, amount) => sum + (amount ?? 0), 0);
 }
 
 function describeDeathExtraction(summary: RunSummary): string {

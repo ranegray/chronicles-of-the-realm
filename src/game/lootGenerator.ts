@@ -52,7 +52,10 @@ export function generateLootForTable(
     const rolledRarity = rollRarity(effectiveTier, rng);
     const allowed = table.entries.filter(e => entryAllowedByRarity(e, rolledRarity));
     const pool = allowed.length > 0 ? allowed : table.entries;
-    const entry = rng.pickWeighted(pool.map(e => ({ value: e, weight: e.weight })));
+    const entry = rng.pickWeighted(pool.map(e => ({
+      value: e,
+      weight: getDepthAdjustedLootWeight(e, rolledRarity, effectiveTier, context)
+    })));
     const qty = rng.nextInt(entry.minQuantity, entry.maxQuantity);
     const template = getItemTemplate(entry.itemTemplateId);
     const instance = instanceFromTemplateId(template.id, rng, qty);
@@ -79,6 +82,25 @@ export function generateLootForTable(
     items.push(result.item);
   }
   return items;
+}
+
+function getDepthAdjustedLootWeight(
+  entry: LootEntry,
+  rolledRarity: Rarity,
+  tier: number,
+  context?: Partial<ItemGenerationContext>
+): number {
+  const template = getItemTemplate(entry.itemTemplateId);
+  if (!["weapon", "armor", "shield", "trinket"].includes(template.category)) {
+    return entry.weight;
+  }
+
+  let weight = entry.weight;
+  weight *= 1 + Math.min(4, Math.max(0, tier - 1) * 0.35);
+  if (rolledRarity !== "common") weight *= 1.8;
+  if (context?.source === "boss") weight *= 2;
+  if (context?.source === "treasure" || context?.source === "event") weight *= 1.35;
+  return weight;
 }
 
 export function generateLootForRoomLootTableId(

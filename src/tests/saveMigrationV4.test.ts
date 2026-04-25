@@ -87,6 +87,8 @@ describe("save migration v4", () => {
       lootExtracted: [stripV4ItemFields(instanceFromTemplateId("gem_dim_quartz", rng))],
       lootLost: [stripV4ItemFields(instanceFromTemplateId("consumable_small_draught", rng))],
       gearLost: [loadoutItem],
+      materialsExtracted: {},
+      materialsLost: {},
       goldGained: 0,
       goldLost: 5,
       xpGained: 10,

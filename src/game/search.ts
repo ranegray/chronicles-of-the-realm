@@ -14,7 +14,7 @@ import { detectTrap, triggerTrap } from "./traps";
 import { getLootTableForBiome } from "../data/lootTables";
 import { generateLootForRoomLootTableId, generateMaterialLoot } from "./lootGenerator";
 import { addItem, calculateInventoryWeight } from "./inventory";
-import { addMaterials } from "./materials";
+import { addMaterials, formatMaterialVault } from "./materials";
 import type { Rng } from "./rng";
 import { createRng } from "./rng";
 
@@ -174,7 +174,7 @@ export function searchCurrentRoom(params: {
         raidInventory: addMaterials({ inventory: run.raidInventory, materials })
       };
       run = updateRoomSearchState(run, room.id, prev => ({ ...prev, hiddenLootClaimed: true }));
-      const names = Object.entries(materials).map(([id, amount]) => `${amount} ${id}`).join(", ");
+      const names = formatMaterialVault(materials);
       run = addDungeonLogEntry({
         run, type: "loot", now, roomId: room.id,
         message: `Materials: ${names}.`

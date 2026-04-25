@@ -850,6 +850,15 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
 .dungeon-header {
   display: flex; justify-content: space-between; align-items: flex-end;
   gap: 10px;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 4px;
+}
+.dungeon-screen-lower .dungeon-header { border-bottom-color: rgba(200, 155, 60, 0.18); }
+.dungeon-screen-deep .dungeon-header { border-bottom-color: rgba(199, 80, 80, 0.24); }
+.dungeon-screen-lower .dungeon-hud { border-color: rgba(200, 155, 60, 0.22); }
+.dungeon-screen-deep .dungeon-hud {
+  border-color: rgba(199, 80, 80, 0.25);
+  background: color-mix(in srgb, var(--bg-1) 88%, rgba(199, 80, 80, 0.12));
 }
 .dungeon-header-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .dungeon-header-eyebrow {
@@ -1720,6 +1729,7 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
 }
 .summary-stat span { color: var(--text-dim); font-size: 0.82rem; }
 .summary-stat strong { font-variant-numeric: tabular-nums; }
+.summary-materials { margin-bottom: 10px; }
 .equipment-grid { display: grid; gap: 8px; }
 .equipment-slot {
   background: var(--bg-2);

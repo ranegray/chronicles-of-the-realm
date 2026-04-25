@@ -357,6 +357,8 @@ function normalizeRunSummary(value: unknown): RunSummary | undefined {
     lootExtracted: Array.isArray(value.lootExtracted) ? value.lootExtracted.map(normalizeItem).filter(Boolean) : [],
     lootLost: Array.isArray(value.lootLost) ? value.lootLost.map(normalizeItem).filter(Boolean) : [],
     gearLost: Array.isArray(value.gearLost) ? value.gearLost.map(normalizeItem).filter(Boolean) : [],
+    materialsExtracted: normalizeMaterialVault(value.materialsExtracted),
+    materialsLost: normalizeMaterialVault(value.materialsLost),
     questRewards: Array.isArray(value.questRewards) ? value.questRewards.map(normalizeItem).filter(Boolean) : []
   } as RunSummary;
 }

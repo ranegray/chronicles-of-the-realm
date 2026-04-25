@@ -56,6 +56,8 @@ export function buildRunSummary({
     lootExtracted,
     lootLost,
     gearLost,
+    materialsExtracted: extraction?.materialsSecured ?? {},
+    materialsLost: death?.materialsLost ?? {},
     goldGained: extraction?.goldGained ?? 0,
     goldLost: death?.goldLost ?? 0,
     xpGained: run.xpGained ?? extraction?.xpGained ?? 0,

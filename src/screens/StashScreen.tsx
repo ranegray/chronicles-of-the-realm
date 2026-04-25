@@ -5,11 +5,12 @@ import { Card } from "../components/Card";
 import { ItemComparePanel } from "../components/ItemComparePanel";
 import { ItemTooltip } from "../components/ItemTooltip";
 import { LoadoutBuilder } from "../components/LoadoutBuilder";
+import { MaterialInventory } from "../components/MaterialInventory";
 import { RunPreparationPanel } from "../components/RunPreparationPanel";
 import { calculateInventoryWeight } from "../game/inventory";
 import { getConsumableHealFormula } from "../game/itemEffects";
 import { getAvailableRunPreparationOptions } from "../game/runPreparation";
-import type { EquipmentSlots, ItemInstance } from "../game/types";
+import type { EquipmentSlots, Inventory, ItemInstance } from "../game/types";
 import { useGameStore } from "../store/gameStore";
 import type { EquipmentChangePreview, EquipmentSlotName } from "../components/v04UiTypes";
 
@@ -98,7 +99,9 @@ export function StashScreen() {
         {mode === "village" && (
           <>
             <Card title={`Next Raid Pack (${preparedInventory.gold} g)`} subtitle={player ? `${calculateInventoryWeight(preparedInventory)} / ${player.derivedStats.carryCapacity} weight` : undefined}>
-              {preparedInventory.items.length === 0 ? <div className="inv-empty">Nothing packed.</div> : (
+              {inventoryIsEmpty(preparedInventory) ? <div className="inv-empty">Nothing packed.</div> : (
+                <>
+                {hasMaterials(preparedInventory) && <MaterialInventory materials={preparedInventory.materials ?? {}} compact />}
                 <div className="inv-items">
                   {preparedInventory.items.map(item => (
                     <ItemActionCard
@@ -108,11 +111,14 @@ export function StashScreen() {
                     />
                   ))}
                 </div>
+                </>
               )}
             </Card>
 
             <Card title={`Stash (${stash.gold} g)`}>
-              {stash.items.length === 0 ? <div className="inv-empty">Stash is bare.</div> : (
+              {inventoryIsEmpty(stash) ? <div className="inv-empty">Stash is bare.</div> : (
+                <>
+                {hasMaterials(stash) && <MaterialInventory materials={stash.materials ?? {}} compact />}
                 <div className="inv-items">
                   {stash.items.map(item => (
                     <ItemActionCard
@@ -135,6 +141,7 @@ export function StashScreen() {
                     />
                   ))}
                 </div>
+                </>
               )}
             </Card>
 
@@ -154,7 +161,9 @@ export function StashScreen() {
             title={`Raid Pack (${activeRun.raidInventory.gold} g)`}
             subtitle={player ? `${calculateInventoryWeight(activeRun.raidInventory)} / ${player.derivedStats.carryCapacity} weight` : undefined}
           >
-            {activeRun.raidInventory.items.length === 0 ? <div className="inv-empty">Empty for now.</div> : (
+            {inventoryIsEmpty(activeRun.raidInventory) ? <div className="inv-empty">Empty for now.</div> : (
+              <>
+              {hasMaterials(activeRun.raidInventory) && <MaterialInventory materials={activeRun.raidInventory.materials ?? {}} compact />}
               <div className="inv-items">
                 {activeRun.raidInventory.items.map(item => (
                   <ItemActionCard
@@ -181,12 +190,22 @@ export function StashScreen() {
                   />
                 ))}
               </div>
+              </>
             )}
           </Card>
         )}
       </div>
     </div>
   );
+}
+
+function inventoryIsEmpty(inventory: Inventory): boolean {
+  return inventory.items.length === 0 &&
+    Object.values(inventory.materials ?? {}).every(amount => !amount || amount <= 0);
+}
+
+function hasMaterials(inventory: Inventory): boolean {
+  return Object.values(inventory.materials ?? {}).some(amount => amount && amount > 0);
 }
 
 function ItemActionCard({ item, actions }: { item: ItemInstance; actions: ReactNode }) {

@@ -34,6 +34,7 @@ import { addItem, calculateInventoryWeight, createEmptyInventory, instanceFromTe
 import { getConsumableHealFormula, rollConsumableHealAmount } from "../game/itemEffects";
 import { generateLootForRoomLootTableId, generateMaterialLoot, rollGold } from "../game/lootGenerator";
 import { getLootTableForBiome } from "../data/lootTables";
+import { getBiome } from "../data/biomes";
 import { getEncounter, getEncountersForBiome } from "../data/encounters";
 import { getEnemy } from "../data/enemies";
 import { getAncestry } from "../data/ancestries";
@@ -41,7 +42,7 @@ import { getClass } from "../data/classes";
 import { startCombat as startCombatBase, resolvePlayerAction, type CombatAction } from "../game/combat";
 import { applyAbandonPenalty, applyDeathPenalty, applyExtractionRewards, applyXpAndLevel, type DeathSummary, type ExtractionRewardSummary } from "../game/progression";
 import { appendRunSummary, buildRunSummary } from "../game/runSummary";
-import { recalculateCharacterStats } from "../game/characterMath";
+import { getModifier, recalculateCharacterStats } from "../game/characterMath";
 import { THREAT_RULES } from "../game/constants";
 import type { CombatThreatDelta } from "../game/combat";
 import type { DungeonLogEntryType, ThreatChange, ThreatChangeReason } from "../game/types";
@@ -50,7 +51,6 @@ import {
   applyThreatChange,
   calculateDescendStrainGain,
   createThreatStateWithCarryover,
-  getDelveStrainLabel,
   getThreatModifiers
 } from "../game/threat";
 import { addDungeonLogEntry } from "../game/dungeonLog";
@@ -72,7 +72,7 @@ import {
 } from "../game/merchants";
 import type { Rng } from "../game/rng";
 import { createRng, randomSeed } from "../game/rng";
-import { addMaterials } from "../game/materials";
+import { addMaterials, formatMaterialVault } from "../game/materials";
 import { initializeVillageProgression, upgradeNpcService as upgradeNpcServiceBase } from "../game/villageProgression";
 import { initializeQuestChainsForVillage, advanceQuestChainAfterQuestClaim } from "../game/questChains";
 import { craftRecipe as craftRecipeBase } from "../game/crafting";
@@ -419,7 +419,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       preparedInventory: createEmptyInventory(),
       pendingRunPreparations: (s.pendingRunPreparations ?? []).filter(prep => !prepared.appliedPreparations.some(applied => applied.id === prep.id))
     };
-    set({ state: next, screen: "dungeon", lastRoomMessage: `You enter the ${run.biome} (${run.seed}).` });
+    set({ state: next, screen: "dungeon", lastRoomMessage: `You enter ${getBiome(run.biome).name}.` });
     persist(next);
   },
 
@@ -460,7 +460,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       run,
       village: s.village,
       reason: "abandoned",
-      reasonText: "You abandoned the delve and lost the raid pack.",
+      reasonText: "You cut the line and left the raid pack behind.",
       death: summary
     });
     const next: GameState = {
@@ -599,6 +599,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
       persist(resolved.state);
       return;
     }
+    if (room.type === "lockedChest") {
+      const lock = resolveLockedChestAttempt(s.player, run, room);
+      if (!lock.opened) {
+        scratch.searched = true;
+        scratch.loot = [];
+        scratch.goldFound = 0;
+        scratch.materialsFound = {};
+        roomScratch.set(room.id, scratch);
+        const nextRun = updateRoomAfterScratchSearch(run, room.id, false);
+        const next: GameState = { ...s, activeRun: nextRun };
+        set({
+          state: next,
+          lastRoomMessage: "The lock holds under your tools. You find no clean way in."
+        });
+        persist(next);
+        playSfx("miss");
+        return;
+      }
+    }
+
     if (room.lootTableId) {
       const count = room.type === "lockedChest" ? 2 : 1;
       items.push(...generateLootForRoomLootTableId(room.lootTableId, rng, count, {
@@ -624,14 +644,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (room.type === "lockedChest") {
       next = notifyQuestEvent(next, { kind: "chestOpened", biome: room.biome });
     }
+    const hasFinds = items.length > 0 || gold > 0 || Object.keys(materials).length > 0;
+    const materialText = formatMaterialVault(materials);
+    next = { ...next, activeRun: updateRoomAfterScratchSearch(run, room.id, hasFinds) };
     set({
       state: next,
       lastRoomMessage:
-        items.length === 0 && gold === 0 && Object.keys(materials).length === 0
+        !hasFinds
           ? "Nothing of worth in this room."
-          : `Found ${items.length} item(s)${gold > 0 ? ` and ${gold} gold` : ""}${Object.keys(materials).length > 0 ? " and materials" : ""}.`
+          : `Found ${items.length} item(s)${gold > 0 ? ` and ${gold} gold` : ""}${materialText ? ` and ${materialText}` : ""}.`
     });
-    if (items.length > 0 || gold > 0 || Object.keys(materials).length > 0) playSfx("loot");
+    persist(next);
+    if (hasFinds) playSfx("loot");
   },
 
   disarmTrap: () => {
@@ -986,7 +1010,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     nextRun = addDungeonLogEntry({
       run: nextRun,
       type: "warning",
-      message: `${strainResult.change.message} Strain: ${getDelveStrainLabel(strainResult.strain.level)}.`,
+      message: strainResult.change.message,
       now: strainResult.change.timestamp
     });
     nextRun = scoutFromCurrent(nextRun, s.player, s.village);
@@ -999,7 +1023,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       state: next,
       screen: "dungeon",
-      lastRoomMessage: `You descend below the boss chamber. Depth ${nextTier} begins. Local threat falls back, but delve strain rises to ${getDelveStrainLabel(nextRun.delveStrain.level)}.`
+      lastRoomMessage: `You descend below the boss chamber. Depth ${nextTier} begins. The halls quiet for a moment, but the way back feels less forgiving.`
     });
     persist(next);
     playSfx("descend");
@@ -1196,7 +1220,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       let raid = addMaterials({ inventory: next.activeRun.raidInventory, materials: materialLoot });
       next = { ...next, activeRun: { ...next.activeRun, raidInventory: raid } };
       for (const [id, amount] of Object.entries(materialLoot)) {
-        lootMessages.push(`${amount} ${id}`);
+        if (amount) lootMessages.push(formatMaterialVault({ [id]: amount }));
         for (let i = 0; i < (amount ?? 0); i++) {
           next = notifyQuestEvent(next, { kind: "materialCollected", tag: id, biome: room.biome });
         }
@@ -2094,7 +2118,7 @@ function finishRunWithDeath(
     run: deadRun,
     village: s.village,
     reason: "dead",
-    reasonText: "You died in the dungeon and lost the raid pack plus unprotected equipped gear.",
+    reasonText: "You fell before reaching the road home. Anything unprotected was left below.",
     death: summary
   });
   const next: GameState = {
@@ -2199,6 +2223,43 @@ function handleExtractionResult(
 const NEW_SEARCH_ROOM_TYPES: RoomType[] = [
   "trap", "combat", "eliteCombat", "empty", "extraction", "boss"
 ];
+
+function updateRoomAfterScratchSearch(run: DungeonRun, roomId: string, hasFinds: boolean): DungeonRun {
+  return {
+    ...run,
+    roomGraph: run.roomGraph.map(room => {
+      if (room.id !== roomId) return room;
+      const previous = room.searchState ?? {
+        searched: false,
+        searchCount: 0,
+        hiddenLootClaimed: false,
+        trapChecked: false,
+        eventRevealed: false
+      };
+      return {
+        ...room,
+        completed: hasFinds ? room.completed : true,
+        searchState: {
+          ...previous,
+          searched: true,
+          searchCount: previous.searchCount + 1,
+          hiddenLootClaimed: hasFinds || previous.hiddenLootClaimed
+        }
+      };
+    })
+  };
+}
+
+function resolveLockedChestAttempt(character: Character, run: DungeonRun, room: DungeonRoom): {
+  opened: boolean;
+} {
+  const rng = createRng(`lockedChest:${run.seed}:${room.id}`);
+  const roll = rng.nextInt(1, 20);
+  const bonus = getModifier(character.abilityScores.agility) + Math.floor((character.derivedStats.trapSense ?? 0) / 2);
+  const difficulty = 10 + Math.floor(Math.max(1, run.tier) / 2) + Math.max(0, room.dangerRating - 1);
+  const total = roll + bonus;
+  return { opened: total >= difficulty };
+}
 
 function isNewSearchRoomType(type: RoomType): boolean {
   return NEW_SEARCH_ROOM_TYPES.includes(type);

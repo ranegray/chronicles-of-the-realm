@@ -134,6 +134,8 @@ export function resolveEventChoice(params: {
     baseMessage = "";
   }
 
+  const outcomeLogStart = run.dungeonLog.length;
+
   // Apply outcomes in order
   for (const outcome of outcomes) {
     ({ run, character } = applyEventOutcome({
@@ -141,12 +143,20 @@ export function resolveEventChoice(params: {
     }));
   }
 
+  const outcomeMessages = run.dungeonLog
+    .slice(outcomeLogStart)
+    .map(entry => entry.message)
+    .filter(Boolean);
+  const visibleResult = [baseMessage || `You chose: ${choice.label}.`, ...outcomeMessages]
+    .filter((message, index, all) => message && all.indexOf(message) === index)
+    .join(" ");
+
   // Mark event resolved
   run = updateRoomEvent(run, event.roomId, ev => ({
     ...ev,
     resolved: true,
     selectedChoiceId: choiceId,
-    resultMessage: baseMessage
+    resultMessage: visibleResult
   }));
 
   // Log the event resolution
@@ -161,7 +171,7 @@ export function resolveEventChoice(params: {
 
   return {
     run, character, choiceId,
-    resultMessage: baseMessage || `You chose: ${choice.label}.`,
+    resultMessage: visibleResult,
     checkResult
   };
 }
@@ -245,7 +255,14 @@ export function applyEventOutcome(params: {
       const table = outcome.lootTableId
         ? outcome.lootTableId
         : getLootTableForBiome(biome, run.tier).id;
-      const items = generateLootForRoomLootTableId(table, rng, 1);
+      const items = generateLootForRoomLootTableId(table, rng, 1, {
+        biome,
+        tier: run.tier,
+        roomType: room?.type,
+        source: "event",
+        threatLevel: run.threat.level,
+        playerClassId: character.classId
+      });
       const capacity = character.derivedStats.carryCapacity;
       let raid = run.raidInventory;
       const taken: ItemInstance[] = [];
@@ -257,8 +274,10 @@ export function applyEventOutcome(params: {
         }
       }
       run = { ...run, raidInventory: raid };
-      const displayMsg = outcome.message ??
-        (taken.length > 0 ? `You gain ${taken.map(i => i.name).join(", ")}.` : "You leave it behind — too much to carry.");
+      const gainedText = taken.length > 0
+        ? `You gain ${taken.map(i => i.name).join(", ")}.`
+        : "You leave it behind - too much to carry.";
+      const displayMsg = outcome.message ? `${outcome.message} ${gainedText}` : gainedText;
       run = addDungeonLogEntry({ run, type: "loot", now, roomId, message: displayMsg });
       break;
     }
