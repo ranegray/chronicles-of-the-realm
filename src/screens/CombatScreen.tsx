@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { ActiveActionBar } from "../components/ActiveActionBar";
 import { Button } from "../components/Button";
 import { useGameStore } from "../store/gameStore";
 import type { EnemyInstance } from "../game/types";
+import { canUseCombatAction, getAvailableCombatActions } from "../game/combatActions";
+import type { ActiveCombatActionView } from "../components/v04UiTypes";
 
 type Fx =
   | { id: string; kind: "enemy-hit"; targetId: string; amount: number }
@@ -16,6 +19,7 @@ export function CombatScreen() {
   const player = useGameStore(s => s.state.player);
   const run = useGameStore(s => s.state.activeRun);
   const performAction = useGameStore(s => s.performCombatAction);
+  const useCombatAction = useGameStore(s => s.useCombatAction);
   const performAutoCombat = useGameStore(s => s.performAutoCombat);
   const closeVictory = useGameStore(s => s.closeCombatVictory);
   const closeFlee = useGameStore(s => s.closeCombatFlee);
@@ -124,6 +128,7 @@ export function CombatScreen() {
   const enemyHitsBy = (id: string) =>
     fx.filter((f): f is Extract<Fx, { kind: "enemy-hit" }> => f.kind === "enemy-hit" && f.targetId === id);
   const lowHp = player.hp / player.maxHp <= 0.25;
+  const classActions = getUnlockedClassActions(player, combat, Boolean(selectedTarget));
 
   return (
     <>
@@ -195,6 +200,11 @@ export function CombatScreen() {
         <footer className="combat-actions-bar">
           {!combat.over && (
             <>
+              <ActiveActionBar
+                actions={classActions}
+                combatState={combat}
+                onUseAction={actionId => useCombatAction(actionId, selectedTarget?.instanceId)}
+              />
               <Button
                 className="btn-hero combat-action-primary"
                 disabled={!selectedTarget}
@@ -249,6 +259,27 @@ export function CombatScreen() {
       </div>
     </>
   );
+}
+
+function getUnlockedClassActions(
+  player: NonNullable<ReturnType<typeof useGameStore.getState>["state"]["player"]>,
+  combat: NonNullable<ReturnType<typeof useGameStore.getState>["state"]["activeCombat"]>,
+  hasTarget: boolean
+): ActiveCombatActionView[] {
+  return getAvailableCombatActions({ character: player, combatState: combat })
+    .filter(action => Boolean(action.requiredTalentId))
+    .map(action => {
+      const needsTarget = action.target === "singleEnemy" || action.target === "allEnemies";
+      const runtime = combat.actionRuntimeState?.find(state => state.actionId === action.id);
+      const useCheck = canUseCombatAction({ character: player, combatState: combat, actionId: action.id });
+      return {
+        ...action,
+        disabled: !useCheck.canUse || (needsTarget && !hasTarget),
+        disabledReason: needsTarget && !hasTarget ? "Choose a living target." : useCheck.reason,
+        remainingCooldown: runtime?.remainingCooldown,
+        usedThisCombat: runtime?.usedThisCombat
+      };
+    });
 }
 
 function EnemyPortrait({

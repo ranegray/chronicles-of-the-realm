@@ -1,4 +1,4 @@
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const DUNGEON_GENERATOR_VERSION = 1;
 export const STORAGE_KEY = "chronicles-of-the-realm:save";
 
@@ -58,6 +58,167 @@ export const LOOT_RULES = {
     legendary: 0
   }
 };
+
+export const CHARACTER_PROGRESSION_RULES = {
+  maxLevel: 10,
+  xpByLevel: {
+    1: 0,
+    2: 100,
+    3: 250,
+    4: 450,
+    5: 700,
+    6: 1000,
+    7: 1350,
+    8: 1750,
+    9: 2200,
+    10: 2700
+  },
+  talentPointsByLevel: {
+    1: 0,
+    2: 1,
+    3: 1,
+    4: 1,
+    5: 1,
+    6: 1,
+    7: 1,
+    8: 1,
+    9: 1,
+    10: 1
+  },
+  hpGainByClass: {
+    warrior: 5,
+    scout: 3,
+    arcanist: 2,
+    warden: 4,
+    devout: 3
+  },
+  allowRespec: true,
+  respecCost: {
+    baseGold: 25,
+    perSpentTalentPoint: 10
+  }
+} as const;
+
+export const TALENT_RULES = {
+  maxTalentTier: 3,
+  defaultTalentCost: 1,
+  activeCombatActionSlots: 3,
+  tierUnlockLevels: {
+    1: 2,
+    2: 4,
+    3: 7
+  },
+  maxLearnedCapstones: 1,
+  allowChangingActiveCombatActionsInDungeon: false
+} as const;
+
+export const COMBAT_ACTION_RULES = {
+  defaultCooldownTurns: 0,
+  maxCooldownTurns: 4,
+  baseActiveActionSlots: 3,
+  classActionThreatCosts: {
+    warrior: 0,
+    scout: 0,
+    arcanist: 2,
+    warden: 0,
+    devout: 0
+  },
+  oncePerCombatResetOnNewCombat: true
+} as const;
+
+export const AFFIX_RULES = {
+  maxAffixesByRarity: {
+    common: 0,
+    uncommon: 1,
+    rare: 2,
+    epic: 3,
+    legendary: 4
+  },
+  affixSlotsByRarity: {
+    common: { prefixes: 0, suffixes: 0 },
+    uncommon: { prefixes: 1, suffixes: 0 },
+    rare: { prefixes: 1, suffixes: 1 },
+    epic: { prefixes: 2, suffixes: 1 },
+    legendary: { prefixes: 2, suffixes: 2 }
+  },
+  valueMultiplierPerAffixRarity: {
+    common: 1,
+    uncommon: 1.15,
+    rare: 1.35,
+    epic: 1.75,
+    legendary: 2.4
+  },
+  preventDuplicateExclusiveGroups: true,
+  classBiasedAffixChance: 0.2,
+  biomeAffixChance: 0.18
+} as const;
+
+export const ITEM_STATE_RULES = {
+  generationChanceByRarity: {
+    common: 0.02,
+    uncommon: 0.06,
+    rare: 0.12,
+    epic: 0.2,
+    legendary: 0.35
+  },
+  stateWeightsByRarity: {
+    common: { fragile: 60, damaged: 40 },
+    uncommon: { fragile: 30, damaged: 30, contraband: 20, bound: 10, cursed: 10 },
+    rare: { fragile: 15, contraband: 25, bound: 20, cursed: 20, protected: 10, damaged: 10 },
+    epic: { contraband: 25, bound: 20, cursed: 20, protected: 20, fragile: 10, damaged: 5 },
+    legendary: { protected: 25, bound: 25, cursed: 20, contraband: 20, fragile: 10 }
+  },
+  contraband: {
+    valueMultiplier: 1.5,
+    threatGainOnRoomEntry: 2,
+    extractionComplicationBonus: 0.08
+  },
+  fragile: {
+    breakChanceOnDeath: 0.65,
+    breakChanceOnExtractionComplication: 0.2
+  },
+  cursed: {
+    cannotDropDuringRun: true,
+    threatGainOnSearch: 2,
+    valueMultiplier: 1.25
+  },
+  protected: { survivesDeath: true },
+  bound: { cannotSell: true, survivesExtraction: true },
+  damaged: {
+    valueMultiplier: 0.6,
+    statPenaltyMultiplier: 0.75
+  },
+  reinforced: {
+    durationRuns: 1,
+    valueMultiplier: 1.1
+  }
+} as const;
+
+export const BUILD_SUMMARY_RULES = {
+  highRiskThreshold: 4,
+  lowDefenseArmorThreshold: 3,
+  lowDamagePowerThreshold: 4,
+  lowExtractionSafetyThreshold: 3,
+  equippedItemScoreWeights: {
+    rarity: 10,
+    affix: 5,
+    state: 3
+  },
+  buildTagThresholds: {
+    melee: 6,
+    ranged: 6,
+    magic: 6,
+    defensive: 6,
+    evasive: 6,
+    scouting: 6,
+    trapHandling: 6,
+    extraction: 6,
+    carryCapacity: 6,
+    healing: 6,
+    highRisk: 4,
+    lootFocused: 5
+  }
+} as const;
 
 export const INVENTORY_RULES = {
   defaultCarryCapacity: 20,

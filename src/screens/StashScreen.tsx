@@ -1,21 +1,17 @@
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
-import { ItemCard } from "../components/ItemCard";
+import { ItemComparePanel } from "../components/ItemComparePanel";
+import { ItemTooltip } from "../components/ItemTooltip";
+import { LoadoutBuilder } from "../components/LoadoutBuilder";
 import { RunPreparationPanel } from "../components/RunPreparationPanel";
 import { calculateInventoryWeight } from "../game/inventory";
 import { getConsumableHealFormula } from "../game/itemEffects";
 import { getAvailableRunPreparationOptions } from "../game/runPreparation";
 import type { EquipmentSlots, ItemInstance } from "../game/types";
 import { useGameStore } from "../store/gameStore";
-
-const EQUIPMENT_LABELS: Record<keyof EquipmentSlots, string> = {
-  weapon: "Weapon",
-  offhand: "Offhand",
-  armor: "Armor",
-  trinket1: "Trinket I",
-  trinket2: "Trinket II"
-};
+import type { EquipmentChangePreview, EquipmentSlotName } from "../components/v04UiTypes";
 
 export function StashScreen() {
   const stash = useGameStore(s => s.state.stash);
@@ -27,16 +23,18 @@ export function StashScreen() {
   const dungeonMessage = useGameStore(s => s.lastRoomMessage);
   const useStashItem = useGameStore(s => s.useStashConsumable);
   const equipStashItem = useGameStore(s => s.equipItemFromStash);
-  const unequipToStash = useGameStore(s => s.unequipItemToStash);
   const packPreparedItem = useGameStore(s => s.packItemForRun);
   const unpackPreparedItem = useGameStore(s => s.unpackPreparedItem);
   const useRaidItem = useGameStore(s => s.useRaidConsumable);
   const equipRaidItem = useGameStore(s => s.equipItemFromRaid);
-  const unequipToRaid = useGameStore(s => s.unequipItemToRaid);
   const dropRaidItem = useGameStore(s => s.dropRaidItem);
   const useCombatItem = useGameStore(s => s.useCombatInventoryItem);
   const purchasePreparation = useGameStore(s => s.purchaseRunPreparation);
+  const genericEquip = useGameStore(s => s.equipItem);
+  const genericUnequip = useGameStore(s => s.unequipItem);
+  const previewEquipmentChange = useGameStore(s => s.previewEquipmentChange);
   const state = useGameStore(s => s.state);
+  const [preview, setPreview] = useState<EquipmentChangePreview | undefined>();
 
   const mode = activeCombat ? "combat" : activeRun ? "dungeon" : "village";
   const message = mode === "village" ? villageMessage : dungeonMessage;
@@ -77,22 +75,23 @@ export function StashScreen() {
         {player && (
           <Card title="Loadout" subtitle={mode === "combat" ? "View only" : `HP ${player.hp} / ${player.maxHp}`}>
             <h4 className="muted">Equipped</h4>
-            <div className="equipment-grid">
-              {(Object.keys(EQUIPMENT_LABELS) as Array<keyof EquipmentSlots>).map(slot => {
-                const item = player.equipped[slot];
-                return (
-                  <div className="equipment-slot" key={slot}>
-                    <div className="equipment-slot-header">
-                      <strong>{EQUIPMENT_LABELS[slot]}</strong>
-                      {item && mode === "village" && <Button variant="ghost" onClick={() => unequipToStash(slot)}>Unequip</Button>}
-                      {item && mode === "dungeon" && <Button variant="ghost" onClick={() => unequipToRaid(slot)}>Pack</Button>}
-                      {item && mode === "combat" && <span className="muted small">Locked</span>}
-                    </div>
-                    {item ? <ItemCard item={item} compact /> : <em>Empty</em>}
-                  </div>
-                );
-              })}
-            </div>
+            <LoadoutBuilder
+              character={player}
+              inventoryItems={mode === "village" ? stash.items : activeRun?.raidInventory.items}
+              activeRun={mode === "dungeon"}
+              readOnly={mode === "combat"}
+              preview={preview}
+              onPreview={(item, slot) => setPreview(previewEquipmentChange(item.instanceId, slot))}
+              onEquip={(item, slot) => {
+                genericEquip(item.instanceId, slot);
+                setPreview(undefined);
+              }}
+              onUnequip={slot => {
+                genericUnequip(slot);
+                setPreview(undefined);
+              }}
+            />
+            {mode !== "combat" && <ItemComparePanel preview={preview} />}
           </Card>
         )}
 
@@ -125,7 +124,10 @@ export function StashScreen() {
                             <Button variant="ghost" onClick={() => useStashItem(item.instanceId)}>Use</Button>
                           )}
                           {canEquip(item) && (
-                            <Button variant="ghost" onClick={() => equipStashItem(item.instanceId)}>Equip</Button>
+                            <>
+                              <Button variant="ghost" onClick={() => setPreview(previewEquipmentChange(item.instanceId, preferredSlotFor(item, player?.equipped)))}>Preview</Button>
+                              <Button variant="ghost" onClick={() => equipStashItem(item.instanceId)}>Equip</Button>
+                            </>
                           )}
                           <Button variant="ghost" onClick={() => packPreparedItem(item.instanceId)}>Pack</Button>
                         </>
@@ -167,7 +169,10 @@ export function StashScreen() {
                               <Button variant="ghost" onClick={() => useRaidItem(item.instanceId)}>Use</Button>
                             )}
                             {canEquip(item) && (
-                              <Button variant="ghost" onClick={() => equipRaidItem(item.instanceId)}>Equip</Button>
+                              <>
+                                <Button variant="ghost" onClick={() => setPreview(previewEquipmentChange(item.instanceId, preferredSlotFor(item, player?.equipped)))}>Preview</Button>
+                                <Button variant="ghost" onClick={() => equipRaidItem(item.instanceId)}>Equip</Button>
+                              </>
                             )}
                             <Button variant="ghost" onClick={() => dropRaidItem(item.instanceId)}>Drop</Button>
                           </>
@@ -187,7 +192,7 @@ export function StashScreen() {
 function ItemActionCard({ item, actions }: { item: ItemInstance; actions: ReactNode }) {
   return (
     <div className="item-action-card">
-      <ItemCard item={item} compact />
+      <ItemTooltip item={item} />
       <div className="item-actions">{actions}</div>
     </div>
   );
@@ -205,4 +210,15 @@ function CombatItemActions({ item, onUse }: { item: ItemInstance; onUse: () => v
     return <Button variant="ghost" onClick={onUse}>Use</Button>;
   }
   return <span className="muted small">Not usable in combat</span>;
+}
+
+function preferredSlotFor(item: ItemInstance, equipped?: EquipmentSlots): EquipmentSlotName {
+  if (item.category === "weapon") return "weapon";
+  if (item.category === "shield") return "offhand";
+  if (item.category === "armor") return "armor";
+  if (item.category === "trinket") {
+    if (!equipped?.trinket1) return "trinket1";
+    return "trinket2";
+  }
+  return "weapon";
 }

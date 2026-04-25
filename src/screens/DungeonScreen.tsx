@@ -4,6 +4,7 @@ import { Card } from "../components/Card";
 import { DungeonLog } from "../components/DungeonLog";
 import { EventChoicePanel } from "../components/EventChoicePanel";
 import { ExtractionPanel } from "../components/ExtractionPanel";
+import { GearRiskBadge } from "../components/GearRiskBadge";
 import { Tooltip } from "../components/Tooltip";
 import { useGameStore } from "../store/gameStore";
 import { getRoomById } from "../game/dungeonGenerator";
@@ -12,6 +13,7 @@ import { calculateInventoryWeight } from "../game/inventory";
 import { RUN_RULES } from "../game/constants";
 import { getThreatLabel } from "../game/threat";
 import type { ActiveTrap, DungeonRoom, DungeonRun, RoomSignTag, ScoutedRoomInfo } from "../game/types";
+import type { ItemWithV4Fields } from "../components/v04UiTypes";
 import { SEARCH_RULES } from "../game/constants";
 import { getTrapTemplate } from "../data/trapTables";
 import { getEventTemplate } from "../data/eventTemplates";
@@ -90,6 +92,10 @@ export function DungeonScreen() {
   const carryCapacity = player.derivedStats.carryCapacity;
   const packValue = calculateInventoryValue(run.raidInventory);
   const unchartedRooms = run.roomGraph.filter(room => !run.visitedRoomIds.includes(room.id)).length;
+  const riskyItems = [
+    ...Object.values(player.equipped).filter(Boolean),
+    ...run.raidInventory.items
+  ].filter(item => (((item as ItemWithV4Fields).states ?? []).filter(state => state.id !== "normal").length > 0));
 
   const threatMood = getThreatLabel(run.threat.level);
   const lowHp = player.hp / player.maxHp <= 0.25;
@@ -205,6 +211,19 @@ export function DungeonScreen() {
         <Card title="Dungeon Log" subtitle={`${run.dungeonLog.length} event${run.dungeonLog.length === 1 ? "" : "s"}`}>
           <DungeonLog entries={run.dungeonLog} />
         </Card>
+
+        {riskyItems.length > 0 && (
+          <Card title="Gear Risk" subtitle="Visible item states affecting this delve">
+            <ul className="risk-item-list">
+              {riskyItems.map(item => (
+                <li key={item!.instanceId}>
+                  <strong>{item!.name}</strong>
+                  <GearRiskBadge states={(item as ItemWithV4Fields).states} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
       </div>
     </div>
   );

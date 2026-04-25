@@ -1,24 +1,46 @@
+import { useState } from "react";
 import { Card } from "../components/Card";
-import { ItemCard } from "../components/ItemCard";
+import { BuildSummaryPanel } from "../components/BuildSummaryPanel";
+import { Button } from "../components/Button";
+import { LoadoutBuilder } from "../components/LoadoutBuilder";
 import { StatBlock } from "../components/StatBlock";
-import type { EquipmentSlots } from "../game/types";
+import { TalentPointSummary } from "../components/TalentPointSummary";
 import { useGameStore } from "../store/gameStore";
-
-const EQUIPMENT_LABELS: Record<keyof EquipmentSlots, string> = {
-  weapon: "Weapon",
-  offhand: "Offhand",
-  armor: "Armor",
-  trinket1: "Trinket I",
-  trinket2: "Trinket II"
-};
+import { TalentScreen } from "./TalentScreen";
+import { getAncestry } from "../data/ancestries";
+import { getClass } from "../data/classes";
+import { generateBuildSummary } from "../game/buildMath";
 
 export function CharacterScreen() {
   const player = useGameStore(s => s.state.player);
   const run = useGameStore(s => s.state.activeRun);
+  const village = useGameStore(s => s.state.village);
+  const learnTalent = useGameStore(s => s.learnTalent);
+  const refundTalents = useGameStore(s => s.refundTalents);
+  const [showTalents, setShowTalents] = useState(false);
 
   if (!player) return <div className="screen">No character.</div>;
 
   const hpPct = Math.round((player.hp / player.maxHp) * 100);
+  const summary = generateBuildSummary({
+    character: player,
+    ancestry: getAncestry(player.ancestryId),
+    classDefinition: getClass(player.classId)
+  });
+
+  if (showTalents) {
+    return (
+      <div className="screen character-screen">
+        <TalentScreen
+          character={player}
+          village={village}
+          onLearnTalent={learnTalent}
+          onRefundTalents={refundTalents}
+          onClose={() => setShowTalents(false)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="screen character-screen">
@@ -32,6 +54,10 @@ export function CharacterScreen() {
               <span className="hp-bar-label">HP {player.hp} / {player.maxHp}</span>
             </div>
             <span className="muted small">{player.xp} XP</span>
+          </div>
+          <div className="character-hero-actions">
+            <TalentPointSummary character={player} />
+            <Button variant="secondary" onClick={() => setShowTalents(true)}>Talents</Button>
           </div>
         </div>
         {run && (
@@ -51,20 +77,12 @@ export function CharacterScreen() {
           <StatBlock character={player} />
         </Card>
 
+        <Card title="Build Summary" subtitle="Stats, gear risk, and class identity">
+          <BuildSummaryPanel summary={summary} />
+        </Card>
+
         <Card title="Loadout" subtitle={run ? "At risk until extraction" : "Safe in the village"}>
-          <div className="equipment-grid">
-            {(Object.keys(EQUIPMENT_LABELS) as Array<keyof EquipmentSlots>).map(slot => {
-              const item = player.equipped[slot];
-              return (
-                <div className="equipment-slot" key={slot}>
-                  <div className="equipment-slot-header">
-                    <strong>{EQUIPMENT_LABELS[slot]}</strong>
-                  </div>
-                  {item ? <ItemCard item={item} compact /> : <em className="muted">Empty</em>}
-                </div>
-              );
-            })}
-          </div>
+          <LoadoutBuilder character={player} readOnly activeRun={Boolean(run)} />
         </Card>
       </div>
     </div>

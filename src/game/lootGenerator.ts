@@ -1,8 +1,9 @@
-import type { DungeonBiome, ItemInstance, MaterialId, MaterialRarity, MaterialVault, Rarity, RoomType } from "./types";
+import type { DungeonBiome, ItemGenerationContext, ItemInstance, MaterialId, MaterialRarity, MaterialVault, Rarity, RoomType } from "./types";
 import { LOOT_RULES, MATERIAL_RULES } from "./constants";
 import { getItemTemplate } from "../data/items";
 import { getLootTableById, type LootTable, type LootEntry } from "../data/lootTables";
 import { instanceFromTemplateId } from "./inventory";
+import { applyGeneratedItemProperties } from "./itemGeneration";
 import type { Rng } from "./rng";
 
 const RARITY_ORDER: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
@@ -29,7 +30,8 @@ function entryAllowedByRarity(entry: LootEntry, rolled: Rarity): boolean {
 export function generateLootForTable(
   table: LootTable,
   rng: Rng,
-  itemCount = 1
+  itemCount = 1,
+  context?: Partial<ItemGenerationContext>
 ): ItemInstance[] {
   const items: ItemInstance[] = [];
   for (let i = 0; i < itemCount; i++) {
@@ -40,7 +42,27 @@ export function generateLootForTable(
     const qty = rng.nextInt(entry.minQuantity, entry.maxQuantity);
     const template = getItemTemplate(entry.itemTemplateId);
     const instance = instanceFromTemplateId(template.id, rng, qty);
-    items.push(instance);
+    const shouldApplyGeneratedProperties = ["weapon", "armor", "shield", "trinket"].includes(instance.category) && !instance.stackable;
+    if (!shouldApplyGeneratedProperties) {
+      items.push(instance);
+      continue;
+    }
+
+    const generationContext: ItemGenerationContext = {
+      seed: context?.seed ?? rng.seed,
+      biome: context?.biome ?? (table.biome === "any" ? "crypt" : table.biome),
+      tier: context?.tier ?? table.tier,
+      roomType: context?.roomType,
+      source: context?.source ?? "treasure",
+      threatLevel: context?.threatLevel,
+      playerClassId: context?.playerClassId
+    };
+    const result = applyGeneratedItemProperties({
+      item: { ...instance, rarity: rolledRarity },
+      context: generationContext,
+      rng: rng.forkChild(`generated:${table.id}:${i}:${instance.instanceId}`)
+    });
+    items.push(result.item);
   }
   return items;
 }

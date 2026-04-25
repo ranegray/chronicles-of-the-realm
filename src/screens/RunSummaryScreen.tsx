@@ -1,6 +1,6 @@
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
-import { ItemCard } from "../components/ItemCard";
+import { ItemTooltip } from "../components/ItemTooltip";
 import type { RunSummary } from "../game/types";
 import { useGameStore } from "../store/gameStore";
 
@@ -20,6 +20,8 @@ export function RunSummaryScreen() {
   const success = summary.reason === "extracted" || summary.reason === "debugExtracted";
   const title = success ? "Run Extracted" : summary.reason === "dead" ? "Run Lost" : "Run Abandoned";
   const state = success ? "success" : summary.reason === "dead" ? "lost" : "abandoned";
+  const protectedItems = getDynamicItemList(summary, "protectedItems", "protectedReturned", "returnedToStash");
+  const brokenItems = getDynamicItemList(summary, "brokenItems", "gearBroken", "broken");
 
   return (
     <div className="screen summary-screen">
@@ -69,6 +71,23 @@ export function RunSummaryScreen() {
           empty="No equipped gear was lost."
         />
       </Card>
+
+      {(protectedItems.length > 0 || brokenItems.length > 0) && (
+        <Card title="Special Item Outcomes" subtitle="v0.4 gear-state resolution">
+          {protectedItems.length > 0 && (
+            <>
+              <h4 className="good">Protected</h4>
+              <ItemList items={protectedItems} empty="No protected items returned." />
+            </>
+          )}
+          {brokenItems.length > 0 && (
+            <>
+              <h4 className="danger">Broken</h4>
+              <ItemList items={brokenItems} empty="No fragile items broke." />
+            </>
+          )}
+        </Card>
+      )}
 
       <Card title="Quest Progress">
         {summary.questProgress.length === 0 ? (
@@ -121,9 +140,18 @@ function ItemList({ items, empty }: { items: RunSummary["lootExtracted"]; empty:
   if (items.length === 0) return <em>{empty}</em>;
   return (
     <div className="inv-items">
-      {items.map(item => <ItemCard key={item.instanceId} item={item} compact />)}
+      {items.map(item => <ItemTooltip key={item.instanceId} item={item} />)}
     </div>
   );
+}
+
+function getDynamicItemList(summary: RunSummary, ...keys: string[]): RunSummary["lootExtracted"] {
+  const dynamic = summary as unknown as Record<string, unknown>;
+  for (const key of keys) {
+    const value = dynamic[key];
+    if (Array.isArray(value)) return value as RunSummary["lootExtracted"];
+  }
+  return [];
 }
 
 function describeDeathExtraction(summary: RunSummary): string {

@@ -8,6 +8,7 @@ import type {
   ExtractionVariant,
   GameState,
   Inventory,
+  ItemInstance,
   RoomSearchState,
   RunSummary,
   ScoutedRoomInfo,
@@ -21,6 +22,7 @@ import { normalizeMaterialVault } from "./materials";
 import { initializeVillageProgression } from "./villageProgression";
 import { initializeQuestChainsForVillage } from "./questChains";
 import { createRng } from "./rng";
+import { initializeCharacterProgression } from "./characterProgression";
 
 export function defaultGameState(): GameState {
   return {
@@ -84,6 +86,7 @@ export function migrateSaveIfNeeded(state: unknown): GameState | null {
     ...base,
     ...state,
     version: SAVE_VERSION,
+    player: normalizeCharacter(state.player),
     stash,
     preparedInventory: normalizeInventory(state.preparedInventory) ?? createEmptyInventory(),
     village,
@@ -120,9 +123,46 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function normalizeInventory(value: unknown): Inventory | null {
   if (!isRecord(value)) return null;
   return {
-    items: Array.isArray(value.items) ? value.items as Inventory["items"] : [],
+    items: Array.isArray(value.items) ? value.items.map(normalizeItem).filter(Boolean) as Inventory["items"] : [],
     gold: typeof value.gold === "number" && Number.isFinite(value.gold) ? value.gold : 0,
     materials: normalizeMaterialVault(value.materials)
+  };
+}
+
+function normalizeCharacter(value: unknown): GameState["player"] {
+  if (!isRecord(value)) return undefined;
+  const character = value as unknown as GameState["player"];
+  if (!character) return undefined;
+  const equipped = isRecord(value.equipped)
+    ? {
+        weapon: normalizeItem(value.equipped.weapon),
+        offhand: normalizeItem(value.equipped.offhand),
+        armor: normalizeItem(value.equipped.armor),
+        trinket1: normalizeItem(value.equipped.trinket1),
+        trinket2: normalizeItem(value.equipped.trinket2)
+      }
+    : {};
+  return initializeCharacterProgression({
+    character: {
+      ...character,
+      equipped
+    }
+  });
+}
+
+function normalizeItem(value: unknown): ItemInstance | undefined {
+  if (!isRecord(value)) return undefined;
+  if (typeof value.instanceId !== "string" || typeof value.templateId !== "string") return undefined;
+  const item = value as unknown as ItemInstance;
+  const states = Array.isArray(item.states) ? [...item.states] : [];
+  if (item.protected && !states.some(state => state.id === "protected")) {
+    states.push({ id: "protected", source: "debug", appliedAt: 0 });
+  }
+  return {
+    ...item,
+    affixes: Array.isArray(item.affixes) ? item.affixes : [],
+    states,
+    tags: Array.isArray(item.tags) ? item.tags : []
   };
 }
 
@@ -169,7 +209,7 @@ function normalizeRun(value: unknown): DungeonRun | undefined {
     startedAt: typeof value.startedAt === "number" ? value.startedAt : Date.now(),
     visitedRoomIds: Array.isArray(value.visitedRoomIds) ? value.visitedRoomIds as string[] : [value.currentRoomId],
     raidInventory: normalizeInventory(value.raidInventory) ?? createEmptyInventory(),
-    loadoutSnapshot: Array.isArray(value.loadoutSnapshot) ? value.loadoutSnapshot as DungeonRun["loadoutSnapshot"] : [],
+    loadoutSnapshot: Array.isArray(value.loadoutSnapshot) ? value.loadoutSnapshot.map(normalizeItem).filter(Boolean) as DungeonRun["loadoutSnapshot"] : [],
     activeQuestIds: Array.isArray(value.activeQuestIds) ? value.activeQuestIds as string[] : [],
     questProgressAtStart: isRecord(value.questProgressAtStart) ? value.questProgressAtStart as Record<string, number> : {},
     xpGained: typeof value.xpGained === "number" ? value.xpGained : 0,
@@ -280,15 +320,23 @@ function normalizeCombat(value: unknown, run: DungeonRun): CombatState | undefin
     outcome: value.outcome === "victory" || value.outcome === "defeat" || value.outcome === "fled"
       ? value.outcome
       : undefined,
-    fromRoomId: value.fromRoomId
+    fromRoomId: value.fromRoomId,
+    actionRuntimeState: Array.isArray(value.actionRuntimeState) ? value.actionRuntimeState as CombatState["actionRuntimeState"] : []
   };
 }
 
 function normalizeRunSummaries(value: unknown): RunSummary[] {
   if (!Array.isArray(value)) return [];
-  return value.filter(isRecord) as unknown as RunSummary[];
+  return value.map(normalizeRunSummary).filter(Boolean) as RunSummary[];
 }
 
 function normalizeRunSummary(value: unknown): RunSummary | undefined {
-  return isRecord(value) ? value as unknown as RunSummary : undefined;
+  if (!isRecord(value)) return undefined;
+  return {
+    ...value,
+    lootExtracted: Array.isArray(value.lootExtracted) ? value.lootExtracted.map(normalizeItem).filter(Boolean) : [],
+    lootLost: Array.isArray(value.lootLost) ? value.lootLost.map(normalizeItem).filter(Boolean) : [],
+    gearLost: Array.isArray(value.gearLost) ? value.gearLost.map(normalizeItem).filter(Boolean) : [],
+    questRewards: Array.isArray(value.questRewards) ? value.questRewards.map(normalizeItem).filter(Boolean) : []
+  } as RunSummary;
 }

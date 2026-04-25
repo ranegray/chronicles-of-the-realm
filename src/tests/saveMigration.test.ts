@@ -4,17 +4,17 @@ import { generateDungeonRun } from "../game/dungeonGenerator";
 import { SAVE_VERSION } from "../game/constants";
 import type { DungeonRun, GameState } from "../game/types";
 
-describe("save migration (v1 → v3)", () => {
+describe("save migration (v1 → current)", () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it("bumps version to 3 when loading v1 save", () => {
+  it("bumps version to the current save version when loading v1 save", () => {
     const legacy = buildLegacyV1State();
     saveGame(legacy as unknown as GameState);
     const loaded = loadGame();
     expect(loaded?.version).toBe(SAVE_VERSION);
-    expect(SAVE_VERSION).toBe(3);
+    expect(SAVE_VERSION).toBe(4);
   });
 
   it("backfills threat, knownRoomIntel, and dungeonLog on active run", () => {

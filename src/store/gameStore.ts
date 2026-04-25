@@ -8,6 +8,11 @@ import type {
   GameState,
   Inventory,
   ItemInstance,
+  CharacterProgressionState,
+  EquipmentChangePreview,
+  EquipmentSlotName,
+  ItemState,
+  ItemStateId,
   Quest,
   QuestEvent,
   RoomType,
@@ -67,6 +72,15 @@ import { craftRecipe as craftRecipeBase } from "../game/crafting";
 import { performServiceAction as performServiceActionBase } from "../game/services";
 import { purchaseRunPreparation as purchaseRunPreparationBase, applyRunPreparationsToRun } from "../game/runPreparation";
 import { applyQuestReward } from "../game/villageRewards";
+import {
+  awardCharacterXp,
+  initializeCharacterProgression,
+  refundTalents as refundTalentsBase
+} from "../game/characterProgression";
+import { learnTalent as learnTalentBase } from "../game/talents";
+import { previewEquipmentChange as previewEquipmentChangeBase } from "../game/equipment";
+import { addItemState, removeItemState } from "../game/itemStates";
+import { resolveCombatAction as resolveCombatActionBase } from "../game/combatActions";
 
 export interface GameStore {
   screen: ScreenId;
@@ -153,6 +167,18 @@ export interface GameStore {
   purchaseRunPreparation: (npcId: string, optionId: string) => void;
   clearPendingRunPreparation: (preparedModifierId: string) => void;
   startDungeonRunWithPreparations: (params?: { biome?: import("../game/types").DungeonBiome; seed?: string }) => void;
+
+  // v0.4 integration wrappers
+  awardXp: (xp: number) => void;
+  learnTalent: (talentId: string) => void;
+  refundTalents: () => void;
+  setActiveCombatActions: (actionIds: string[]) => void;
+  equipItem: (itemInstanceId: string, slot: EquipmentSlotName) => void;
+  unequipItem: (slot: EquipmentSlotName) => void;
+  previewEquipmentChange: (itemInstanceId: string, slot: EquipmentSlotName) => EquipmentChangePreview | undefined;
+  useCombatAction: (actionId: string, targetEnemyInstanceId?: string) => void;
+  repairDamagedItem: (itemInstanceId: string) => void;
+  applyItemStateFromService: (itemInstanceId: string, stateId: ItemStateId) => void;
 
   // Dev tools
   debugGenerateDungeonSeed: () => void;
@@ -1426,6 +1452,167 @@ export const useGameStore = create<GameStore>((set, get) => ({
     persist(next);
   },
 
+  awardXp: xp => {
+    const s = get().state;
+    if (!s.player || xp <= 0) return;
+    const result = awardCharacterXp({ character: s.player, xp });
+    const player = recalculatePlayer(result.character);
+    const next: GameState = { ...s, player };
+    set({
+      state: next,
+      lastVillageMessage: result.talentPointsGained > 0
+        ? `${player.name} gained ${xp} XP and ${result.talentPointsGained} talent point${result.talentPointsGained === 1 ? "" : "s"}.`
+        : `${player.name} gained ${xp} XP.`
+    });
+    persist(next);
+  },
+
+  learnTalent: talentId => {
+    const s = get().state;
+    if (!s.player) return;
+    const result = learnTalentBase({ character: s.player, talentId, village: s.village });
+    if (!result.success) {
+      set({ lastVillageMessage: result.message });
+      return;
+    }
+    const player = recalculatePlayer(result.character);
+    const next: GameState = { ...s, player };
+    set({ state: next, lastVillageMessage: result.message });
+    persist(next);
+  },
+
+  refundTalents: () => {
+    const s = get().state;
+    if (!s.player) return;
+    const player = recalculatePlayer(refundTalentsBase({ character: s.player }));
+    const next: GameState = { ...s, player };
+    set({ state: next, lastVillageMessage: "Talents refunded." });
+    persist(next);
+  },
+
+  setActiveCombatActions: actionIds => {
+    const s = get().state;
+    if (!s.player) return;
+    const progression = initializeCharacterProgression({ character: s.player }).progression;
+    const allowed = new Set(progression.activeCombatActionIds);
+    for (const talentId of progression.learnedTalentIds) {
+      const actionId = COMBAT_ACTION_BY_TALENT[talentId];
+      if (actionId) allowed.add(actionId);
+    }
+    const nextProgression: CharacterProgressionState = {
+      ...progression,
+      activeCombatActionIds: actionIds.filter(id => allowed.has(id)).slice(0, 3)
+    };
+    const next: GameState = { ...s, player: { ...s.player, progression: nextProgression } as Character };
+    set({ state: next, lastVillageMessage: "Combat actions updated." });
+    persist(next);
+  },
+
+  equipItem: (itemInstanceId, slot) => {
+    const s = get().state;
+    if (s.activeRun?.raidInventory.items.some(item => item.instanceId === itemInstanceId)) {
+      get().equipItemFromRaid(itemInstanceId, slot);
+      return;
+    }
+    if (s.preparedInventory.items.some(item => item.instanceId === itemInstanceId)) {
+      equipPreparedItem(get, set, itemInstanceId, slot);
+      return;
+    }
+    get().equipItemFromStash(itemInstanceId, slot);
+  },
+
+  unequipItem: slot => {
+    if (get().state.activeRun) {
+      get().unequipItemToRaid(slot);
+    } else {
+      get().unequipItemToStash(slot);
+    }
+  },
+
+  previewEquipmentChange: (itemInstanceId, slot) => {
+    const s = get().state;
+    if (!s.player) return undefined;
+    const item = findItemInGameState(s, itemInstanceId);
+    if (!item) return undefined;
+    return previewEquipmentChangeBase({
+      character: s.player,
+      item,
+      slot,
+      ancestry: getAncestry(s.player.ancestryId),
+      classDefinition: getClass(s.player.classId)
+    });
+  },
+
+  useCombatAction: (actionId, targetEnemyInstanceId) => {
+    const s = get().state;
+    const combat = s.activeCombat;
+    const player = s.player;
+    if (!combat || !player || combat.over) return;
+    const target = targetEnemyInstanceId ?? combat.enemies.find(enemy => enemy.hp > 0)?.instanceId;
+    if (actionId === "attack" && target) {
+      get().performCombatAction({ kind: "attack", targetId: target });
+      return;
+    }
+    if (actionId === "power-attack" && target) {
+      get().performCombatAction({ kind: "powerAttack", targetId: target });
+      return;
+    }
+    if (actionId === "defend") {
+      get().performCombatAction({ kind: "defend" });
+      return;
+    }
+    if (actionId === "flee") {
+      get().performCombatAction({ kind: "flee" });
+      return;
+    }
+    const rng = createRng(`classAction:${s.activeRun?.seed ?? "x"}:${combat.encounterId}:${combat.turn}:${actionId}`);
+    const result = resolveCombatActionBase({
+      character: player,
+      combatState: { ...combat, actionThreatDeltas: [] },
+      actionId,
+      targetEnemyInstanceId,
+      rng
+    });
+    let nextRun = s.activeRun;
+    if (nextRun && (result.combatState.actionThreatDeltas?.length ?? 0) > 0) {
+      nextRun = applyCombatThreatDeltas(
+        nextRun,
+        result.combatState.actionThreatDeltas!.map(delta => ({
+          amount: delta.amount,
+          reason: delta.reason,
+          message: delta.message
+        })),
+        combat.fromRoomId
+      );
+    }
+    const nextCombat: CombatState = { ...result.combatState, actionThreatDeltas: [] };
+    const next: GameState = { ...s, player: result.character, activeCombat: nextCombat, activeRun: nextRun };
+    set({ state: next });
+    persist(next);
+    if (nextCombat.over) {
+      handleCombatOutcome(get, set);
+    }
+  },
+
+  repairDamagedItem: itemInstanceId => {
+    const s = get().state;
+    const next = mapItemEverywhere(s, itemInstanceId, item => removeItemState({ item, stateId: "damaged" }));
+    set({ state: next, lastVillageMessage: "Damaged state repaired." });
+    persist(next);
+  },
+
+  applyItemStateFromService: (itemInstanceId, stateId) => {
+    const s = get().state;
+    const state: ItemState = {
+      id: stateId as ItemStateId,
+      source: "serviceAction",
+      appliedAt: Date.now()
+    };
+    const next = mapItemEverywhere(s, itemInstanceId, item => addItemState({ item, state }));
+    set({ state: next, lastVillageMessage: `${formatTalentName(stateId)} applied to item.` });
+    persist(next);
+  },
+
   debugGenerateDungeonSeed: () => {
     const s = get().state;
     if (!s.player) return;
@@ -1521,6 +1708,94 @@ export const useGameStore = create<GameStore>((set, get) => ({
     persist(next);
   }
 }));
+
+const COMBAT_ACTION_BY_TALENT: Record<string, string> = {
+  "warrior-shield-bash": "shield-bash",
+  "warrior-cleaving-strike": "cleaving-strike",
+  "scout-slip-away": "slip-away",
+  "scout-ambusher": "ambush-strike",
+  "arcanist-cinder-bolt": "cinder-bolt",
+  "arcanist-veil-tear": "veil-tear",
+  "warden-hunters-mark": "hunters-mark",
+  "warden-rooting-shot": "rooting-shot",
+  "devout-field-prayer": "field-prayer",
+  "devout-smite-the-hollow": "smite-the-hollow"
+};
+
+function findItemInGameState(state: GameState, itemInstanceId: string): ItemInstance | undefined {
+  const equipped = state.player
+    ? [state.player.equipped.weapon, state.player.equipped.offhand, state.player.equipped.armor, state.player.equipped.trinket1, state.player.equipped.trinket2]
+    : [];
+  return [
+    ...state.stash.items,
+    ...state.preparedInventory.items,
+    ...(state.activeRun?.raidInventory.items ?? []),
+    ...(equipped.filter(Boolean) as ItemInstance[])
+  ].find(item => item.instanceId === itemInstanceId);
+}
+
+function mapItemEverywhere(
+  state: GameState,
+  itemInstanceId: string,
+  mapper: (item: ItemInstance) => ItemInstance
+): GameState {
+  const mapItems = (items: ItemInstance[]) => items.map(item => item.instanceId === itemInstanceId ? mapper(item) : item);
+  const equipped = state.player ? { ...state.player.equipped } : undefined;
+  if (equipped) {
+    for (const slot of ["weapon", "offhand", "armor", "trinket1", "trinket2"] as const) {
+      const item = equipped[slot];
+      if (item?.instanceId === itemInstanceId) equipped[slot] = mapper(item);
+    }
+  }
+  const player = state.player && equipped
+    ? recalculatePlayer({ ...state.player, equipped })
+    : state.player;
+  return {
+    ...state,
+    player,
+    stash: { ...state.stash, items: mapItems(state.stash.items) },
+    preparedInventory: { ...state.preparedInventory, items: mapItems(state.preparedInventory.items) },
+    activeRun: state.activeRun
+      ? {
+        ...state.activeRun,
+        raidInventory: {
+          ...state.activeRun.raidInventory,
+          items: mapItems(state.activeRun.raidInventory.items)
+        }
+      }
+      : state.activeRun
+  };
+}
+
+function equipPreparedItem(
+  get: () => GameStore,
+  set: (partial: Partial<GameStore>) => void,
+  itemInstanceId: string,
+  slot: EquipmentSlotName
+) {
+  const s = get().state;
+  if (!s.player) return;
+  const item = s.preparedInventory.items.find(candidate => candidate.instanceId === itemInstanceId);
+  if (!item) return;
+  const oldItem = s.player.equipped[slot];
+  let preparedInventory = removeItem(s.preparedInventory, itemInstanceId, item.quantity);
+  if (oldItem) preparedInventory = addItem(preparedInventory, oldItem);
+  const player = recalculatePlayer({
+    ...s.player,
+    equipped: { ...s.player.equipped, [slot]: item }
+  });
+  const next: GameState = { ...s, player, preparedInventory };
+  set({ state: next, lastVillageMessage: `${item.name} equipped.` });
+  persist(next);
+}
+
+function formatTalentName(id: string): string {
+  return id
+    .split("-")
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 function applyRunThreat(
   run: DungeonRun,

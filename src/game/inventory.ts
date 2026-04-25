@@ -25,8 +25,9 @@ export function instanceFromTemplate(
     stackable: template.stackable,
     quantity,
     stats: template.stats ? { ...template.stats } : undefined,
-    tags: template.tags ? [...template.tags] : undefined,
-    affixes: undefined
+    tags: template.tags ? [...template.tags] : [],
+    affixes: [],
+    states: []
   };
 }
 

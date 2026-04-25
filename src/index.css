@@ -225,6 +225,8 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
 .btn-danger:hover:not(:disabled) { background: rgba(199, 80, 80, 0.1); }
 .btn-ghost { background: transparent; border-color: transparent; }
 .btn-ghost:hover:not(:disabled) { border-color: var(--line); }
+.good { color: var(--good); }
+.danger { color: var(--danger); }
 
 /* Cards */
 .card {
@@ -238,6 +240,269 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
 .card-danger { border-color: var(--danger); }
 .card-selectable { cursor: pointer; }
 .card-selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(200, 155, 60, 0.25) inset; }
+
+/* v0.4 build, talent, and gear surfaces */
+.character-hero-actions,
+.talent-screen-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.talent-point-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(64px, 1fr));
+  gap: 6px;
+  min-width: 220px;
+}
+.talent-point-cell,
+.build-score,
+.summary-stat {
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.02);
+  border-radius: 6px;
+  padding: 7px 9px;
+}
+.talent-point-cell span,
+.build-score span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.talent-point-cell strong,
+.build-score strong {
+  display: block;
+  font-size: 1.15rem;
+}
+.talent-screen {
+  min-height: 0;
+  overflow: auto;
+}
+.talent-screen-header,
+.talent-tree-head,
+.item-tooltip-header,
+.item-compare-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.talent-tier-stack {
+  display: grid;
+  gap: 14px;
+}
+.talent-tier h3 {
+  margin-top: 0;
+}
+.talent-tier-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.talent-node-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--bg-2);
+}
+.talent-node-available {
+  border-color: rgba(216, 178, 92, 0.65);
+}
+.talent-node-learned {
+  border-color: rgba(108, 174, 108, 0.65);
+  background: rgba(108, 174, 108, 0.08);
+}
+.talent-node-header,
+.talent-node-footer,
+.equipment-slot-header,
+.loadout-pool-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.talent-node-kicker,
+.talent-status,
+.talent-node-cost {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.talent-node-effects,
+.talent-node-reqs,
+.build-warning-list,
+.item-tooltip-list,
+.item-state-warning-list,
+.risk-item-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.talent-node-reqs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 0;
+}
+.talent-node-reqs span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.build-summary-panel {
+  display: grid;
+  gap: 12px;
+}
+.build-tag-row,
+.affix-row,
+.item-tooltip-tags,
+.gear-risk-badges,
+.active-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.build-tag,
+.affix-badge,
+.gear-risk-badge,
+.item-tooltip-tags span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-2);
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.affix-badge-prefix { border-color: rgba(93, 157, 220, 0.55); }
+.affix-badge-suffix { border-color: rgba(216, 158, 58, 0.55); }
+.affix-badge-implicit { border-color: rgba(108, 174, 108, 0.55); }
+.gear-risk-protected { border-color: var(--good); color: var(--good); }
+.gear-risk-fragile,
+.gear-risk-damaged,
+.gear-risk-reinforced { border-color: var(--warn); color: var(--warn); }
+.gear-risk-cursed,
+.gear-risk-contraband { border-color: var(--danger); color: var(--danger); }
+.gear-risk-bound { border-color: var(--rarity-epic); color: var(--rarity-epic); }
+.build-score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+.build-score-track {
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.build-score-track span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.build-warning,
+.item-state-warning {
+  margin-bottom: 4px;
+}
+.build-warning-info,
+.item-state-warning-info { color: var(--text-dim); }
+.build-warning-warning,
+.item-state-warning-warning { color: var(--warn); }
+.build-warning-danger,
+.item-state-warning-danger { color: var(--danger); }
+.item-tooltip {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--bg-2);
+  min-width: 0;
+}
+.item-tooltip-header strong,
+.item-tooltip-header span {
+  display: block;
+}
+.item-tooltip-header span,
+.item-tooltip-desc,
+.item-tooltip-section p {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+.item-tooltip-value {
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.item-tooltip-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.item-tooltip-section h4,
+.loadout-pool h4 {
+  margin: 0 0 6px;
+  color: var(--text-dim);
+  font-size: 0.86rem;
+}
+.item-tooltip-stats,
+.item-compare-diff {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+.item-tooltip-stats div,
+.item-compare-diff div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.item-tooltip-stats dt,
+.item-compare-diff dt {
+  color: var(--text-muted);
+}
+.item-tooltip-stats dd,
+.item-compare-diff dd {
+  margin: 0;
+}
+.loadout-builder {
+  display: grid;
+  gap: 12px;
+}
+.equipment-slot-previewing {
+  border-color: var(--accent);
+}
+.loadout-pool-grid,
+.item-compare-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.loadout-pool-item,
+.item-compare-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(255,255,255,0.02);
+}
+.item-compare-panel {
+  margin-top: 12px;
+}
+.item-compare-empty {
+  color: var(--text-muted);
+}
+.active-action-bar {
+  padding-right: 8px;
+  border-right: 1px solid var(--line);
+}
+.risk-item-list li {
+  margin-bottom: 8px;
+}
 .card-header { margin-bottom: 8px; }
 .card-title { font-weight: 600; font-size: 1.1rem; }
 .card-subtitle { color: var(--text-muted); font-size: 0.9rem; }
