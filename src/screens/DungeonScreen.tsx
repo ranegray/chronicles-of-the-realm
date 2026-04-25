@@ -10,11 +10,10 @@ import { useGameStore } from "../store/gameStore";
 import { getRoomById } from "../game/dungeonGenerator";
 import { getBiome } from "../data/biomes";
 import { calculateInventoryWeight } from "../game/inventory";
-import { RUN_RULES } from "../game/constants";
-import { getThreatLabel } from "../game/threat";
+import { SEARCH_RULES } from "../game/constants";
+import { getDelveStrainLabel, getThreatLabel } from "../game/threat";
 import type { ActiveTrap, DungeonRoom, DungeonRun, RoomSignTag, ScoutedRoomInfo } from "../game/types";
 import type { ItemWithV4Fields } from "../components/v04UiTypes";
-import { SEARCH_RULES } from "../game/constants";
 import { getTrapTemplate } from "../data/trapTables";
 import { getEventTemplate } from "../data/eventTemplates";
 import { describeSign } from "../data/roomSigns";
@@ -98,6 +97,7 @@ export function DungeonScreen() {
   ].filter(item => (((item as ItemWithV4Fields).states ?? []).filter(state => state.id !== "normal").length > 0));
 
   const threatMood = getThreatLabel(run.threat.level);
+  const strainMood = getDelveStrainLabel(run.delveStrain.level);
   const lowHp = player.hp / player.maxHp <= 0.25;
 
   return (
@@ -106,7 +106,7 @@ export function DungeonScreen() {
       <header className="dungeon-header">
         <div className="dungeon-header-title">
           <span className="dungeon-header-eyebrow" title={`Seed: ${run.seed}`}>
-            Depth {run.tier} · {biome.name} · <span className={`dungeon-header-mood dungeon-header-mood-${run.threat.level}${moodRising ? " dungeon-header-mood-rising" : ""}`}>{threatMood}</span>
+            Depth {run.tier} · {biome.name} · Alert <span className={`dungeon-header-mood dungeon-header-mood-${run.threat.level}${moodRising ? " dungeon-header-mood-rising" : ""}`}>{threatMood}</span> · Strain {strainMood}
           </span>
           <h2>{current.title}</h2>
           <p className="muted">{biome.description}</p>
@@ -133,6 +133,8 @@ export function DungeonScreen() {
         <span className="dungeon-hud-chip"><em>Gold</em> {run.raidInventory.gold}</span>
         <span className="dungeon-hud-chip"><em>Value</em> {packValue}</span>
         <span className="dungeon-hud-chip"><em>Uncharted</em> {unchartedRooms}</span>
+        <span className="dungeon-hud-chip"><em>Alert</em> {run.threat.points}</span>
+        <span className="dungeon-hud-chip"><em>Strain</em> {run.delveStrain.points}</span>
       </div>
 
       <div className="dungeon-grid dungeon-grid-noexits">
@@ -175,11 +177,8 @@ export function DungeonScreen() {
             {current.extractionPoint && !current.extraction && (
               <Button onClick={extract}>Extract</Button>
             )}
-            {current.type === "boss" && current.completed && run.tier < RUN_RULES.maxDungeonDepth && (
+            {current.type === "boss" && current.completed && (
               <Button variant="secondary" onClick={descend}>Descend</Button>
-            )}
-            {current.type === "boss" && current.completed && run.tier >= RUN_RULES.maxDungeonDepth && (
-              <span className="muted small">No deeper stair opens.</span>
             )}
             {current.type === "questObjective" && (
               <Button onClick={search}>Investigate</Button>

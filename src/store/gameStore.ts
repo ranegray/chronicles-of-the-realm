@@ -42,10 +42,17 @@ import { startCombat as startCombatBase, resolvePlayerAction, type CombatAction 
 import { applyAbandonPenalty, applyDeathPenalty, applyExtractionRewards, applyXpAndLevel, type DeathSummary, type ExtractionRewardSummary } from "../game/progression";
 import { appendRunSummary, buildRunSummary } from "../game/runSummary";
 import { recalculateCharacterStats } from "../game/characterMath";
-import { RUN_RULES, THREAT_RULES } from "../game/constants";
+import { THREAT_RULES } from "../game/constants";
 import type { CombatThreatDelta } from "../game/combat";
 import type { DungeonLogEntryType, ThreatChange, ThreatChangeReason } from "../game/types";
-import { applyThreatChange, getThreatModifiers } from "../game/threat";
+import {
+  applyDelveStrainChange,
+  applyThreatChange,
+  calculateDescendStrainGain,
+  createThreatStateWithCarryover,
+  getDelveStrainLabel,
+  getThreatModifiers
+} from "../game/threat";
 import { addDungeonLogEntry } from "../game/dungeonLog";
 import { scoutAdjacentRooms } from "../game/scouting";
 import { searchCurrentRoom } from "../game/search";
@@ -545,7 +552,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const encId = pickGuardEncounter(nextRun.biome, nextRun.tier, ambushRng);
         if (encId) {
           const enc = getEncounter(encId);
-          const combat = startCombatBase(enc, ambushRng, room.id);
+          const combat = startCombatBase(enc, ambushRng, room.id, nextRun.tier);
           const combatState: GameState = { ...nextState, activeCombat: combat };
           set({ state: combatState, screen: "combat", lastRoomMessage: searchResult.result.message });
           saveGame(combatState);
@@ -586,7 +593,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     if (room.lootTableId) {
       const count = room.type === "lockedChest" ? 2 : 1;
-      items.push(...generateLootForRoomLootTableId(room.lootTableId, rng, count));
+      items.push(...generateLootForRoomLootTableId(room.lootTableId, rng, count, {
+        biome: run.biome,
+        tier: run.tier,
+        roomType: room.type,
+        source: room.type === "lockedChest" ? "treasure" : "treasure",
+        threatLevel: run.threat.level,
+        playerClassId: s.player.classId
+      }));
       gold = rollGold(rng, run.tier);
     } else if (room.type === "shrine") {
       gold = rollGold(rng, run.tier);
@@ -924,10 +938,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const run = s.activeRun;
     const room = getRoomById(run.roomGraph, run.currentRoomId);
     if (!room || room.type !== "boss" || !room.completed) return;
-    if (run.tier >= RUN_RULES.maxDungeonDepth) {
-      set({ lastRoomMessage: "The stair falls away into sealed black stone. This is as deep as the delve goes for now." });
-      return;
-    }
 
     const nextTier = run.tier + 1;
     const nextSeed = `${run.seed}:depth:${nextTier}`;
@@ -947,6 +957,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     nextRun.roomsVisitedBeforeDepth = (run.roomsVisitedBeforeDepth ?? 0) + run.visitedRoomIds.length;
     nextRun.roomsCompletedBeforeDepth = (run.roomsCompletedBeforeDepth ?? 0) + completedThisDepth;
     nextRun.dangerLevel = nextTier;
+    nextRun.threat = createThreatStateWithCarryover({ previousThreat: run.threat });
+    const strainGain = calculateDescendStrainGain({ nextDepth: nextTier, previousThreat: run.threat });
+    const strainResult = applyDelveStrainChange({
+      strain: run.delveStrain,
+      amount: strainGain,
+      depth: nextTier,
+      reason: "descended",
+      message: `The descent to depth ${nextTier} strains the delve.`
+    });
+    nextRun.delveStrain = strainResult.strain;
+    nextRun = addDungeonLogEntry({
+      run: nextRun,
+      type: "warning",
+      message: `${strainResult.change.message} Strain: ${getDelveStrainLabel(strainResult.strain.level)}.`,
+      now: strainResult.change.timestamp
+    });
     nextRun = scoutFromCurrent(nextRun, s.player, s.village);
     roomScratch.clear();
 
@@ -957,7 +983,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       state: next,
       screen: "dungeon",
-      lastRoomMessage: `You descend below the boss chamber. Depth ${nextTier} begins.`
+      lastRoomMessage: `You descend below the boss chamber. Depth ${nextTier} begins. Local threat falls back, but delve strain rises to ${getDelveStrainLabel(nextRun.delveStrain.level)}.`
     });
     persist(next);
   },
@@ -1126,7 +1152,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const rng = createRng(`combatLoot:${run.seed}:${room.id}`);
     const lootMessages: string[] = [];
     if (room.lootTableId) {
-      const items = generateLootForRoomLootTableId(room.lootTableId, rng, 1);
+      const items = generateLootForRoomLootTableId(room.lootTableId, rng, 1, {
+        biome: run.biome,
+        tier: run.tier,
+        roomType: room.type,
+        source: "combat",
+        threatLevel: run.threat.level,
+        playerClassId: s.player.classId
+      });
       const cap = s.player.derivedStats.carryCapacity;
       let raid = next.activeRun!.raidInventory;
       for (const item of items) {
@@ -1190,11 +1223,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       next = { ...next, activeRun: { ...next.activeRun, xpGained: (next.activeRun.xpGained ?? 0) + xpGain } };
     }
     const lootText = lootMessages.length > 0 ? ` Found: ${lootMessages.join(", ")}.` : "";
-    const descendText = room.type === "boss" && run.tier < RUN_RULES.maxDungeonDepth
+    const descendText = room.type === "boss"
       ? " A stair descends beyond the chamber."
-      : room.type === "boss"
-        ? " No stair opens below this final depth."
-        : "";
+      : "";
     if (next.activeRun) {
       const now = Date.now();
       const logMessage = isExtractionGuardWin
@@ -1975,7 +2006,13 @@ function rollCombatDrops(room: DungeonRoom, run: DungeonRun, rng: Rng): ItemInst
   if (rng.nextFloat() > dropChance) return [];
   const itemCount = room.type === "boss" ? 2 : 1;
   const lootTable = getLootTableForBiome(room.biome, run.tier);
-  return generateLootForRoomLootTableId(lootTable.id, rng, itemCount);
+  return generateLootForRoomLootTableId(lootTable.id, rng, itemCount, {
+    biome: run.biome,
+    tier: run.tier,
+    roomType: room.type,
+    source: room.type === "boss" ? "boss" : "combat",
+    threatLevel: run.threat.level
+  });
 }
 
 function finishRunWithDeath(
@@ -2084,7 +2121,7 @@ function handleExtractionResult(
   if (result.startedCombat && result.combatEncounterId && result.fromRoomId) {
     const enc = getEncounter(result.combatEncounterId);
     const rng = createRng(`enc:${roomId}:${Date.now()}`);
-    const combat = startCombatBase(enc, rng, result.fromRoomId);
+    const combat = startCombatBase(enc, rng, result.fromRoomId, result.run.tier);
     nextState = { ...nextState, activeCombat: combat };
     set({ state: nextState, screen: "combat", lastRoomMessage: result.message });
     saveGame(nextState);
@@ -2125,7 +2162,7 @@ function maybeStartCombatForRoom(
     }
   }
   const enc = getEncounter(encounterId);
-  const combat = startCombatBase(enc, rng, room.id);
+  const combat = startCombatBase(enc, rng, room.id, run?.tier ?? 1);
   const next: GameState = { ...state, activeCombat: combat };
   set({ state: next, screen: "combat" });
   saveGame(next);

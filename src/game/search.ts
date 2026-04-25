@@ -238,7 +238,14 @@ export function rollHiddenLoot(params: {
   if (rng.nextFloat() > chance) return [];
 
   const lootTable = getLootTableForBiome(room.biome, run.tier);
-  return generateLootForRoomLootTableId(lootTable.id, rng, 1);
+  return generateLootForRoomLootTableId(lootTable.id, rng, 1, {
+    biome: run.biome,
+    tier: run.tier,
+    roomType: room.type,
+    source: room.type === "boss" ? "boss" : "treasure",
+    threatLevel: run.threat.level,
+    playerClassId: character.classId
+  });
 }
 
 // ---------------------------------------------------------------------------

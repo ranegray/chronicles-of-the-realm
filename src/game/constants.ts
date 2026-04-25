@@ -28,10 +28,49 @@ export const RUN_RULES = {
   minExtractionRooms: 1,
   baseExtractionRoomChance: 0.12,
   bossRoomChanceTierOne: 0.15,
-  maxDungeonDepth: 3,
   deathLosesRaidInventory: true,
   deathLosesLoadout: true
 };
+
+export const DEPTH_RULES = {
+  roomCountGrowthEveryDepth: 3,
+  maxRoomCountBonus: 10,
+  dangerBonusEveryDepth: 2,
+  maxDangerBonus: 8,
+  bossEveryDepth: true,
+  floorThreatCarryoverRatio: 0.25,
+  baseStrainOnDescend: 8,
+  strainPerDepth: 3,
+  strainThresholds: [
+    { level: 0, minPoints: 0, label: "Fresh" },
+    { level: 1, minPoints: 10, label: "Pressed" },
+    { level: 2, minPoints: 24, label: "Burdened" },
+    { level: 3, minPoints: 42, label: "Fraying" },
+    { level: 4, minPoints: 64, label: "Desperate" },
+    { level: 5, minPoints: 90, label: "Overmatched" }
+  ],
+  enemyScaling: {
+    hpPerDepth: 2,
+    damageEveryDepth: 2,
+    accuracyEveryDepth: 2,
+    armorEveryDepth: 3,
+    evasionEveryDepth: 4
+  },
+  extraction: {
+    unstableWeightPerDepth: 2,
+    guardedWeightPerDepth: 2,
+    delayedWeightPerDepth: 1,
+    stableWeightLossPerDepth: 3,
+    maxDepthWeightBonus: 24,
+    strainComplicationChancePerLevel: 0.03
+  },
+  lootRarityDepthBonus: {
+    uncommonEveryDepth: 1,
+    rareEveryDepth: 2,
+    epicStartsAtDepth: 4,
+    legendaryStartsAtDepth: 7
+  }
+} as const;
 
 export const COMBAT_RULES = {
   d20Sides: 20,

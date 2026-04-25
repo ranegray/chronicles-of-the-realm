@@ -41,9 +41,10 @@ const FLEE_CHANCE_MAX = 0.85;
 export function startCombat(
   encounter: EncounterDefinition,
   rng: Rng,
-  fromRoomId: string
+  fromRoomId: string,
+  depthTier = 1
 ): CombatState {
-  const enemies = buildEncounterEnemies(encounter, rng);
+  const enemies = buildEncounterEnemies(encounter, rng, depthTier);
   return {
     encounterId: encounter.id,
     enemies,

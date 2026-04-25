@@ -679,6 +679,7 @@ export interface DungeonRun {
   roomsCompletedBeforeDepth: number;
   dangerLevel: number;
   threat: ThreatState;
+  delveStrain: DelveStrainState;
   knownRoomIntel: Record<string, ScoutedRoomInfo>;
   dungeonLog: DungeonLogEntry[];
   currentExtractionInteraction?: {
@@ -1116,6 +1117,7 @@ export type QuestEvent =
 // ---------------------------------------------------------------------------
 
 export type ThreatLevel = 0 | 1 | 2 | 3 | 4 | 5;
+export type DelveStrainLevel = 0 | 1 | 2 | 3 | 4 | 5;
 
 export type ThreatChangeReason =
   | "enteredRoom"
@@ -1148,6 +1150,27 @@ export interface ThreatState {
   maxLevel: ThreatLevel;
   lastChangedAt: number;
   changes: ThreatChange[];
+}
+
+export interface DelveStrainChange {
+  id: string;
+  timestamp: number;
+  reason: "descended" | "deepPressure" | "extractionComplication" | "debug";
+  amount: number;
+  depth: number;
+  previousPoints: number;
+  newPoints: number;
+  previousLevel: DelveStrainLevel;
+  newLevel: DelveStrainLevel;
+  message: string;
+}
+
+export interface DelveStrainState {
+  points: number;
+  level: DelveStrainLevel;
+  maxLevel: DelveStrainLevel;
+  lastChangedAt: number;
+  changes: DelveStrainChange[];
 }
 
 export interface ThreatLevelModifier {

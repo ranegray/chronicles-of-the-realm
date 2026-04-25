@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { generateDungeonRun, generateRoomGraph } from "../game/dungeonGenerator";
-import { RUN_RULES } from "../game/constants";
+import { DEPTH_RULES, RUN_RULES } from "../game/constants";
 
 describe("dungeonGenerator", () => {
   it("generates the same room graph for the same seed", () => {
@@ -29,8 +29,8 @@ describe("dungeonGenerator", () => {
     }
   });
 
-  it("guarantees a boss room through the configured delve depth", () => {
-    for (let tier = 1; tier <= RUN_RULES.maxDungeonDepth; tier++) {
+  it("guarantees a boss room at sampled uncapped delve depths", () => {
+    for (const tier of [1, 2, 3, 5, 8, 12]) {
       const rooms = generateRoomGraph(`boss-depth-${tier}`, "crypt", tier);
       expect(rooms.some(r => r.type === "boss")).toBe(true);
     }
@@ -48,6 +48,16 @@ describe("dungeonGenerator", () => {
       expect(rooms.length).toBeGreaterThanOrEqual(RUN_RULES.tierOneMinRooms);
       expect(rooms.length).toBeLessThanOrEqual(RUN_RULES.tierOneMaxRooms);
     }
+  });
+
+  it("adds more room budget as depth increases", () => {
+    const deep = generateRoomGraph("depth-scale", "crypt", 10);
+    const expectedBonus = Math.min(
+      DEPTH_RULES.maxRoomCountBonus,
+      Math.floor((10 - 1) / DEPTH_RULES.roomCountGrowthEveryDepth)
+    );
+    expect(deep.length).toBeGreaterThanOrEqual(RUN_RULES.tierOneMinRooms + expectedBonus);
+    expect(deep.length).toBeLessThanOrEqual(RUN_RULES.tierOneMaxRooms + DEPTH_RULES.maxRoomCountBonus);
   });
 
   it("starts at the entrance and the entrance is connected", () => {
@@ -88,5 +98,6 @@ describe("dungeonGenerator", () => {
     const run = generateDungeonRun({ seed: "ids" });
     expect(run.runId).toMatch(/^run_/);
     expect(run.seed).toEqual("ids");
+    expect(run.delveStrain.points).toBe(0);
   });
 });

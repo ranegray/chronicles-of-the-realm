@@ -1,7 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   applyThreatChange,
+  applyDelveStrainChange,
+  calculateDescendStrainGain,
+  createInitialDelveStrainState,
   createInitialThreatState,
+  createThreatStateWithCarryover,
+  getCombinedPressureLevel,
+  getDelveStrainLabel,
+  getDelveStrainLevelFromPoints,
   getThreatLabel,
   getThreatLevelFromPoints,
   getThreatModifiers,
@@ -88,6 +95,53 @@ describe("threat", () => {
   it("labels each level via getThreatLabel", () => {
     expect(getThreatLabel(0)).toBe("Quiet");
     expect(getThreatLabel(5)).toBe("Awakened");
+  });
+
+  it("tracks delve strain separately from local floor threat", () => {
+    const initial = createInitialDelveStrainState(100);
+    const { strain, change } = applyDelveStrainChange({
+      strain: initial,
+      amount: 24,
+      depth: 3,
+      reason: "descended",
+      now: 120
+    });
+    expect(strain.points).toBe(24);
+    expect(strain.level).toBe(getDelveStrainLevelFromPoints(24));
+    expect(getDelveStrainLabel(strain.level)).toBe("Burdened");
+    expect(change.depth).toBe(3);
+  });
+
+  it("resets local threat with carryover while descent adds strain", () => {
+    const { threat: hot } = applyThreatChange({
+      threat: createInitialThreatState(0),
+      amount: 80,
+      reason: "debug",
+      now: 1
+    });
+    const nextFloorThreat = createThreatStateWithCarryover({ previousThreat: hot, now: 2 });
+    expect(nextFloorThreat.points).toBeLessThan(hot.points);
+    expect(nextFloorThreat.points).toBeGreaterThan(0);
+
+    const gain = calculateDescendStrainGain({ nextDepth: 4, previousThreat: hot });
+    expect(gain).toBeGreaterThan(8);
+  });
+
+  it("combines floor alert and delve strain into pressure for global checks", () => {
+    const { threat } = applyThreatChange({
+      threat: createInitialThreatState(0),
+      amount: 40,
+      reason: "debug",
+      now: 1
+    });
+    const { strain } = applyDelveStrainChange({
+      strain: createInitialDelveStrainState(0),
+      amount: 64,
+      depth: 8,
+      reason: "descended",
+      now: 2
+    });
+    expect(getCombinedPressureLevel({ threat, strain })).toBeGreaterThan(threat.level);
   });
 });
 

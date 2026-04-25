@@ -16,7 +16,12 @@ import type {
 } from "./types";
 import { SAVE_VERSION, STORAGE_KEY, THREAT_RULES } from "./constants";
 import { createEmptyInventory } from "./inventory";
-import { createInitialThreatState, getThreatLevelFromPoints } from "./threat";
+import {
+  createInitialDelveStrainState,
+  createInitialThreatState,
+  getDelveStrainLevelFromPoints,
+  getThreatLevelFromPoints
+} from "./threat";
 import { createDefaultSearchState } from "./dungeonGenerator";
 import { normalizeMaterialVault } from "./materials";
 import { initializeVillageProgression } from "./villageProgression";
@@ -217,6 +222,7 @@ function normalizeRun(value: unknown): DungeonRun | undefined {
     roomsCompletedBeforeDepth: typeof value.roomsCompletedBeforeDepth === "number" ? value.roomsCompletedBeforeDepth : 0,
     dangerLevel: typeof value.dangerLevel === "number" ? value.dangerLevel : 1,
     threat: normalizeThreatState(value.threat),
+    delveStrain: normalizeDelveStrainState(value.delveStrain),
     knownRoomIntel: normalizeKnownRoomIntel(value.knownRoomIntel),
     dungeonLog: normalizeDungeonLog(value.dungeonLog),
     appliedRunPreparations: Array.isArray(value.appliedRunPreparations) ? value.appliedRunPreparations as DungeonRun["appliedRunPreparations"] : []
@@ -259,6 +265,19 @@ function normalizeThreatState(value: unknown): ThreatState {
     maxLevel: maxLevel as ThreatState["maxLevel"],
     lastChangedAt: typeof value.lastChangedAt === "number" ? value.lastChangedAt : Date.now(),
     changes: Array.isArray(value.changes) ? value.changes as ThreatState["changes"] : []
+  };
+}
+
+function normalizeDelveStrainState(value: unknown): DungeonRun["delveStrain"] {
+  if (!isRecord(value)) return createInitialDelveStrainState();
+  const points = typeof value.points === "number" ? Math.max(0, value.points) : 0;
+  const level = getDelveStrainLevelFromPoints(points);
+  return {
+    points,
+    level,
+    maxLevel: 5,
+    lastChangedAt: typeof value.lastChangedAt === "number" ? value.lastChangedAt : Date.now(),
+    changes: Array.isArray(value.changes) ? value.changes as DungeonRun["delveStrain"]["changes"] : []
   };
 }
 

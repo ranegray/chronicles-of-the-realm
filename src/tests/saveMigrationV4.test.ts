@@ -49,6 +49,8 @@ describe("save migration v4", () => {
     });
     const village = generateVillage(createRng("migration-v4-village"));
     const run = generateDungeonRun({ seed: "migration-v4-run", biome: "crypt", tier: 1 });
+    const { delveStrain, ...legacyRunFields } = run;
+    void delveStrain;
     run.raidInventory = addItem(run.raidInventory, raidItem);
     run.loadoutSnapshot = [loadoutItem];
     run.appliedRunPreparations = [{
@@ -107,7 +109,13 @@ describe("save migration v4", () => {
         renown: 7,
         completedRunPreparationIds: ["cartographer-extra-scouting"]
       },
-      activeRun: run,
+      activeRun: {
+        ...legacyRunFields,
+        raidInventory: run.raidInventory,
+        loadoutSnapshot: run.loadoutSnapshot,
+        appliedRunPreparations: run.appliedRunPreparations,
+        dungeonLog: run.dungeonLog
+      },
       runSummaries: [runSummary],
       lastRunSummary: runSummary,
       pendingRunPreparations: run.appliedRunPreparations
@@ -140,6 +148,7 @@ describe("save migration v4", () => {
     expect(loaded.lastRunSummary?.questRewards[0]).toMatchObject({ affixes: [], states: [], tags: [] });
 
     expect(loaded.activeRun?.threat).toBeDefined();
+    expect(loaded.activeRun?.delveStrain).toMatchObject({ points: 0, level: 0, changes: [] });
     expect(loaded.activeRun?.knownRoomIntel).toBeDefined();
     expect(loaded.activeRun?.dungeonLog[0]?.message).toBe("Legacy log entry.");
     expect(loaded.activeRun?.appliedRunPreparations).toEqual(run.appliedRunPreparations);

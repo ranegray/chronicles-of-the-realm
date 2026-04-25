@@ -8,6 +8,7 @@ import type {
   RoomType
 } from "./types";
 import {
+  DEPTH_RULES,
   DUNGEON_GENERATOR_VERSION,
   RUN_RULES,
   SCOUTING_RULES
@@ -18,7 +19,7 @@ import { getLootTableForBiome } from "../data/lootTables";
 import { createEmptyInventory } from "./inventory";
 import type { Rng } from "./rng";
 import { createRng, makeId, randomSeed } from "./rng";
-import { createInitialThreatState } from "./threat";
+import { createInitialDelveStrainState, createInitialThreatState } from "./threat";
 import { addDungeonLogEntry, createEmptyDungeonLog } from "./dungeonLog";
 import { BIOME_SIGN_FLAVOR, ROOM_SIGNS_BY_TYPE } from "../data/roomSigns";
 import { generateTrapForRoom } from "./traps";
@@ -98,6 +99,7 @@ export function generateDungeonRun(params: DungeonGenParams = {}): DungeonRun {
     roomsCompletedBeforeDepth: 0,
     dangerLevel: tier,
     threat: createInitialThreatState(startedAt),
+    delveStrain: createInitialDelveStrainState(startedAt),
     knownRoomIntel: {},
     dungeonLog: createEmptyDungeonLog()
   };
@@ -129,7 +131,11 @@ export function generateRoomGraph(
   const rng = createRng(`graph:${seed}:${biome}:${tier}`);
   const minR = RUN_RULES.tierOneMinRooms;
   const maxR = RUN_RULES.tierOneMaxRooms;
-  const totalRooms = rng.nextInt(minR, maxR);
+  const depthRoomBonus = Math.min(
+    DEPTH_RULES.maxRoomCountBonus,
+    Math.floor(Math.max(0, tier - 1) / DEPTH_RULES.roomCountGrowthEveryDepth)
+  );
+  const totalRooms = rng.nextInt(minR + depthRoomBonus, maxR + depthRoomBonus);
 
   const rooms: DungeonRoom[] = [];
   for (let i = 0; i < totalRooms; i++) {
@@ -252,13 +258,16 @@ function buildRoom(
   const extraction = type === "extraction" || extractionPoint
     ? generateExtractionPoint({ roomId: id, biome, tier, rng })
     : undefined;
+  const scaledDanger = type === "entrance" || type === "extraction" || type === "empty"
+    ? dangerRating
+    : dangerRating + getDepthDangerBonus(tier);
   const bareRoom: DungeonRoom = {
     id,
     type,
     biome,
     title,
     description: desc,
-    dangerRating,
+    dangerRating: scaledDanger,
     connectedRoomIds: [],
     visited: false,
     completed: false,
@@ -269,7 +278,7 @@ function buildRoom(
     extractionPoint,
     extraction,
     searchState: createDefaultSearchState(),
-    scoutingProfile: computeScoutingProfile(type, biome, dangerRating, extractionPoint)
+    scoutingProfile: computeScoutingProfile(type, biome, scaledDanger, extractionPoint)
   };
   const activeEvent = maybeGenerateEvent({ room: bareRoom, biome, tier, rng });
   return activeEvent ? { ...bareRoom, activeEvent } : bareRoom;
@@ -363,14 +372,20 @@ export function ensureRequiredRooms(
     const idx = findReplaceableIdx(minIdx)!;
     rooms[idx] = buildRoom(rng, biome, tier, "extraction", idx);
   }
-  const requiresBoss = tier <= RUN_RULES.maxDungeonDepth;
-  if (!has("boss") && (requiresBoss || rng.nextFloat() < RUN_RULES.bossRoomChanceTierOne)) {
+  if (!has("boss") && DEPTH_RULES.bossEveryDepth) {
     const idx = findReplaceableIdx(Math.max(1, Math.floor(rooms.length * 0.65)), rooms.length - 1, false) ??
-      (requiresBoss ? findReplaceableIdx(1, rooms.length - 1, false) : undefined);
+      findReplaceableIdx(1, rooms.length - 1, false);
     if (idx !== undefined) {
       rooms[idx] = buildRoom(rng, biome, tier, "boss", idx);
     }
   }
+}
+
+function getDepthDangerBonus(tier: number): number {
+  return Math.min(
+    DEPTH_RULES.maxDangerBonus,
+    Math.floor(Math.max(0, tier - 1) / DEPTH_RULES.dangerBonusEveryDepth)
+  );
 }
 
 function assignSpatialLayout(rooms: DungeonRoom[], rng: Rng): void {
