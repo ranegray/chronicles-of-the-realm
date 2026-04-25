@@ -11,6 +11,7 @@ import { ABILITY_NAMES, CHARACTER_CREATION } from "./constants";
 import { getAncestry, ANCESTRIES } from "../data/ancestries";
 import { getClass, getStarterKit, CLASSES } from "../data/classes";
 import { calculateDerivedStats } from "./characterMath";
+import { initializeCharacterProgression } from "./characterProgression";
 import { instanceFromTemplateId } from "./inventory";
 import type { Rng } from "./rng";
 import { createRng, makeId, randomSeed } from "./rng";
@@ -133,7 +134,7 @@ export const CharacterCreationService = {
       equipped
     );
 
-    const character: Character = {
+    const character: Character = initializeCharacterProgression({ character: {
       id: makeId(draft.rng, "char"),
       name: draft.name.trim(),
       ancestryId: ancestry.id,
@@ -145,7 +146,7 @@ export const CharacterCreationService = {
       hp: derivedStats.maxHp,
       maxHp: derivedStats.maxHp,
       equipped
-    };
+    } as Character });
 
     return { character, equipment: items };
   },

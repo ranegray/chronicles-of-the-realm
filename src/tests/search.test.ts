@@ -65,6 +65,14 @@ describe("search", () => {
     expect(second.run.threat.points - mid).toBe(SEARCH_RULES.repeatSearchThreatIncrease);
   });
 
+  it("does not grant the same room material twice on repeated searches", () => {
+    const run = runWithHiddenLootEligibleRoom("repeat-material");
+    const character = buildCharacter("scout");
+    const first = searchCurrentRoom({ run, character, rng: createRng("repeat-material-a") });
+    const second = searchCurrentRoom({ run: first.run, character, rng: createRng("repeat-material-b") });
+    expect(second.run.raidInventory.materials).toEqual(first.run.raidInventory.materials);
+  });
+
   it("search count is tracked on the room and blocks a third search", () => {
     let run = runWithHiddenLootEligibleRoom("search-3");
     const character = buildCharacter("scout");

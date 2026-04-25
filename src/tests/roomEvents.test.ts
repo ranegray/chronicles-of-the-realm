@@ -124,6 +124,19 @@ describe("roomEvents", () => {
     expect(gate.reason).toMatch(/gold/);
   });
 
+  it("merchant-shade trade result tells the player what they got", () => {
+    const character = buildCharacter("scout");
+    const base = generateDungeonRun({ seed: "merchant-out", biome: "crypt", tier: 3 });
+    const { run, event } = attachEventToRoom({
+      ...base,
+      raidInventory: { ...base.raidInventory, gold: 20 }
+    }, "merchant-shade");
+    const res = resolveEventChoice({ run, character, event, choiceId: "trade-gold", rng: createRng("merchant-trade") });
+    expect(res.run.raidInventory.gold).toBe(5);
+    expect(res.resultMessage).toContain("You gain");
+    expect(res.resultMessage).toMatch(/\.$/);
+  });
+
   it("applyEventOutcome gainLootFromTable adds items when under capacity", () => {
     const character = buildCharacter("warden");
     const run = generateDungeonRun({ seed: "loot-out", biome: "crypt", tier: 1 });

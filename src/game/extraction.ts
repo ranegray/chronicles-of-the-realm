@@ -7,9 +7,9 @@ import type {
   ExtractionVariant,
   ItemInstance
 } from "./types";
-import { EXTRACTION_RULES } from "./constants";
+import { DEPTH_RULES, EXTRACTION_RULES } from "./constants";
 import { getEncountersForBiome } from "../data/encounters";
-import { applyThreatChange, getThreatModifiers } from "./threat";
+import { applyThreatChange, getCombinedPressureLevel, getThreatModifiers } from "./threat";
 import { addDungeonLogEntry } from "./dungeonLog";
 import { calculateInventoryWeight, removeItem } from "./inventory";
 import type { Rng } from "./rng";
@@ -33,10 +33,22 @@ export function generateExtractionPoint(params: {
   rng: Rng;
 }): ExtractionPoint {
   const { roomId, biome, tier, rng } = params;
-  const weights = EXTRACTION_RULES.variantWeightsTierOne;
+  const weights = getDepthExtractionWeights(tier);
   const entries = VARIANT_ORDER.map(v => ({ value: v, weight: weights[v] }));
   const variant = rng.pickWeighted(entries);
   return buildExtractionPoint({ roomId, biome, tier, variant, rng });
+}
+
+function getDepthExtractionWeights(tier: number): Record<ExtractionVariant, number> {
+  const depthBonus = Math.min(DEPTH_RULES.extraction.maxDepthWeightBonus, Math.max(0, tier - 1));
+  const base = EXTRACTION_RULES.variantWeightsTierOne;
+  return {
+    stable: Math.max(10, base.stable - depthBonus * DEPTH_RULES.extraction.stableWeightLossPerDepth),
+    delayed: base.delayed + depthBonus * DEPTH_RULES.extraction.delayedWeightPerDepth,
+    guarded: base.guarded + depthBonus * DEPTH_RULES.extraction.guardedWeightPerDepth,
+    unstable: base.unstable + depthBonus * DEPTH_RULES.extraction.unstableWeightPerDepth,
+    burdened: base.burdened + Math.floor(depthBonus / 2)
+  };
 }
 
 function buildExtractionPoint(params: {
@@ -295,7 +307,7 @@ export function resolveExtractionTurn(params: {
   const turnsLeft = extraction.turnsRemaining ?? 0;
 
   // Ambush roll per turn
-  const modifier = getThreatModifiers(run.threat.level);
+  const modifier = getThreatModifiers(getCombinedPressureLevel({ threat: run.threat, strain: run.delveStrain }));
   const ambushChance = EXTRACTION_RULES.delayed.ambushChancePerTurn + modifier.ambushChance;
   if (rng.nextFloat() < ambushChance) {
     const guardId = pickGuardEncounter(run.biome, run.tier, rng);
@@ -365,8 +377,10 @@ export function resolveUnstableExtraction(params: {
   }
 
   const base = extraction.baseComplicationChance ?? EXTRACTION_RULES.unstable.baseComplicationChance;
-  const modifier = getThreatModifiers(run.threat.level);
-  const raw = base + modifier.extractionComplicationChance;
+  const pressureLevel = getCombinedPressureLevel({ threat: run.threat, strain: run.delveStrain });
+  const modifier = getThreatModifiers(pressureLevel);
+  const raw = base + modifier.extractionComplicationChance +
+    run.delveStrain.level * DEPTH_RULES.extraction.strainComplicationChancePerLevel;
   const chance = Math.min(EXTRACTION_RULES.unstable.maxComplicationChance, Math.max(0, raw));
 
   if (rng.nextFloat() >= chance) {

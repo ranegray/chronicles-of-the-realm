@@ -6,6 +6,8 @@ import { useGameStore } from "../store/gameStore";
 export function DevPanel() {
   const [showJson, setShowJson] = useState(false);
   const state = useGameStore(s => s.state);
+  const newGame = useGameStore(s => s.newGame);
+  const updateSettings = useGameStore(s => s.updateSettings);
   const debugGenerateDungeonSeed = useGameStore(s => s.debugGenerateDungeonSeed);
   const debugGiveGold = useGameStore(s => s.debugGiveGold);
   const debugHealPlayer = useGameStore(s => s.debugHealPlayer);
@@ -22,6 +24,22 @@ export function DevPanel() {
       <summary>Dev</summary>
       <div className="dev-panel-body">
         <div className="dev-actions">
+          <label className="dev-toggle">
+            <input
+              type="checkbox"
+              checked={!state.settings.audioMuted}
+              onChange={event => updateSettings({ audioMuted: !event.currentTarget.checked })}
+            />
+            SFX
+          </label>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (confirm("Delete the current local save and start a new game?")) newGame();
+            }}
+          >
+            New Game
+          </Button>
           <Button variant="secondary" onClick={debugGenerateDungeonSeed}>New Seed</Button>
           <Button variant="secondary" onClick={debugGiveGold}>+100 Gold</Button>
           <Button variant="secondary" onClick={debugHealPlayer}>Heal</Button>

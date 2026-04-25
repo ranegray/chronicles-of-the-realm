@@ -234,11 +234,281 @@ export interface DerivedStats {
   trapSense: number;
 }
 
-export interface ItemAffix {
+export type CharacterLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+
+export interface CharacterProgressionState {
+  level: CharacterLevel;
+  xp: number;
+  totalXpEarned: number;
+  unspentTalentPoints: number;
+  spentTalentPoints: number;
+  learnedTalentIds: string[];
+  activeCombatActionIds: string[];
+  unlockedPassiveIds: string[];
+  unlockedBuildFlags: Record<string, boolean>;
+}
+
+export type TalentNodeType =
+  | "passive"
+  | "combatAction"
+  | "exploration"
+  | "defensive"
+  | "utility"
+  | "capstone";
+
+export type TalentUnlockStatus = "locked" | "available" | "learned";
+
+export type TalentEffectType =
+  | "derivedStatBonus"
+  | "abilityScoreBonus"
+  | "unlockCombatAction"
+  | "unlockPassiveFlag"
+  | "improveScouting"
+  | "improveTrapHandling"
+  | "improveFleeChance"
+  | "reduceThreatGain"
+  | "increaseCarryCapacity"
+  | "increaseHealingReceived"
+  | "increaseDamageWithTag"
+  | "reduceDamageFromTag"
+  | "improveEventCheck"
+  | "improveExtraction"
+  | "modifyCritChance"
+  | "modifyDeathPenalty"
+  | "grantStartingItem"
+  | "classSpecific";
+
+export interface TalentEffect {
+  type: TalentEffectType;
+  statKey?: keyof DerivedStats | AbilityName;
+  amount?: number;
+  combatActionId?: string;
+  passiveFlag?: string;
+  itemTag?: string;
+  enemyTag?: string;
+  roomType?: RoomType;
+  biome?: DungeonBiome;
+  description: string;
+}
+
+export interface TalentRequirement {
+  talentId?: string;
+  minCharacterLevel?: number;
+  minServiceRole?: NpcRole;
+  minServiceLevel?: ServiceLevel;
+  villageFlag?: string;
+}
+
+export interface TalentNodeDefinition {
+  id: string;
+  classId: ClassId;
+  name: string;
+  description: string;
+  type: TalentNodeType;
+  tier: number;
+  cost: number;
+  requirements?: TalentRequirement[];
+  effects: TalentEffect[];
+  tags: string[];
+}
+
+export interface TalentTreeDefinition {
+  classId: ClassId;
+  name: string;
+  description: string;
+  nodes: TalentNodeDefinition[];
+}
+
+export type CombatActionType =
+  | "basic"
+  | "weapon"
+  | "class"
+  | "defensive"
+  | "utility"
+  | "magic"
+  | "escape";
+
+export type CombatActionTarget =
+  | "self"
+  | "singleEnemy"
+  | "allEnemies"
+  | "room"
+  | "none";
+
+export interface CombatActionDefinition {
   id: string;
   name: string;
   description: string;
-  stats: StatModifierBlock;
+  classId?: ClassId;
+  type: CombatActionType;
+  target: CombatActionTarget;
+  requiredTalentId?: string;
+  accuracyModifier?: number;
+  damageModifier?: number;
+  damageMultiplier?: number;
+  healingAmount?: number;
+  threatChange?: number;
+  fleeChanceModifier?: number;
+  appliesPassiveFlag?: string;
+  oncePerCombat?: boolean;
+  cooldownTurns?: number;
+  logMessage: string;
+}
+
+export interface CombatActionRuntimeState {
+  actionId: string;
+  remainingCooldown: number;
+  usedThisCombat: boolean;
+}
+
+export type BuildTag =
+  | "melee"
+  | "ranged"
+  | "magic"
+  | "defensive"
+  | "evasive"
+  | "scouting"
+  | "trapHandling"
+  | "extraction"
+  | "carryCapacity"
+  | "healing"
+  | "highRisk"
+  | "lootFocused";
+
+export type BuildWarningType =
+  | "overweight"
+  | "lowHealing"
+  | "fragileGear"
+  | "cursedGear"
+  | "contraband"
+  | "lowDefense"
+  | "lowDamage"
+  | "noEscapeTools";
+
+export interface BuildWarning {
+  type: BuildWarningType;
+  message: string;
+  severity: "info" | "warning" | "danger";
+}
+
+export interface BuildSummary {
+  characterId: string;
+  primaryTags: BuildTag[];
+  totalStats: DerivedStats;
+  equippedItemScore: number;
+  riskScore: number;
+  extractionSafetyScore: number;
+  combatPowerScore: number;
+  explorationScore: number;
+  warnings: BuildWarning[];
+}
+
+export type AffixType = "prefix" | "suffix" | "implicit" | "special";
+
+export type AffixRollType = "flat" | "percent" | "flag";
+
+export type AffixAllowedItemCategory =
+  | ItemCategory
+  | "anyEquipment"
+  | "anyWeapon"
+  | "anyArmor"
+  | "anyTrinket";
+
+export interface AffixDefinition {
+  id: string;
+  name: string;
+  type: AffixType;
+  descriptionTemplate: string;
+  minRarity: Rarity;
+  maxRarity?: Rarity;
+  allowedCategories: AffixAllowedItemCategory[];
+  weight: number;
+  minTier: number;
+  maxTier: number;
+  statKey?: keyof DerivedStats | AbilityName;
+  rollType: AffixRollType;
+  minValue?: number;
+  maxValue?: number;
+  tags: string[];
+  biomeTags?: DungeonBiome[];
+  classTags?: ClassId[];
+  exclusiveGroup?: string;
+}
+
+export interface ItemAffix {
+  id: string;
+  definitionId?: string;
+  name: string;
+  type?: AffixType;
+  description: string;
+  statKey?: keyof DerivedStats | AbilityName;
+  rollType?: AffixRollType;
+  value?: number;
+  tags?: string[];
+  stats?: StatModifierBlock;
+}
+
+export type ItemStateId =
+  | "normal"
+  | "protected"
+  | "fragile"
+  | "cursed"
+  | "bound"
+  | "contraband"
+  | "damaged"
+  | "reinforced";
+
+export type ItemStateSource =
+  | "lootGeneration"
+  | "serviceAction"
+  | "questReward"
+  | "eventOutcome"
+  | "runPreparation"
+  | "deathPenalty"
+  | "debug";
+
+export interface ItemStateDefinition {
+  id: ItemStateId;
+  label: string;
+  description: string;
+  riskDescription: string;
+  visible: boolean;
+  tags: string[];
+}
+
+export interface ItemState {
+  id: ItemStateId;
+  source: ItemStateSource;
+  appliedAt: number;
+  expiresAfterRunId?: string;
+  expiresAtTimestamp?: number;
+  valueModifier?: number;
+  statModifier?: StatModifierBlock;
+  metadata?: Record<string, string | number | boolean>;
+}
+
+export interface ItemGenerationContext {
+  seed: string;
+  biome: DungeonBiome;
+  tier: number;
+  roomType?: RoomType;
+  source:
+    | "combat"
+    | "treasure"
+    | "boss"
+    | "event"
+    | "quest"
+    | "crafting"
+    | "vendor"
+    | "debug";
+  threatLevel?: ThreatLevel;
+  playerClassId?: ClassId;
+}
+
+export interface GeneratedItemResult {
+  item: ItemInstance;
+  affixesRolled: ItemAffix[];
+  statesRolled: ItemState[];
 }
 
 export interface ItemTemplate {
@@ -267,10 +537,18 @@ export interface ItemInstance {
   quantity: number;
   stats?: StatModifierBlock;
   affixes?: ItemAffix[];
+  states?: ItemState[];
   tags?: string[];
   protected?: boolean;
   upgradeLevel?: number;
 }
+
+export type EquipmentSlotName =
+  | "weapon"
+  | "offhand"
+  | "armor"
+  | "trinket1"
+  | "trinket2";
 
 export interface EquipmentSlots {
   weapon?: ItemInstance;
@@ -278,6 +556,16 @@ export interface EquipmentSlots {
   armor?: ItemInstance;
   trinket1?: ItemInstance;
   trinket2?: ItemInstance;
+}
+
+export interface EquipmentChangePreview {
+  slot: EquipmentSlotName;
+  currentItem?: ItemInstance;
+  newItem?: ItemInstance;
+  currentStats: DerivedStats;
+  previewStats: DerivedStats;
+  statDiff: Partial<Record<keyof DerivedStats, number>>;
+  warnings: BuildWarning[];
 }
 
 export interface Character {
@@ -293,6 +581,7 @@ export interface Character {
   maxHp: number;
   equipped: EquipmentSlots;
   wounded?: boolean;
+  progression: CharacterProgressionState;
 }
 
 export interface Inventory {
@@ -390,6 +679,7 @@ export interface DungeonRun {
   roomsCompletedBeforeDepth: number;
   dangerLevel: number;
   threat: ThreatState;
+  delveStrain: DelveStrainState;
   knownRoomIntel: Record<string, ScoutedRoomInfo>;
   dungeonLog: DungeonLogEntry[];
   currentExtractionInteraction?: {
@@ -720,6 +1010,7 @@ export interface PreparedRunModifier {
 export interface GameSettings {
   onboardingComplete: boolean;
   textSpeed: "slow" | "normal" | "fast";
+  audioMuted: boolean;
 }
 
 export interface GameState {
@@ -767,6 +1058,8 @@ export interface RunSummary {
   lootExtracted: ItemInstance[];
   lootLost: ItemInstance[];
   gearLost: ItemInstance[];
+  materialsExtracted: MaterialVault;
+  materialsLost: MaterialVault;
   goldGained: number;
   goldLost: number;
   xpGained: number;
@@ -803,6 +1096,13 @@ export interface CombatState {
   over: boolean;
   outcome?: "victory" | "defeat" | "fled";
   fromRoomId: string;
+  actionRuntimeState?: CombatActionRuntimeState[];
+  actionThreatDeltas?: {
+    actionId: string;
+    amount: number;
+    reason: ThreatChangeReason;
+    message: string;
+  }[];
 }
 
 export type QuestEvent =
@@ -820,6 +1120,7 @@ export type QuestEvent =
 // ---------------------------------------------------------------------------
 
 export type ThreatLevel = 0 | 1 | 2 | 3 | 4 | 5;
+export type DelveStrainLevel = 0 | 1 | 2 | 3 | 4 | 5;
 
 export type ThreatChangeReason =
   | "enteredRoom"
@@ -852,6 +1153,27 @@ export interface ThreatState {
   maxLevel: ThreatLevel;
   lastChangedAt: number;
   changes: ThreatChange[];
+}
+
+export interface DelveStrainChange {
+  id: string;
+  timestamp: number;
+  reason: "descended" | "deepPressure" | "extractionComplication" | "debug";
+  amount: number;
+  depth: number;
+  previousPoints: number;
+  newPoints: number;
+  previousLevel: DelveStrainLevel;
+  newLevel: DelveStrainLevel;
+  message: string;
+}
+
+export interface DelveStrainState {
+  points: number;
+  level: DelveStrainLevel;
+  maxLevel: DelveStrainLevel;
+  lastChangedAt: number;
+  changes: DelveStrainChange[];
 }
 
 export interface ThreatLevelModifier {

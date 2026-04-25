@@ -25,6 +25,14 @@ describe("combat", () => {
     expect(state.over).toBe(false);
   });
 
+  it("scales enemies upward at deeper depths", () => {
+    const enc = getEncounter("enc_crypt_rats");
+    const shallow = startCombat(enc, createRng("depth-enemy"), "room1", 1);
+    const deep = startCombat(enc, createRng("depth-enemy"), "room1", 8);
+    expect(deep.enemies[0]!.maxHp).toBeGreaterThan(shallow.enemies[0]!.maxHp);
+    expect(deep.enemies[0]!.accuracy).toBeGreaterThan(shallow.enemies[0]!.accuracy);
+  });
+
   it("attack action either hits or misses but logs an entry", () => {
     const enc = getEncounter("enc_crypt_rats");
     const player = buildPlayer();

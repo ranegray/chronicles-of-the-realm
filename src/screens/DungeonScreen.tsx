@@ -3,15 +3,15 @@ import { Card } from "../components/Card";
 import { DungeonLog } from "../components/DungeonLog";
 import { EventChoicePanel } from "../components/EventChoicePanel";
 import { ExtractionPanel } from "../components/ExtractionPanel";
+import { GearRiskBadge } from "../components/GearRiskBadge";
 import { Tooltip } from "../components/Tooltip";
 import { useGameStore } from "../store/gameStore";
 import { getRoomById } from "../game/dungeonGenerator";
 import { getBiome } from "../data/biomes";
 import { calculateInventoryWeight } from "../game/inventory";
-import { RUN_RULES } from "../game/constants";
-import { getThreatLabel } from "../game/threat";
-import type { ActiveTrap, DungeonRoom, DungeonRun, RoomSignTag, ScoutedRoomInfo } from "../game/types";
 import { SEARCH_RULES } from "../game/constants";
+import type { ActiveTrap, DungeonRoom, DungeonRun, RoomSignTag, ScoutedRoomInfo } from "../game/types";
+import type { ItemWithV4Fields } from "../components/v04UiTypes";
 import { getTrapTemplate } from "../data/trapTables";
 import { getEventTemplate } from "../data/eventTemplates";
 import { describeSign } from "../data/roomSigns";
@@ -20,7 +20,7 @@ const TYPE_LABELS: Record<string, string> = {
   entrance: "Entrance",
   combat: "Combat",
   eliteCombat: "Elite",
-  treasure: "Treasure",
+  treasure: "Cache",
   trap: "Trap",
   shrine: "Shrine",
   npcEvent: "Voice",
@@ -71,15 +71,28 @@ export function DungeonScreen() {
   const carryCapacity = player.derivedStats.carryCapacity;
   const packValue = calculateInventoryValue(run.raidInventory);
   const unchartedRooms = run.roomGraph.filter(room => !run.visitedRoomIds.includes(room.id)).length;
+  const riskyItems = [
+    ...Object.values(player.equipped).filter(Boolean),
+    ...run.raidInventory.items
+  ].filter(item => (((item as ItemWithV4Fields).states ?? []).filter(state => state.id !== "normal").length > 0));
 
-  const threatMood = getThreatLabel(run.threat.level);
+  const lowHp = player.hp / player.maxHp <= 0.25;
+  const roomHasLootFlow = (current.type === "treasure" || current.type === "lockedChest" || current.type === "shrine") && !current.activeEvent && !current.completed;
+  const roomLootSearched = Boolean(current.searchState?.searched);
+  const lootSearchLabel = current.type === "lockedChest"
+    ? "Work the Lock"
+    : current.type === "shrine"
+      ? "Examine"
+      : "Search";
+  const depthTone = run.tier >= 7 ? "deep" : run.tier >= 4 ? "lower" : "upper";
 
   return (
-    <div className="screen dungeon-screen">
+    <div className={`screen dungeon-screen dungeon-screen-${depthTone}`}>
+      {lowHp && <div className="low-hp-vignette" aria-hidden="true" />}
       <header className="dungeon-header">
         <div className="dungeon-header-title">
           <span className="dungeon-header-eyebrow" title={`Seed: ${run.seed}`}>
-            Depth {run.tier} · {biome.name} · <span className={`dungeon-header-mood dungeon-header-mood-${run.threat.level}`}>{threatMood}</span>
+            Depth {run.tier} · {biome.name}
           </span>
           <h2>{current.title}</h2>
           <p className="muted">{biome.description}</p>
@@ -127,9 +140,11 @@ export function DungeonScreen() {
           <div className="room-actions">
             {current.activeEvent && !current.activeEvent.resolved ? null : (
             <>
-            {(current.type === "treasure" || current.type === "lockedChest" || current.type === "shrine") && !current.activeEvent && (
+            {roomHasLootFlow && !roomLootSearched && (
+              <Button onClick={search}>{lootSearchLabel}</Button>
+            )}
+            {roomHasLootFlow && roomLootSearched && (
               <>
-                <Button onClick={search}>Search</Button>
                 <Button variant="secondary" onClick={loot}>Take All</Button>
               </>
             )}
@@ -148,11 +163,8 @@ export function DungeonScreen() {
             {current.extractionPoint && !current.extraction && (
               <Button onClick={extract}>Extract</Button>
             )}
-            {current.type === "boss" && current.completed && run.tier < RUN_RULES.maxDungeonDepth && (
+            {current.type === "boss" && current.completed && (
               <Button variant="secondary" onClick={descend}>Descend</Button>
-            )}
-            {current.type === "boss" && current.completed && run.tier >= RUN_RULES.maxDungeonDepth && (
-              <span className="muted small">No deeper stair opens.</span>
             )}
             {current.type === "questObjective" && (
               <Button onClick={search}>Investigate</Button>
@@ -184,6 +196,19 @@ export function DungeonScreen() {
         <Card title="Dungeon Log" subtitle={`${run.dungeonLog.length} event${run.dungeonLog.length === 1 ? "" : "s"}`}>
           <DungeonLog entries={run.dungeonLog} />
         </Card>
+
+        {riskyItems.length > 0 && (
+          <Card title="Gear Risk" subtitle="Visible item states affecting this delve">
+            <ul className="risk-item-list">
+              {riskyItems.map(item => (
+                <li key={item!.instanceId}>
+                  <strong>{item!.name}</strong>
+                  <GearRiskBadge states={(item as ItemWithV4Fields).states} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
       </div>
     </div>
   );

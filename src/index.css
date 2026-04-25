@@ -22,7 +22,12 @@
 }
 
 * { box-sizing: border-box; }
-html, body, #root { height: 100%; margin: 0; }
+html, body, #root {
+  height: 100vh;
+  max-height: 100vh;
+  margin: 0;
+  overflow: hidden;
+}
 body {
   background: var(--bg-0);
   color: var(--text);
@@ -32,9 +37,48 @@ body {
 }
 
 .app-root {
-  min-height: 100%;
+  height: 100vh;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.screen {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Minimal native-feel scrollbars on internal scroll containers.
+   WebKit/Blink: thin overlay-style thumb, transparent track.
+   Firefox: scrollbar-width: thin + matching colors. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(216, 178, 92, 0.22) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(216, 178, 92, 0.18);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background 160ms ease;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(216, 178, 92, 0.42);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .global-nav {
@@ -181,6 +225,8 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
 .btn-danger:hover:not(:disabled) { background: rgba(199, 80, 80, 0.1); }
 .btn-ghost { background: transparent; border-color: transparent; }
 .btn-ghost:hover:not(:disabled) { border-color: var(--line); }
+.good { color: var(--good); }
+.danger { color: var(--danger); }
 
 /* Cards */
 .card {
@@ -194,6 +240,269 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
 .card-danger { border-color: var(--danger); }
 .card-selectable { cursor: pointer; }
 .card-selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(200, 155, 60, 0.25) inset; }
+
+/* v0.4 build, talent, and gear surfaces */
+.character-hero-actions,
+.talent-screen-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.talent-point-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(64px, 1fr));
+  gap: 6px;
+  min-width: 220px;
+}
+.talent-point-cell,
+.build-score,
+.summary-stat {
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.02);
+  border-radius: 6px;
+  padding: 7px 9px;
+}
+.talent-point-cell span,
+.build-score span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.talent-point-cell strong,
+.build-score strong {
+  display: block;
+  font-size: 1.15rem;
+}
+.talent-screen {
+  min-height: 0;
+  overflow: auto;
+}
+.talent-screen-header,
+.talent-tree-head,
+.item-tooltip-header,
+.item-compare-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.talent-tier-stack {
+  display: grid;
+  gap: 14px;
+}
+.talent-tier h3 {
+  margin-top: 0;
+}
+.talent-tier-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.talent-node-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--bg-2);
+}
+.talent-node-available {
+  border-color: rgba(216, 178, 92, 0.65);
+}
+.talent-node-learned {
+  border-color: rgba(108, 174, 108, 0.65);
+  background: rgba(108, 174, 108, 0.08);
+}
+.talent-node-header,
+.talent-node-footer,
+.equipment-slot-header,
+.loadout-pool-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.talent-node-kicker,
+.talent-status,
+.talent-node-cost {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.talent-node-effects,
+.talent-node-reqs,
+.build-warning-list,
+.item-tooltip-list,
+.item-state-warning-list,
+.risk-item-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.talent-node-reqs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 0;
+}
+.talent-node-reqs span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.build-summary-panel {
+  display: grid;
+  gap: 12px;
+}
+.build-tag-row,
+.affix-row,
+.item-tooltip-tags,
+.gear-risk-badges,
+.active-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.build-tag,
+.affix-badge,
+.gear-risk-badge,
+.item-tooltip-tags span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-2);
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.affix-badge-prefix { border-color: rgba(93, 157, 220, 0.55); }
+.affix-badge-suffix { border-color: rgba(216, 158, 58, 0.55); }
+.affix-badge-implicit { border-color: rgba(108, 174, 108, 0.55); }
+.gear-risk-protected { border-color: var(--good); color: var(--good); }
+.gear-risk-fragile,
+.gear-risk-damaged,
+.gear-risk-reinforced { border-color: var(--warn); color: var(--warn); }
+.gear-risk-cursed,
+.gear-risk-contraband { border-color: var(--danger); color: var(--danger); }
+.gear-risk-bound { border-color: var(--rarity-epic); color: var(--rarity-epic); }
+.build-score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+.build-score-track {
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.build-score-track span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.build-warning,
+.item-state-warning {
+  margin-bottom: 4px;
+}
+.build-warning-info,
+.item-state-warning-info { color: var(--text-dim); }
+.build-warning-warning,
+.item-state-warning-warning { color: var(--warn); }
+.build-warning-danger,
+.item-state-warning-danger { color: var(--danger); }
+.item-tooltip {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--bg-2);
+  min-width: 0;
+}
+.item-tooltip-header strong,
+.item-tooltip-header span {
+  display: block;
+}
+.item-tooltip-header span,
+.item-tooltip-desc,
+.item-tooltip-section p {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+.item-tooltip-value {
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.item-tooltip-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.item-tooltip-section h4,
+.loadout-pool h4 {
+  margin: 0 0 6px;
+  color: var(--text-dim);
+  font-size: 0.86rem;
+}
+.item-tooltip-stats,
+.item-compare-diff {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+.item-tooltip-stats div,
+.item-compare-diff div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.item-tooltip-stats dt,
+.item-compare-diff dt {
+  color: var(--text-muted);
+}
+.item-tooltip-stats dd,
+.item-compare-diff dd {
+  margin: 0;
+}
+.loadout-builder {
+  display: grid;
+  gap: 12px;
+}
+.equipment-slot-previewing {
+  border-color: var(--accent);
+}
+.loadout-pool-grid,
+.item-compare-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.loadout-pool-item,
+.item-compare-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(255,255,255,0.02);
+}
+.item-compare-panel {
+  margin-top: 12px;
+}
+.item-compare-empty {
+  color: var(--text-muted);
+}
+.active-action-bar {
+  padding-right: 8px;
+  border-right: 1px solid var(--line);
+}
+.risk-item-list li {
+  margin-bottom: 8px;
+}
 .card-header { margin-bottom: 8px; }
 .card-title { font-weight: 600; font-size: 1.1rem; }
 .card-subtitle { color: var(--text-muted); font-size: 0.9rem; }
@@ -367,6 +676,12 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  align-content: start;
+  padding-right: 4px;
 }
 .npc-tile {
   padding: 10px 12px;
@@ -535,6 +850,15 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
 .dungeon-header {
   display: flex; justify-content: space-between; align-items: flex-end;
   gap: 10px;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 4px;
+}
+.dungeon-screen-lower .dungeon-header { border-bottom-color: rgba(200, 155, 60, 0.18); }
+.dungeon-screen-deep .dungeon-header { border-bottom-color: rgba(199, 80, 80, 0.24); }
+.dungeon-screen-lower .dungeon-hud { border-color: rgba(200, 155, 60, 0.22); }
+.dungeon-screen-deep .dungeon-hud {
+  border-color: rgba(199, 80, 80, 0.25);
+  background: color-mix(in srgb, var(--bg-1) 88%, rgba(199, 80, 80, 0.12));
 }
 .dungeon-header-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .dungeon-header-eyebrow {
@@ -571,6 +895,9 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
   grid-template-columns: 2fr 1fr;
   grid-template-areas: "current adj" "map log";
   gap: 12px;
+  flex: 1 1 0;
+  min-height: 0;
+  align-items: stretch;
 }
 .dungeon-grid .card:nth-child(1) { grid-area: current; }
 .dungeon-grid .card:nth-child(2) { grid-area: adj; }
@@ -585,6 +912,21 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
 .dungeon-grid-noexits .card:nth-child(1) { grid-area: current; }
 .dungeon-grid-noexits .card:nth-child(2) { grid-area: map; }
 .dungeon-grid-noexits .card:nth-child(3) { grid-area: log; }
+
+.dungeon-grid > .card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  margin-bottom: 0;
+}
+.dungeon-grid > .card > .card-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
 
 .dungeon-header-mood {
   color: var(--text-dim);
@@ -874,6 +1216,7 @@ button.map-room:hover {
   box-shadow: inset 0 0 40px rgba(0,0,0,0.55);
 }
 .combat-enemy {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -885,8 +1228,20 @@ button.map-room:hover {
   font: inherit;
   text-align: left;
   cursor: default;
+  overflow: visible;
   transition: border-color 100ms ease, background 100ms ease, transform 100ms ease;
 }
+.combat-enemy::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: rgba(199, 80, 80, 0);
+  transition: background 120ms ease-out;
+  z-index: 0;
+}
+.combat-enemy > * { position: relative; z-index: 1; }
 button.combat-enemy { cursor: pointer; }
 button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3); }
 .combat-enemy-selected {
@@ -898,10 +1253,26 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   filter: grayscale(0.7);
   text-decoration: line-through;
 }
+.combat-enemy-hit { animation: enemy-hit-shake 280ms ease-out; }
+.combat-enemy-hit::before { animation: enemy-hit-wash 380ms ease-out; }
+@keyframes enemy-hit-shake {
+  0%, 100% { transform: translateX(0); }
+  18% { transform: translateX(-5px); }
+  36% { transform: translateX(5px); }
+  54% { transform: translateX(-3px); }
+  72% { transform: translateX(3px); }
+  90% { transform: translateX(-1px); }
+}
+@keyframes enemy-hit-wash {
+  0% { background: rgba(199, 80, 80, 0); }
+  25% { background: rgba(199, 80, 80, 0.42); }
+  100% { background: rgba(199, 80, 80, 0); }
+}
 .combat-enemy-name { font-weight: 600; }
 .combat-enemy-foot { letter-spacing: 0.02em; }
 
 .combat-player {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -921,6 +1292,93 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   background: var(--bg-2);
 }
 .combat-chip-warn { color: var(--accent-2); border-color: var(--warm-line); background: rgba(216, 178, 92, 0.08); }
+
+.combat-player-impact { animation: player-hit-shake 320ms ease-out; }
+.combat-player-impact::before {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: rgba(199, 80, 80, 0);
+  animation: player-hit-wash 420ms ease-out;
+}
+@keyframes player-hit-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(1px); }
+}
+@keyframes player-hit-wash {
+  0% { background: rgba(199, 80, 80, 0); }
+  20% { background: rgba(199, 80, 80, 0.30); }
+  100% { background: rgba(199, 80, 80, 0); }
+}
+
+/* Floating damage / heal numbers */
+.damage-float {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%) translateY(0) scale(0.8);
+  font-family: ui-serif, Georgia, serif;
+  font-weight: 800;
+  font-size: 1.55rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.95),
+    0 0 12px rgba(0, 0, 0, 0.7);
+  z-index: 5;
+  animation: damage-float-rise 950ms cubic-bezier(0.18, 0.7, 0.3, 1) forwards;
+}
+.damage-float-damage { color: #ff8b6c; }
+.damage-float-heal { color: #8fd68f; }
+.damage-float-player { top: -8px; }
+@keyframes damage-float-rise {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(0) scale(0.6);
+  }
+  12% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-6px) scale(1.18);
+  }
+  28% {
+    transform: translateX(-50%) translateY(-12px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-46px) scale(0.95);
+  }
+}
+
+/* Full-viewport red vignette pulse when the player takes damage */
+.combat-screen-flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 200;
+  background: radial-gradient(ellipse at center, transparent 38%, rgba(199, 80, 80, 0.55) 100%);
+  opacity: 0;
+  animation: combat-screen-flash 460ms ease-out;
+}
+@keyframes combat-screen-flash {
+  0% { opacity: 0; }
+  18% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* HP bar recoil when the bearer is hit */
+.hp-bar-recoil { animation: hp-bar-recoil 320ms ease-out; }
+@keyframes hp-bar-recoil {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(1px); }
+}
 
 .combat-log-panel {
   border: 1px solid var(--line);
@@ -1079,7 +1537,28 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.7rem; margin-right: 4px;
 }
 .stash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.stash-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; align-items: start; }
+.stash-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 12px;
+  flex: 1 1 0;
+  min-height: 0;
+  align-items: stretch;
+}
+.stash-grid > .card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  margin-bottom: 0;
+}
+.stash-grid > .card > .card-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
 .character-screen { padding: 14px 24px 20px; display: flex; flex-direction: column; gap: 12px; }
 .character-hero {
   display: flex;
@@ -1111,7 +1590,23 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   display: grid;
   grid-template-columns: 1fr 1.6fr;
   gap: 12px;
-  align-items: start;
+  flex: 1 1 0;
+  min-height: 0;
+  align-items: stretch;
+}
+.character-grid > .card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  margin-bottom: 0;
+}
+.character-grid > .card > .card-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 .quest-screen { padding: 14px 24px 20px; display: flex; flex-direction: column; gap: 12px; }
 .quest-hero {
@@ -1143,7 +1638,9 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
-  align-items: start;
+  flex: 1 1 0;
+  min-height: 0;
+  align-items: stretch;
 }
 .quest-column {
   background: var(--bg-1);
@@ -1153,6 +1650,16 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+.quest-column-list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 .quest-column-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
 .quest-column-title {
@@ -1170,6 +1677,16 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
 .quest-column-item p { margin: 4px 0; }
 .quest-column-item-actions { margin-top: 6px; }
 .summary-screen { max-width: 960px; display: flex; flex-direction: column; gap: 12px; padding: 14px 24px 20px; }
+.summary-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .summary-hero {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -1212,6 +1729,7 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
 }
 .summary-stat span { color: var(--text-dim); font-size: 0.82rem; }
 .summary-stat strong { font-variant-numeric: tabular-nums; }
+.summary-materials { margin-bottom: 10px; }
 .equipment-grid { display: grid; gap: 8px; }
 .equipment-slot {
   background: var(--bg-2);
@@ -1296,10 +1814,30 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   background: var(--bg-3);
   color: var(--text-dim);
 }
-.merchant-pane { display: grid; gap: 12px; }
+.merchant-pane {
+  display: grid;
+  gap: 12px;
+  flex: 1 1 0;
+  min-height: 0;
+  align-items: stretch;
+}
 .merchant-pane-wares { grid-template-columns: 1fr 1fr; }
-.merchant-pane-services { grid-template-columns: 1fr 1fr; }
+.merchant-pane-services { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
 .merchant-pane-quests { grid-template-columns: 1fr; }
+.merchant-pane > .card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  margin-bottom: 0;
+}
+.merchant-pane > .card > .card-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
 .quest-list-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .quest-list-actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
 
@@ -1334,6 +1872,20 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+.dev-toggle {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-dim);
+  display: inline-flex;
+  font-size: 0.82rem;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 8px;
+}
+.dev-toggle input {
+  accent-color: var(--accent-2);
 }
 .dev-metrics span {
   border: 1px solid var(--line);
@@ -1425,6 +1977,148 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
 .dungeon-log-event { border-left-color: var(--accent-2); }
 .dungeon-log-trap { border-left-color: var(--warn); }
 .dungeon-log-quest { border-left-color: var(--rarity-rare); }
+
+/* Diegetic log: latest entry breathes, older ones dim toward silence. */
+.dungeon-log-diegetic .dungeon-log-entry {
+  background: linear-gradient(90deg, rgba(255,255,255,0.012), transparent 70%);
+  transition: opacity 280ms ease, color 280ms ease, transform 280ms ease;
+}
+.dungeon-log-now {
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  animation: dungeon-log-now-breathe 1600ms ease-in-out 1;
+  text-shadow: 0 0 12px rgba(216, 178, 92, 0.18);
+}
+@keyframes dungeon-log-now-breathe {
+  0% {
+    opacity: 0.2;
+    transform: translateX(-4px);
+    text-shadow: 0 0 0 rgba(216, 178, 92, 0);
+  }
+  35% {
+    opacity: 1;
+    transform: translateX(0);
+    text-shadow: 0 0 16px rgba(216, 178, 92, 0.36);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+    text-shadow: 0 0 12px rgba(216, 178, 92, 0.18);
+  }
+}
+.dungeon-log-recent-1 { opacity: 0.78; }
+.dungeon-log-recent-2 { opacity: 0.62; }
+.dungeon-log-recent-3 { opacity: 0.48; }
+.dungeon-log-recent-4 { opacity: 0.36; }
+.dungeon-log-recent-5 { opacity: 0.26; }
+.dungeon-log-faded { opacity: 0.18; }
+
+/* Persistent low-HP screen vignette: ambient pressure when HP <= 25%. */
+.low-hp-vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 180;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(199, 80, 80, 0.32) 100%);
+  animation: low-hp-pulse 2.4s ease-in-out infinite;
+}
+@keyframes low-hp-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.85; }
+}
+
+/* Threat-rise glow: when the dungeon mood escalates the eyebrow word flares. */
+.dungeon-header-mood {
+  display: inline-block;
+  transition: text-shadow 320ms ease-out, color 320ms ease-out;
+}
+.dungeon-header-mood-rising {
+  animation: mood-rise-glow 1800ms ease-out 1;
+}
+@keyframes mood-rise-glow {
+  0% {
+    text-shadow: 0 0 0 currentColor;
+    transform: scale(1);
+  }
+  18% {
+    text-shadow: 0 0 14px currentColor, 0 0 28px currentColor;
+    transform: scale(1.06);
+  }
+  100% {
+    text-shadow: 0 0 0 currentColor;
+    transform: scale(1);
+  }
+}
+
+/* Parchment grain — subtle SVG noise overlaid on warm hero panels so the
+   surface reads as fibered paper rather than flat fill. */
+.delve-hero,
+.character-hero,
+.merchant-hero,
+.quest-hero,
+.stash-hero,
+.summary-hero {
+  position: relative;
+  overflow: hidden;
+}
+.delve-hero::after,
+.character-hero::after,
+.merchant-hero::after,
+.quest-hero::after,
+.stash-hero::after,
+.summary-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.22;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.85  0 0 0 0 0.78  0 0 0 0 0.55  0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 160px 160px;
+}
+
+/* Cut-corner hero panels — angled corners give the warm panels a parchment
+   edge instead of a pure rounded rectangle. */
+.delve-hero,
+.character-hero,
+.merchant-hero,
+.quest-hero,
+.stash-hero,
+.summary-hero {
+  border-radius: 0;
+  clip-path: polygon(
+    14px 0,
+    calc(100% - 6px) 0,
+    100% 8px,
+    100% calc(100% - 14px),
+    calc(100% - 14px) 100%,
+    8px 100%,
+    0 calc(100% - 8px),
+    0 14px
+  );
+}
+
+/* Tactile button press — subtle depress on click for haptic feel. */
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+.btn-hero:active:not(:disabled) {
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.35), 0 0 8px rgba(200, 155, 60, 0.18);
+}
+
+/* HP bar inner glint — subtle metallic highlight band on the fill. */
+.hp-bar-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
 
 /* Event panel */
 .event-panel {

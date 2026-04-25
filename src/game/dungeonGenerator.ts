@@ -8,6 +8,7 @@ import type {
   RoomType
 } from "./types";
 import {
+  DEPTH_RULES,
   DUNGEON_GENERATOR_VERSION,
   RUN_RULES,
   SCOUTING_RULES
@@ -18,7 +19,7 @@ import { getLootTableForBiome } from "../data/lootTables";
 import { createEmptyInventory } from "./inventory";
 import type { Rng } from "./rng";
 import { createRng, makeId, randomSeed } from "./rng";
-import { createInitialThreatState } from "./threat";
+import { createInitialDelveStrainState, createInitialThreatState } from "./threat";
 import { addDungeonLogEntry, createEmptyDungeonLog } from "./dungeonLog";
 import { BIOME_SIGN_FLAVOR, ROOM_SIGNS_BY_TYPE } from "../data/roomSigns";
 import { generateTrapForRoom } from "./traps";
@@ -98,6 +99,7 @@ export function generateDungeonRun(params: DungeonGenParams = {}): DungeonRun {
     roomsCompletedBeforeDepth: 0,
     dangerLevel: tier,
     threat: createInitialThreatState(startedAt),
+    delveStrain: createInitialDelveStrainState(startedAt),
     knownRoomIntel: {},
     dungeonLog: createEmptyDungeonLog()
   };
@@ -129,7 +131,11 @@ export function generateRoomGraph(
   const rng = createRng(`graph:${seed}:${biome}:${tier}`);
   const minR = RUN_RULES.tierOneMinRooms;
   const maxR = RUN_RULES.tierOneMaxRooms;
-  const totalRooms = rng.nextInt(minR, maxR);
+  const depthRoomBonus = Math.min(
+    DEPTH_RULES.maxRoomCountBonus,
+    Math.floor(Math.max(0, tier - 1) / DEPTH_RULES.roomCountGrowthEveryDepth)
+  );
+  const totalRooms = rng.nextInt(minR + depthRoomBonus, maxR + depthRoomBonus);
 
   const rooms: DungeonRoom[] = [];
   for (let i = 0; i < totalRooms; i++) {
@@ -155,7 +161,7 @@ function buildRoom(
   idx: number
 ): DungeonRoom {
   const biomeInfo = getBiome(biome);
-  const desc = rng.pickOne(biomeInfo.roomDescriptions);
+  const baseDescription = rng.pickOne(biomeInfo.roomDescriptions);
 
   let title = "";
   let dangerRating = 1;
@@ -171,7 +177,7 @@ function buildRoom(
       dangerRating = 0;
       break;
     case "combat": {
-      title = "Combat Room";
+      title = rng.pickOne(["Guarded Hall", "Broken Watch", "Stalking Ground"]);
       const encounters = getEncountersForBiome(biome, tier);
       const enc = rng.pickWeighted(encounters.map(e => ({ value: e, weight: e.weight })));
       encounterId = enc.id;
@@ -179,7 +185,7 @@ function buildRoom(
       break;
     }
     case "eliteCombat": {
-      title = "Elite Combat";
+      title = rng.pickOne(["Hard Crossing", "Old Killing Floor", "Held Chamber"]);
       const encounters = getEncountersForBiome(biome, tier);
       const harder = encounters
         .filter(e => e.dangerRating >= 2)
@@ -191,12 +197,12 @@ function buildRoom(
       break;
     }
     case "treasure":
-      title = "Treasure";
+      title = rng.pickOne(["Old Cache", "Forgotten Stores", "Sealed Cache"]);
       lootTableId = getLootTableForBiome(biome, tier).id;
       dangerRating = 1;
       break;
     case "trap": {
-      title = "Trap Room";
+      title = rng.pickOne(["Unsteady Passage", "Worked Floor", "Wrong Turn"]);
       const trap = generateTrapForRoom({
         room: { id: "" } as DungeonRoom,
         biome,
@@ -213,11 +219,11 @@ function buildRoom(
       break;
     }
     case "shrine":
-      title = "Shrine";
+      title = rng.pickOne(["Quiet Shrine", "Old Offering Place", "Worn Altar"]);
       dangerRating = 0;
       break;
     case "npcEvent":
-      title = "Lone Voice";
+      title = rng.pickOne(["Lone Voice", "Waiting Stranger", "Still Figure"]);
       dangerRating = 1;
       break;
     case "questObjective":
@@ -225,7 +231,7 @@ function buildRoom(
       dangerRating = 1;
       break;
     case "lockedChest":
-      title = "Locked Chest";
+      title = rng.pickOne(["Locked Coffer", "Ironbound Chest", "Sealed Coffer"]);
       lootTableId = getLootTableForBiome(biome, tier).id;
       dangerRating = 1;
       break;
@@ -235,7 +241,7 @@ function buildRoom(
       extractionPoint = true;
       break;
     case "boss": {
-      title = "Boss Chamber";
+      title = rng.pickOne(["Deep Threshold", "Claimed Hall", "Last Door"]);
       const encounters = getEncountersForBiome(biome, tier);
       const enc = rng.pickWeighted(encounters.map(e => ({ value: e, weight: e.weight })));
       encounterId = enc.id;
@@ -243,7 +249,7 @@ function buildRoom(
       break;
     }
     case "empty":
-      title = "Quiet Hall";
+      title = rng.pickOne(["Quiet Hall", "Hushed Passage", "Cold Turning"]);
       dangerRating = 0;
       break;
   }
@@ -252,13 +258,16 @@ function buildRoom(
   const extraction = type === "extraction" || extractionPoint
     ? generateExtractionPoint({ roomId: id, biome, tier, rng })
     : undefined;
+  const scaledDanger = type === "entrance" || type === "extraction" || type === "empty"
+    ? dangerRating
+    : dangerRating + getDepthDangerBonus(tier);
   const bareRoom: DungeonRoom = {
     id,
     type,
     biome,
     title,
-    description: desc,
-    dangerRating,
+    description: describeRoomAtDepth({ baseDescription, type, biome, tier, dangerRating: scaledDanger, rng }),
+    dangerRating: scaledDanger,
     connectedRoomIds: [],
     visited: false,
     completed: false,
@@ -269,10 +278,99 @@ function buildRoom(
     extractionPoint,
     extraction,
     searchState: createDefaultSearchState(),
-    scoutingProfile: computeScoutingProfile(type, biome, dangerRating, extractionPoint)
+    scoutingProfile: computeScoutingProfile(type, biome, scaledDanger, extractionPoint)
   };
   const activeEvent = maybeGenerateEvent({ room: bareRoom, biome, tier, rng });
   return activeEvent ? { ...bareRoom, activeEvent } : bareRoom;
+}
+
+function describeRoomAtDepth(params: {
+  baseDescription: string;
+  type: RoomType;
+  biome: DungeonBiome;
+  tier: number;
+  dangerRating: number;
+  rng: Rng;
+}): string {
+  const { baseDescription, type, biome, tier, dangerRating, rng } = params;
+  const details: string[] = [baseDescription];
+  if (tier >= 4) {
+    details.push(rng.pickOne(depthPressureDetails(biome)));
+  }
+  if (tier >= 7) {
+    details.push(rng.pickOne(deepPressureDetails(type, dangerRating)));
+  }
+  return details.join(" ");
+}
+
+function depthPressureDetails(biome: DungeonBiome): string[] {
+  switch (biome) {
+    case "crypt":
+      return [
+        "The stone is cold enough to ache through leather.",
+        "Old names have been scratched out and written again lower on the wall.",
+        "Fine grey dust shifts without a draft."
+      ];
+    case "goblinWarrens":
+      return [
+        "Fresh brace-work has been jammed into older, narrower cuts.",
+        "The tunnel has been used recently, and in a hurry.",
+        "Grease smoke clings low to the ceiling."
+      ];
+    case "fungalCaverns":
+      return [
+        "The caps here lean toward you before settling back.",
+        "Spores drift in slow sheets whenever your boot moves.",
+        "The floor gives softly, as if something underneath exhales."
+      ];
+    case "ruinedKeep":
+      return [
+        "The stones carry faint bootfalls that do not match yours.",
+        "Old banners stir although the room has no wind.",
+        "A command half-remembered seems to hang in the air."
+      ];
+    case "oldMine":
+      return [
+        "The timbers complain under a weight above you.",
+        "Black water beads on the walls and runs upward in places.",
+        "Distant picks strike once, then stop."
+      ];
+    case "sunkenTemple":
+      return [
+        "Salt crusts the seams in thick white veins.",
+        "Water whispers somewhere behind the stone.",
+        "The air tastes briny and old enough to swallow."
+      ];
+  }
+}
+
+function deepPressureDetails(type: RoomType, dangerRating: number): string[] {
+  if (type === "treasure" || type === "lockedChest") {
+    return [
+      "Whatever was hidden here was hidden from more than thieves.",
+      "The prize feels watched before it is even touched.",
+      "A careful hand left old warnings beneath the dust."
+    ];
+  }
+  if (type === "extraction") {
+    return [
+      "The way out is real, but it no longer feels close.",
+      "Every sound from above arrives thin and delayed.",
+      "The passage back seems to narrow when you look away."
+    ];
+  }
+  if (dangerRating >= 3 || type === "combat" || type === "eliteCombat" || type === "boss") {
+    return [
+      "Something has worn a patient path through this room.",
+      "The quiet here is practiced, not empty.",
+      "Marks on the floor show where others tried to stand their ground."
+    ];
+  }
+  return [
+    "The silence has weight now.",
+    "Even the dust seems reluctant to settle.",
+    "The room waits longer than it should."
+  ];
 }
 
 function maybeGenerateEvent(params: {
@@ -363,14 +461,20 @@ export function ensureRequiredRooms(
     const idx = findReplaceableIdx(minIdx)!;
     rooms[idx] = buildRoom(rng, biome, tier, "extraction", idx);
   }
-  const requiresBoss = tier <= RUN_RULES.maxDungeonDepth;
-  if (!has("boss") && (requiresBoss || rng.nextFloat() < RUN_RULES.bossRoomChanceTierOne)) {
+  if (!has("boss") && DEPTH_RULES.bossEveryDepth) {
     const idx = findReplaceableIdx(Math.max(1, Math.floor(rooms.length * 0.65)), rooms.length - 1, false) ??
-      (requiresBoss ? findReplaceableIdx(1, rooms.length - 1, false) : undefined);
+      findReplaceableIdx(1, rooms.length - 1, false);
     if (idx !== undefined) {
       rooms[idx] = buildRoom(rng, biome, tier, "boss", idx);
     }
   }
+}
+
+function getDepthDangerBonus(tier: number): number {
+  return Math.min(
+    DEPTH_RULES.maxDangerBonus,
+    Math.floor(Math.max(0, tier - 1) / DEPTH_RULES.dangerBonusEveryDepth)
+  );
 }
 
 function assignSpatialLayout(rooms: DungeonRoom[], rng: Rng): void {

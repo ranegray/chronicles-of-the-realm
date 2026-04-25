@@ -7,6 +7,7 @@ import type {
   EquipmentSlots,
   StatModifierBlock
 } from "./types";
+import { calculateFullDerivedStats } from "./buildMath";
 
 export function getModifier(score: number): number {
   return Math.floor((score - 10) / 2);
@@ -75,12 +76,12 @@ export function recalculateCharacterStats(
   ancestry: AncestryDefinition,
   cls: ClassDefinition
 ): Character {
-  const derivedStats = calculateDerivedStats(
-    character.abilityScores,
+  const derivedStats = calculateFullDerivedStats({
+    character,
     ancestry,
-    cls,
-    character.equipped
-  );
+    classDefinition: cls,
+    equipped: character.equipped
+  });
   const newMax = derivedStats.maxHp;
   const newHp = Math.min(character.hp, newMax);
   return {

@@ -126,6 +126,15 @@ export function formatResourceCost(cost: ResourceCost): string {
   return parts.length > 0 ? parts.join(", ") : "Free";
 }
 
+export function formatMaterialVault(materials: MaterialVault): string {
+  const parts: string[] = [];
+  for (const [id, amount] of Object.entries(materials) as [MaterialId, number][]) {
+    if (!amount || amount <= 0) continue;
+    parts.push(`${amount} ${getMaterialDefinition(id).name}`);
+  }
+  return parts.join(", ");
+}
+
 export function mergeMaterialVaults(...vaults: MaterialVault[]): MaterialVault {
   return vaults.reduce((acc, vault) => {
     for (const [id, amount] of Object.entries(vault) as [MaterialId, number][]) {

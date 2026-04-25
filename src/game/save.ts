@@ -8,6 +8,7 @@ import type {
   ExtractionVariant,
   GameState,
   Inventory,
+  ItemInstance,
   RoomSearchState,
   RunSummary,
   ScoutedRoomInfo,
@@ -15,12 +16,18 @@ import type {
 } from "./types";
 import { SAVE_VERSION, STORAGE_KEY, THREAT_RULES } from "./constants";
 import { createEmptyInventory } from "./inventory";
-import { createInitialThreatState, getThreatLevelFromPoints } from "./threat";
+import {
+  createInitialDelveStrainState,
+  createInitialThreatState,
+  getDelveStrainLevelFromPoints,
+  getThreatLevelFromPoints
+} from "./threat";
 import { createDefaultSearchState } from "./dungeonGenerator";
 import { normalizeMaterialVault } from "./materials";
 import { initializeVillageProgression } from "./villageProgression";
 import { initializeQuestChainsForVillage } from "./questChains";
 import { createRng } from "./rng";
+import { initializeCharacterProgression } from "./characterProgression";
 
 export function defaultGameState(): GameState {
   return {
@@ -32,7 +39,8 @@ export function defaultGameState(): GameState {
     pendingRunPreparations: [],
     settings: {
       onboardingComplete: false,
-      textSpeed: "normal"
+      textSpeed: "normal",
+      audioMuted: false
     }
   };
 }
@@ -84,6 +92,7 @@ export function migrateSaveIfNeeded(state: unknown): GameState | null {
     ...base,
     ...state,
     version: SAVE_VERSION,
+    player: normalizeCharacter(state.player),
     stash,
     preparedInventory: normalizeInventory(state.preparedInventory) ?? createEmptyInventory(),
     village,
@@ -120,9 +129,46 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function normalizeInventory(value: unknown): Inventory | null {
   if (!isRecord(value)) return null;
   return {
-    items: Array.isArray(value.items) ? value.items as Inventory["items"] : [],
+    items: Array.isArray(value.items) ? value.items.map(normalizeItem).filter(Boolean) as Inventory["items"] : [],
     gold: typeof value.gold === "number" && Number.isFinite(value.gold) ? value.gold : 0,
     materials: normalizeMaterialVault(value.materials)
+  };
+}
+
+function normalizeCharacter(value: unknown): GameState["player"] {
+  if (!isRecord(value)) return undefined;
+  const character = value as unknown as GameState["player"];
+  if (!character) return undefined;
+  const equipped = isRecord(value.equipped)
+    ? {
+        weapon: normalizeItem(value.equipped.weapon),
+        offhand: normalizeItem(value.equipped.offhand),
+        armor: normalizeItem(value.equipped.armor),
+        trinket1: normalizeItem(value.equipped.trinket1),
+        trinket2: normalizeItem(value.equipped.trinket2)
+      }
+    : {};
+  return initializeCharacterProgression({
+    character: {
+      ...character,
+      equipped
+    }
+  });
+}
+
+function normalizeItem(value: unknown): ItemInstance | undefined {
+  if (!isRecord(value)) return undefined;
+  if (typeof value.instanceId !== "string" || typeof value.templateId !== "string") return undefined;
+  const item = value as unknown as ItemInstance;
+  const states = Array.isArray(item.states) ? [...item.states] : [];
+  if (item.protected && !states.some(state => state.id === "protected")) {
+    states.push({ id: "protected", source: "debug", appliedAt: 0 });
+  }
+  return {
+    ...item,
+    affixes: Array.isArray(item.affixes) ? item.affixes : [],
+    states,
+    tags: Array.isArray(item.tags) ? item.tags : []
   };
 }
 
@@ -169,7 +215,7 @@ function normalizeRun(value: unknown): DungeonRun | undefined {
     startedAt: typeof value.startedAt === "number" ? value.startedAt : Date.now(),
     visitedRoomIds: Array.isArray(value.visitedRoomIds) ? value.visitedRoomIds as string[] : [value.currentRoomId],
     raidInventory: normalizeInventory(value.raidInventory) ?? createEmptyInventory(),
-    loadoutSnapshot: Array.isArray(value.loadoutSnapshot) ? value.loadoutSnapshot as DungeonRun["loadoutSnapshot"] : [],
+    loadoutSnapshot: Array.isArray(value.loadoutSnapshot) ? value.loadoutSnapshot.map(normalizeItem).filter(Boolean) as DungeonRun["loadoutSnapshot"] : [],
     activeQuestIds: Array.isArray(value.activeQuestIds) ? value.activeQuestIds as string[] : [],
     questProgressAtStart: isRecord(value.questProgressAtStart) ? value.questProgressAtStart as Record<string, number> : {},
     xpGained: typeof value.xpGained === "number" ? value.xpGained : 0,
@@ -177,6 +223,7 @@ function normalizeRun(value: unknown): DungeonRun | undefined {
     roomsCompletedBeforeDepth: typeof value.roomsCompletedBeforeDepth === "number" ? value.roomsCompletedBeforeDepth : 0,
     dangerLevel: typeof value.dangerLevel === "number" ? value.dangerLevel : 1,
     threat: normalizeThreatState(value.threat),
+    delveStrain: normalizeDelveStrainState(value.delveStrain),
     knownRoomIntel: normalizeKnownRoomIntel(value.knownRoomIntel),
     dungeonLog: normalizeDungeonLog(value.dungeonLog),
     appliedRunPreparations: Array.isArray(value.appliedRunPreparations) ? value.appliedRunPreparations as DungeonRun["appliedRunPreparations"] : []
@@ -219,6 +266,19 @@ function normalizeThreatState(value: unknown): ThreatState {
     maxLevel: maxLevel as ThreatState["maxLevel"],
     lastChangedAt: typeof value.lastChangedAt === "number" ? value.lastChangedAt : Date.now(),
     changes: Array.isArray(value.changes) ? value.changes as ThreatState["changes"] : []
+  };
+}
+
+function normalizeDelveStrainState(value: unknown): DungeonRun["delveStrain"] {
+  if (!isRecord(value)) return createInitialDelveStrainState();
+  const points = typeof value.points === "number" ? Math.max(0, value.points) : 0;
+  const level = getDelveStrainLevelFromPoints(points);
+  return {
+    points,
+    level,
+    maxLevel: 5,
+    lastChangedAt: typeof value.lastChangedAt === "number" ? value.lastChangedAt : Date.now(),
+    changes: Array.isArray(value.changes) ? value.changes as DungeonRun["delveStrain"]["changes"] : []
   };
 }
 
@@ -280,15 +340,25 @@ function normalizeCombat(value: unknown, run: DungeonRun): CombatState | undefin
     outcome: value.outcome === "victory" || value.outcome === "defeat" || value.outcome === "fled"
       ? value.outcome
       : undefined,
-    fromRoomId: value.fromRoomId
+    fromRoomId: value.fromRoomId,
+    actionRuntimeState: Array.isArray(value.actionRuntimeState) ? value.actionRuntimeState as CombatState["actionRuntimeState"] : []
   };
 }
 
 function normalizeRunSummaries(value: unknown): RunSummary[] {
   if (!Array.isArray(value)) return [];
-  return value.filter(isRecord) as unknown as RunSummary[];
+  return value.map(normalizeRunSummary).filter(Boolean) as RunSummary[];
 }
 
 function normalizeRunSummary(value: unknown): RunSummary | undefined {
-  return isRecord(value) ? value as unknown as RunSummary : undefined;
+  if (!isRecord(value)) return undefined;
+  return {
+    ...value,
+    lootExtracted: Array.isArray(value.lootExtracted) ? value.lootExtracted.map(normalizeItem).filter(Boolean) : [],
+    lootLost: Array.isArray(value.lootLost) ? value.lootLost.map(normalizeItem).filter(Boolean) : [],
+    gearLost: Array.isArray(value.gearLost) ? value.gearLost.map(normalizeItem).filter(Boolean) : [],
+    materialsExtracted: normalizeMaterialVault(value.materialsExtracted),
+    materialsLost: normalizeMaterialVault(value.materialsLost),
+    questRewards: Array.isArray(value.questRewards) ? value.questRewards.map(normalizeItem).filter(Boolean) : []
+  } as RunSummary;
 }

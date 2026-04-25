@@ -4,7 +4,8 @@ import type {
   Quest,
   VillageState,
   ItemInstance,
-  Inventory
+  Inventory,
+  MaterialVault
 } from "./types";
 import { moveRaidInventoryToStash, createEmptyInventory } from "./inventory";
 import { instanceFromTemplateId } from "./inventory";
@@ -14,6 +15,7 @@ export interface ExtractionRewardSummary {
   goldGained: number;
   xpGained: number;
   itemsSecured: ItemInstance[];
+  materialsSecured: MaterialVault;
   questsCompleted: Quest[];
   questRewards: ItemInstance[];
   unlocksApplied: string[];
@@ -36,6 +38,7 @@ export function applyExtractionRewards(args: {
     goldGained: 0,
     xpGained: run.xpGained,
     itemsSecured: [...run.raidInventory.items],
+    materialsSecured: { ...(run.raidInventory.materials ?? {}) },
     questsCompleted: [],
     questRewards: [],
     unlocksApplied: []
@@ -70,6 +73,7 @@ export interface DeathSummary {
   itemsLost: ItemInstance[];
   raidItemsLost: ItemInstance[];
   gearLost: ItemInstance[];
+  materialsLost: MaterialVault;
   goldLost: number;
 }
 
@@ -80,6 +84,7 @@ export function applyDeathPenalty(run: DungeonRun): { run: DungeonRun; summary: 
     itemsLost: [...raidItemsLost, ...gearLost],
     raidItemsLost,
     gearLost,
+    materialsLost: { ...(run.raidInventory.materials ?? {}) },
     goldLost: run.raidInventory.gold
   };
   const next: DungeonRun = {
@@ -97,6 +102,7 @@ export function applyAbandonPenalty(run: DungeonRun): { run: DungeonRun; summary
     itemsLost: raidItemsLost,
     raidItemsLost,
     gearLost: [],
+    materialsLost: { ...(run.raidInventory.materials ?? {}) },
     goldLost: run.raidInventory.gold
   };
   const next: DungeonRun = {

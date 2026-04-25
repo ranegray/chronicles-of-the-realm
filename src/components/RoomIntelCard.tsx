@@ -5,7 +5,7 @@ const TYPE_LABELS: Record<string, string> = {
   entrance: "Entrance",
   combat: "Combat",
   eliteCombat: "Elite",
-  treasure: "Treasure",
+  treasure: "Cache",
   trap: "Trap",
   shrine: "Shrine",
   npcEvent: "Voice",

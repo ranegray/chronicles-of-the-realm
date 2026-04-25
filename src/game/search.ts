@@ -14,7 +14,7 @@ import { detectTrap, triggerTrap } from "./traps";
 import { getLootTableForBiome } from "../data/lootTables";
 import { generateLootForRoomLootTableId, generateMaterialLoot } from "./lootGenerator";
 import { addItem, calculateInventoryWeight } from "./inventory";
-import { addMaterials } from "./materials";
+import { addMaterials, formatMaterialVault } from "./materials";
 import type { Rng } from "./rng";
 import { createRng } from "./rng";
 
@@ -133,60 +133,62 @@ export function searchCurrentRoom(params: {
     };
   }
 
-  // Room-type specific hidden loot pools
-  const loot = rollHiddenLoot({ run, character: nextCharacter, room, rng });
-  if (loot.length > 0) {
-    const capacity = nextCharacter.derivedStats.carryCapacity;
-    let raid = run.raidInventory;
-    const taken: ItemInstance[] = [];
-    for (const item of loot) {
-      const weight = calculateInventoryWeight(raid) + item.weight * item.quantity;
-      if (weight <= capacity) {
-        raid = addItem(raid, item);
-        taken.push(item);
+  if (!room.searchState?.hiddenLootClaimed) {
+    // Room-type specific hidden loot pools
+    const loot = rollHiddenLoot({ run, character: nextCharacter, room, rng });
+    if (loot.length > 0) {
+      const capacity = nextCharacter.derivedStats.carryCapacity;
+      let raid = run.raidInventory;
+      const taken: ItemInstance[] = [];
+      for (const item of loot) {
+        const weight = calculateInventoryWeight(raid) + item.weight * item.quantity;
+        if (weight <= capacity) {
+          raid = addItem(raid, item);
+          taken.push(item);
+        }
+      }
+      run = { ...run, raidInventory: raid };
+      run = updateRoomSearchState(run, room.id, prev => ({ ...prev, hiddenLootClaimed: prev.hiddenLootClaimed || taken.length > 0 }));
+      if (taken.length > 0) {
+        const names = taken.map(item => item.name).join(", ");
+        run = addDungeonLogEntry({
+          run, type: "loot", now, roomId: room.id,
+          message: `Hidden: ${names}.`
+        });
+        return {
+          run,
+          character: nextCharacter,
+          result: {
+            type: "hiddenLoot",
+            message: `You uncover ${names}.`,
+            loot: taken
+          }
+        };
       }
     }
-    run = { ...run, raidInventory: raid };
-    run = updateRoomSearchState(run, room.id, prev => ({ ...prev, hiddenLootClaimed: prev.hiddenLootClaimed || taken.length > 0 }));
-    if (taken.length > 0) {
-      const names = taken.map(item => item.name).join(", ");
+
+    const materials = generateMaterialLoot({ biome: room.biome, roomType: room.type, tier: run.tier, rng });
+    if (Object.keys(materials).length > 0) {
+      run = {
+        ...run,
+        raidInventory: addMaterials({ inventory: run.raidInventory, materials })
+      };
+      run = updateRoomSearchState(run, room.id, prev => ({ ...prev, hiddenLootClaimed: true }));
+      const names = formatMaterialVault(materials);
       run = addDungeonLogEntry({
         run, type: "loot", now, roomId: room.id,
-        message: `Hidden: ${names}.`
+        message: `Materials: ${names}.`
       });
       return {
         run,
         character: nextCharacter,
         result: {
           type: "hiddenLoot",
-          message: `You uncover ${names}.`,
-          loot: taken
+          message: `You gather ${names}.`,
+          loot: []
         }
       };
     }
-  }
-
-  const materials = generateMaterialLoot({ biome: room.biome, roomType: room.type, tier: run.tier, rng });
-  if (Object.keys(materials).length > 0) {
-    run = {
-      ...run,
-      raidInventory: addMaterials({ inventory: run.raidInventory, materials })
-    };
-    run = updateRoomSearchState(run, room.id, prev => ({ ...prev, hiddenLootClaimed: true }));
-    const names = Object.entries(materials).map(([id, amount]) => `${amount} ${id}`).join(", ");
-    run = addDungeonLogEntry({
-      run, type: "loot", now, roomId: room.id,
-      message: `Materials: ${names}.`
-    });
-    return {
-      run,
-      character: nextCharacter,
-      result: {
-        type: "hiddenLoot",
-        message: `You gather ${names}.`,
-        loot: []
-      }
-    };
   }
 
   // Rare ambush
@@ -236,7 +238,14 @@ export function rollHiddenLoot(params: {
   if (rng.nextFloat() > chance) return [];
 
   const lootTable = getLootTableForBiome(room.biome, run.tier);
-  return generateLootForRoomLootTableId(lootTable.id, rng, 1);
+  return generateLootForRoomLootTableId(lootTable.id, rng, 1, {
+    biome: run.biome,
+    tier: run.tier,
+    roomType: room.type,
+    source: room.type === "boss" ? "boss" : "treasure",
+    threatLevel: run.threat.level,
+    playerClassId: character.classId
+  });
 }
 
 // ---------------------------------------------------------------------------
