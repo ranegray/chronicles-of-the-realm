@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DungeonLog } from "../components/DungeonLog";
 import { EventChoicePanel } from "../components/EventChoicePanel";
 import { ExtractionPanel } from "../components/ExtractionPanel";
@@ -68,6 +69,8 @@ export function DungeonScreen() {
   const engage = useGameStore(s => s.engageCurrentRoomCombat);
   const [showMap, setShowMap] = useState(false);
   const [showLog, setShowLog] = useState(false);
+  const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
+  const [showDescendConfirm, setShowDescendConfirm] = useState(false);
 
   if (!run || !player) return <div className="screen">No active run.</div>;
   const current = getRoomById(run.roomGraph, run.currentRoomId);
@@ -109,11 +112,32 @@ export function DungeonScreen() {
           <span className="dungeon-header-biome muted small">{biome.description}</span>
         </div>
         <div className="dungeon-actions">
-          <Button variant="danger" onClick={() => {
-            if (confirm("Abandon the run? You will lose carried loot.")) abandon();
-          }}>Abandon Run</Button>
+          <Button variant="danger" onClick={() => setShowAbandonConfirm(true)}>Abandon Run</Button>
         </div>
       </header>
+
+      {showAbandonConfirm && (
+        <ConfirmDialog
+          title="Abandon the delve"
+          body="What you carry stays behind. The dungeon keeps what it is given."
+          confirmLabel="Leave it all"
+          cancelLabel="Stay"
+          danger
+          onConfirm={() => { setShowAbandonConfirm(false); abandon(); }}
+          onCancel={() => setShowAbandonConfirm(false)}
+        />
+      )}
+
+      {showDescendConfirm && (
+        <ConfirmDialog
+          title="Descend"
+          body="Unclaimed spoils on this floor will be lost to the dark below."
+          confirmLabel="Descend"
+          cancelLabel="Wait"
+          onConfirm={() => { setShowDescendConfirm(false); descend(); }}
+          onCancel={() => setShowDescendConfirm(false)}
+        />
+      )}
 
       <div className="dungeon-hud">
         <div className="dungeon-hud-hp">
@@ -179,7 +203,10 @@ export function DungeonScreen() {
             )}
             {current.type === "boss" && current.completed && (
               <Button variant="secondary" onClick={() => {
-                if (floorHasPendingLoot(run) && !confirm("Descend? Unclaimed loot on this floor will be lost.")) return;
+                if (floorHasPendingLoot(run)) {
+                  setShowDescendConfirm(true);
+                  return;
+                }
                 descend();
               }}>Descend</Button>
             )}

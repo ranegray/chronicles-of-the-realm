@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { calculateInventoryWeight } from "../game/inventory";
 import { useGameStore } from "../store/gameStore";
 import { ServiceLevelBadge } from "../components/ServiceLevelBadge";
@@ -15,6 +17,7 @@ export function VillageScreen() {
   const toggleQuest = useGameStore(s => s.toggleQuestActive);
   const resetSave = useGameStore(s => s.resetSave);
   const message = useGameStore(s => s.lastVillageMessage);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   if (!player || !village) {
     return <div className="screen">Loading…</div>;
@@ -36,9 +39,21 @@ export function VillageScreen() {
               type="button"
               className="delve-hero-reset"
               title="Reset save and return to the title"
-              onClick={() => { if (confirm("Reset save and return to the title?")) resetSave(); }}
+              onClick={() => setShowResetConfirm(true)}
             >Reset</button>
           </div>
+
+          {showResetConfirm && (
+            <ConfirmDialog
+              title="Burn the chronicle"
+              body="Burn the chronicle and begin again. Nothing of this journey will remain."
+              confirmLabel="Burn it"
+              cancelLabel="Keep going"
+              danger
+              onConfirm={() => { setShowResetConfirm(false); resetSave(); }}
+              onCancel={() => setShowResetConfirm(false)}
+            />
+          )}
           <h1>Enter the Dungeon</h1>
           <div className="delve-hero-meta">
             <span><em>Pack</em> {preparedWeight} / {player.derivedStats.carryCapacity}</span>
