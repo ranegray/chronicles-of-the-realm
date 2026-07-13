@@ -1,0 +1,135 @@
+/* Stash screen — the packing ritual (issue #28). One narrative column, same
+   reading surface as the village and dungeon screens. Packing is staged as
+   a sequence of decisions (wear, carry, leave, prepare), not a dashboard
+   of cards. */
+
+.pack-screen { padding: 14px 24px 20px; display: flex; flex-direction: column; gap: 0; }
+
+.pack-hero-eyebrow {
+  display: block;
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 2px;
+}
+
+.pack-hero-scene {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text);
+  margin: 4px 0 14px;
+}
+
+.pack-status-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 18px;
+}
+.pack-status-line em {
+  font-style: normal;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  margin-right: 4px;
+}
+
+.pack-section { margin-top: 8px; margin-bottom: 22px; }
+.pack-section-heading {
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin: 0 0 4px;
+}
+.pack-section-intro {
+  color: var(--text-dim);
+  font-style: italic;
+  margin: 0 0 10px;
+}
+
+/* Weight budget — slim, felt near the cap. */
+.pack-weight-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  overflow: hidden;
+  margin: 6px 0 12px;
+}
+.pack-weight-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 150ms ease, background 150ms ease;
+}
+.pack-weight-bar-fill.pack-weight-amber { background: var(--warn); }
+.pack-weight-bar-fill.pack-weight-over { background: var(--danger); }
+
+/* Row list — same grammar as the room loot panel: name · weight · value · action. */
+.pack-row-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pack-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.pack-row-name {
+  color: var(--text);
+  border-bottom: 1px dotted var(--text-muted);
+  cursor: default;
+  width: fit-content;
+}
+.pack-row-weight,
+.pack-row-value {
+  text-align: right;
+  white-space: nowrap;
+}
+.pack-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.pack-row-note {
+  grid-column: 1 / -1;
+}
+.pack-empty { color: var(--text-muted); font-style: italic; margin: 4px 0; }
+
+.pack-vault-line { margin-top: 10px; }
+.pack-vault-label {
+  display: block;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  margin-bottom: 4px;
+}
+
+/* Before You Go — three solemn choices, one section. */
+.pack-vow-block { margin-top: 16px; }
+.pack-vow-heading {
+  color: var(--text-dim);
+  font-size: 0.86rem;
+  letter-spacing: 0.04em;
+  margin: 0 0 4px;
+}
+.pack-vow-fiction {
+  color: var(--text-dim);
+  font-style: italic;
+  margin: 0 0 8px;
+}
+.pack-vow-block + .pack-vow-block { margin-top: 20px; }

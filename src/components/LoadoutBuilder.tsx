@@ -1,8 +1,9 @@
 import { Button } from "./Button";
 import { ItemTooltip } from "./ItemTooltip";
-import { GearRiskBadge } from "./GearRiskBadge";
-import type { Character, EquipmentSlots, ItemInstance } from "../game/types";
-import type { EquipmentChangePreview, EquipmentSlotName, ItemWithV4Fields } from "./v04UiTypes";
+import { Tooltip } from "./Tooltip";
+import type { Character, EquipmentSlots, ItemInstance, StatModifierBlock } from "../game/types";
+import type { EquipmentChangePreview, EquipmentSlotName } from "./v04UiTypes";
+import "./LoadoutBuilder.css";
 
 export interface LoadoutBuilderProps {
   character: Character;
@@ -36,42 +37,48 @@ export function LoadoutBuilder({
   const equippable = inventoryItems.filter(canEquip);
   return (
     <section className="loadout-builder">
-      <div className="equipment-grid">
+      <ul className="loadout-slot-list">
         {(Object.keys(EQUIPMENT_LABELS) as EquipmentSlotName[]).map(slot => {
           const item = character.equipped[slot];
           return (
-            <div className={`equipment-slot ${preview?.slot === slot ? "equipment-slot-previewing" : ""}`} key={slot}>
-              <div className="equipment-slot-header">
-                <strong>{EQUIPMENT_LABELS[slot]}</strong>
-                {item && !readOnly && onUnequip && (
-                  <Button variant="ghost" onClick={() => onUnequip(slot)}>
-                    {activeRun ? "Pack" : "Unequip"}
-                  </Button>
-                )}
-                {!item && readOnly && <span className="muted small">Empty</span>}
-              </div>
+            <li
+              className={`loadout-slot-row ${preview?.slot === slot ? "loadout-slot-row-previewing" : ""}`}
+              key={slot}
+            >
+              <span className="loadout-slot-label">{EQUIPMENT_LABELS[slot]}</span>
               {item ? (
-                <>
-                  <ItemTooltip item={item} />
-                  <GearRiskBadge states={(item as ItemWithV4Fields).states} />
-                </>
+                <Tooltip content={<ItemTooltip item={item} />} as="span">
+                  <span className="loadout-slot-item">{item.name}</span>
+                </Tooltip>
               ) : (
-                <em className="muted">Empty</em>
+                <em className="loadout-slot-empty">Empty</em>
               )}
-            </div>
+              <span className="loadout-slot-stat muted small">
+                {item ? keyStatFor(item) : ""}
+              </span>
+              {item && !readOnly && onUnequip ? (
+                <Button variant="ghost" onClick={() => onUnequip(slot)}>
+                  {activeRun ? "Pack" : "Unequip"}
+                </Button>
+              ) : (
+                <span />
+              )}
+            </li>
           );
         })}
-      </div>
+      </ul>
 
       {equippable.length > 0 && !readOnly && (
         <div className="loadout-pool">
-          <h4>Available Gear</h4>
-          <div className="loadout-pool-grid">
+          <h4 className="loadout-pool-heading">Gear on hand</h4>
+          <ul className="loadout-pool-list">
             {equippable.map(item => {
               const slot = defaultSlotForItem(item, character.equipped);
               return (
-                <article key={item.instanceId} className="loadout-pool-item">
-                  <ItemTooltip item={item} comparisonItem={slot ? character.equipped[slot] : undefined} />
+                <li key={item.instanceId} className="loadout-pool-row">
+                  <Tooltip content={<ItemTooltip item={item} comparisonItem={slot ? character.equipped[slot] : undefined} />} as="span">
+                    <span className="loadout-pool-name">{item.name}</span>
+                  </Tooltip>
                   <div className="loadout-pool-actions">
                     {slot ? (
                       <>
@@ -82,10 +89,10 @@ export function LoadoutBuilder({
                       <span className="muted small">No valid slot</span>
                     )}
                   </div>
-                </article>
+                </li>
               );
             })}
-          </div>
+          </ul>
         </div>
       )}
     </section>
@@ -114,4 +121,34 @@ function defaultSlotForItem(item: ItemInstance, equipped: EquipmentSlots): Equip
     if (!equipped.trinket2) return "trinket2";
   }
   return valid[0];
+}
+
+const KEY_STAT_LABELS: Record<string, string> = {
+  might: "Might",
+  agility: "Agility",
+  endurance: "Endurance",
+  intellect: "Intellect",
+  will: "Will",
+  presence: "Presence",
+  maxHp: "Max HP",
+  armor: "Armor",
+  accuracy: "Accuracy",
+  evasion: "Evasion",
+  critChance: "Crit %",
+  carryCapacity: "Carry",
+  magicPower: "Magic",
+  trapSense: "Trap Sense"
+};
+
+function keyStatFor(item: ItemInstance): string {
+  const stats = item.stats;
+  if (!stats) return "";
+  const entries = Object.entries(stats).filter(
+    ([, value]) => typeof value === "number" && value !== 0
+  ) as Array<[keyof StatModifierBlock, number]>;
+  if (entries.length === 0) return "";
+  const [key, value] = entries[0];
+  const label = KEY_STAT_LABELS[key] ?? key;
+  const signed = value > 0 ? `+${value}` : String(value);
+  return `${signed} ${label}`;
 }

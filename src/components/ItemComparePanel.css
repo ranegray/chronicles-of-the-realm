@@ -1,0 +1,41 @@
+/* Item compare panel — the preview a player weighs before committing to a swap. */
+
+.compare-panel {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg-1);
+}
+.compare-panel-empty { color: var(--text-muted); }
+.compare-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.compare-panel-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--accent-2);
+  letter-spacing: 0.02em;
+}
+.compare-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+.compare-diff {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 0;
+}
+.compare-diff div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.compare-diff dt { color: var(--text-muted); }
+.compare-diff dd { margin: 0; }

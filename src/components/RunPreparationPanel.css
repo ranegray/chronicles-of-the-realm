@@ -1,0 +1,23 @@
+/* Before You Go — run preparations, keepsake, and insurance as solemn,
+   full-width choice rows (same grammar as the village notice board). */
+
+.vow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+.vow-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vow-row-name { color: var(--text); }
+.vow-row-detail { color: var(--text-muted); font-size: 0.85em; }
+.pack-empty { color: var(--text-muted); font-style: italic; margin: 4px 0; }
