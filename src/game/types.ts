@@ -1031,6 +1031,21 @@ export interface GameState {
   pendingRunPreparations?: PreparedRunModifier[];
   pendingKeepsakeInstanceId?: string;
   pendingInsuredInstanceId?: string;
+  /** The Delve (v0.5) run layer. Optional/additive: absent on old saves and
+   *  whenever no delve run is active. See src/game/delve/types.ts. */
+  delveRun?: import("./delve/types").DelveRunState;
+  /** The raid pack carried into the active delve run (mirrors activeRun.raidInventory
+   *  for the old dungeon layer, tracked separately since DelveRunState itself holds
+   *  no inventory — the engine reports item/gold changes as events for the store). */
+  delveRaidPack?: Inventory;
+  /** Store-side bookkeeping for the active delve run that the pure engine doesn't
+   *  track itself (mirrors the run-start snapshot old runs take of keepsake/insurance). */
+  delveMeta?: {
+    startedAt: number;
+    xpGained: number;
+    keepsakeInstanceId?: string;
+    insuredInstanceId?: string;
+  };
 }
 
 export type RunEndReason =
@@ -1089,6 +1104,7 @@ export type ScreenId =
   | "village"
   | "dungeon"
   | "combat"
+  | "delve"
   | "runSummary"
   | "stash"
   | "character"

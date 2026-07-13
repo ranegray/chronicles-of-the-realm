@@ -2371,3 +2371,126 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   gap: 8px;
   margin-top: 10px;
 }
+
+/* ---------------------------------------------------------------------
+   The Delve (v0.5) — one narrative column, no minimap. Reuses the v0.4
+   narrative-column/passage-choice look; only the status strip and light
+   tint are new. See docs/design/the-delve.md Pillar 4.
+   --------------------------------------------------------------------- */
+.delve-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  transition: background 400ms ease, filter 400ms ease;
+}
+.delve-screen-dim { filter: saturate(0.9) brightness(0.96); }
+.delve-screen-dark {
+  filter: saturate(0.6) brightness(0.82);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.15));
+}
+
+.delve-status-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-1);
+}
+.delve-status-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-right: 6px;
+}
+.delve-status-hp { display: flex; align-items: center; }
+.delve-status-chip em {
+  font-style: normal;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  margin-right: 4px;
+}
+.delve-abandon-btn { margin-left: auto; }
+
+.delve-lamp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.86rem;
+  color: var(--text-dim);
+}
+.delve-lamp-glyph {
+  display: inline-block;
+  width: 10px;
+  height: 12px;
+  border-radius: 50% 50% 45% 45%;
+  background: var(--accent-2);
+  box-shadow: 0 0 6px 1px rgba(216, 178, 92, 0.55);
+}
+.delve-lamp-bright .delve-lamp-glyph { background: var(--accent-2); box-shadow: 0 0 7px 2px rgba(216, 178, 92, 0.6); }
+.delve-lamp-dim .delve-lamp-glyph { background: var(--warn); box-shadow: 0 0 5px 1px rgba(230, 134, 60, 0.45); }
+.delve-lamp-dark .delve-lamp-glyph { background: var(--text-muted); box-shadow: none; }
+.delve-lamp-dark .delve-lamp-value { color: var(--danger); }
+
+.delve-alertness-0 { color: var(--good); }
+.delve-alertness-1 { color: var(--text-dim); }
+.delve-alertness-2 { color: var(--accent-2); }
+.delve-alertness-3 { color: var(--warn); }
+.delve-alertness-4,
+.delve-alertness-5 { color: var(--danger); }
+
+.delve-column { gap: 6px; }
+.delve-entry {
+  margin: 0;
+  line-height: 1.55;
+  color: var(--text);
+}
+.delve-entry-room { font-size: 1.06rem; font-weight: 600; margin-top: 6px; }
+.delve-entry-sense { color: var(--text-dim); font-style: italic; }
+.delve-entry-action { color: var(--text); }
+.delve-entry-encounter { color: var(--warn); }
+.delve-entry-system { color: var(--accent-2); }
+.delve-entry-map { color: var(--text-dim); font-style: italic; }
+.delve-entry-dim { color: var(--text-muted); opacity: 0.66; }
+.delve-entry-dim.delve-entry-sense,
+.delve-entry-dim.delve-entry-map { color: var(--text-muted); }
+
+.delve-entry.delve-entry-in {
+  animation: delve-entry-fade-in 260ms ease-out backwards;
+}
+@keyframes delve-entry-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .delve-entry.delve-entry-in {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
+
+.delve-choices {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.delve-passage-choice {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 100ms ease, background 100ms ease;
+}
+.delve-passage-choice:hover { border-color: var(--accent); background: var(--bg-2); }

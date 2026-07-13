@@ -15,6 +15,7 @@ export function DevPanel() {
   const debugKillPlayer = useGameStore(s => s.debugKillPlayer);
   const debugForceExtraction = useGameStore(s => s.debugForceExtraction);
   const debugCompleteQuest = useGameStore(s => s.debugCompleteQuest);
+  const startDelveRun = useGameStore(s => s.startDelveRun);
 
   const metrics = useMemo(() => calculateRunMetrics(state.runSummaries), [state.runSummaries]);
   const saveJson = useMemo(() => JSON.stringify(state, null, 2), [state]);
@@ -47,6 +48,13 @@ export function DevPanel() {
           <Button variant="danger" onClick={debugKillPlayer} disabled={!state.activeRun}>Kill Player</Button>
           <Button variant="danger" onClick={debugForceExtraction} disabled={!state.activeRun}>Force Extract</Button>
           <Button variant="secondary" onClick={debugCompleteQuest} disabled={!state.village}>Complete Quest</Button>
+          <Button
+            variant="secondary"
+            onClick={() => startDelveRun("goblinWarrens")}
+            disabled={!state.player || Boolean(state.delveRun)}
+          >
+            Start Delve (Warrens)
+          </Button>
           <Button variant="ghost" onClick={() => setShowJson(value => !value)}>Save JSON</Button>
         </div>
 
