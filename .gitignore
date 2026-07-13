@@ -10,3 +10,4 @@ dist-ssr
 coverage
 *.tsbuildinfo
 .claude/settings.local.json
+.claude/worktrees/
