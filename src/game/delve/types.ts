@@ -141,6 +141,8 @@ export interface EncounterBeatResult {
   playerHpDelta: number;
   enemyHpDelta: number;
   noise: NoiseEvent;
+  /** Oil the run layer must spend for this beat/option resolution. */
+  oilAction: OilAction;
   over: boolean;
   outcome?: "won" | "escaped" | "dead";
 }

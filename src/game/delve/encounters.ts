@@ -25,16 +25,8 @@ import { COMBAT_RULES } from "../constants";
 import { getDamageBonus, guessWeaponDice } from "../combat";
 import { moveNoiseLoudness, NOISE_LOUDNESS } from "./noise";
 
-// ---------------------------------------------------------------------------
-// Contract note (see final report): EncounterBeatResult has no field for the
-// OilAction the design doc asks every beat/option resolution to report
-// ("costs 1 oil (return the OilAction; the run layer spends it)"). Rather
-// than editing types.ts, this module returns a superset that is structurally
-// still an EncounterBeatResult.
-// ---------------------------------------------------------------------------
-export interface DelveEncounterBeatResult extends EncounterBeatResult {
-  oilAction: OilAction;
-}
+/** @deprecated The contract now carries oilAction; use EncounterBeatResult. */
+export type DelveEncounterBeatResult = EncounterBeatResult;
 
 // ---------------------------------------------------------------------------
 // Tuning constants (documented judgment calls; see docs/design/the-delve.md
