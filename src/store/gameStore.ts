@@ -1245,7 +1245,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
         next = notifyQuestEvent(next, { kind: "miniBossDefeated", biome: room.biome });
       }
     }
-    const enemyDrops = rollCombatDrops(room, run, rng);
+    // While an extraction is charging, the room's loot panel is hidden and
+    // stays hidden until the run ends — so any combat drops rolled during a
+    // per-turn ambush here would be undepositable/unclaimable. Suppress the
+    // drop at the source rather than generating an item nobody can claim.
+    const isChargingExtraction = room.type === "extraction" && room.extraction?.state === "charging";
+    const enemyDrops = isChargingExtraction ? [] : rollCombatDrops(room, run, rng);
     if (enemyDrops.length > 0 && next.activeRun) {
       lootMessages.push(...enemyDrops.map(item => item.name));
       next = { ...next, activeRun: depositPendingLoot(next.activeRun, room.id, { items: enemyDrops }) };
