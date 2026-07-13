@@ -34,7 +34,7 @@ export function canCraftRecipe(params: {
   reason?: string;
   missing?: ResourceCost;
 } {
-  if (params.gameState.activeRun) {
+  if (params.gameState.delveRun) {
     return { canCraft: false, reason: "Crafting is only available in the village." };
   }
   const recipe = getCraftingRecipe(params.recipeId);

@@ -30,7 +30,7 @@ export function VillageScreen() {
   const village = useGameStore(s => s.state.village);
   const stash = useGameStore(s => s.state.stash);
   const preparedInventory = useGameStore(s => s.state.preparedInventory);
-  const startRun = useGameStore(s => s.startDungeonRun);
+  const startDelveRun = useGameStore(s => s.startDelveRun);
   const goToScreen = useGameStore(s => s.goToScreen);
   const openMerchant = useGameStore(s => s.openMerchant);
   const toggleQuest = useGameStore(s => s.toggleQuestActive);
@@ -84,9 +84,9 @@ export function VillageScreen() {
           {message && <p className="msg village-message">{message}</p>}
 
           <section className="village-decision" aria-label="Today's decision">
-            <h1 className="village-decision-title">Enter the Dungeon</h1>
+            <h1 className="village-decision-title">Enter the Warrens</h1>
             <div className="village-decision-actions">
-              <Button className="btn-hero" onClick={() => startRun()}>Enter the Dungeon</Button>
+              <Button className="btn-hero" onClick={() => startDelveRun("goblinWarrens")}>Enter the Warrens</Button>
               <Button variant="secondary" onClick={() => goToScreen("stash")}>Pack Gear</Button>
             </div>
             <div className="village-decision-meta muted small">

@@ -1,12 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { applyDeathPenalty, resolveDeathOutcome } from "../game/progression";
 import { CharacterCreationService, createEmptyDraft } from "../game/characterCreation";
-import { generateDungeonRun } from "../game/dungeonGenerator";
 import { addItem, createEmptyInventory, instanceFromTemplateId } from "../game/inventory";
 import { createRng } from "../game/rng";
-import { defaultGameState, loadGame, saveGame } from "../game/save";
-import { SAVE_VERSION } from "../game/constants";
-import type { GameState } from "../game/types";
+import type { DungeonRun } from "../game/types";
 
 function buildPlayer() {
   let d = createEmptyDraft("death-cost");
@@ -19,9 +16,37 @@ function buildPlayer() {
   return CharacterCreationService.finalizeCharacter(d).character;
 }
 
+/**
+ * A minimal DungeonRun fixture, standing in for the delve-run adapter
+ * gameStore.ts builds at run's end (see buildDelveRunAdapter). Death/
+ * abandon/extraction penalty math only reads raidInventory, loadoutSnapshot,
+ * activeQuestIds, keepsakeInstanceId, and insuredInstanceId — everything
+ * else here is filler.
+ */
+function buildFakeRun(seed: string): DungeonRun {
+  return {
+    runId: seed,
+    seed,
+    biome: "goblinWarrens",
+    tier: 1,
+    status: "active",
+    startedAt: 0,
+    currentRoomId: "entry",
+    roomGraph: [],
+    visitedRoomIds: ["entry"],
+    raidInventory: createEmptyInventory(),
+    loadoutSnapshot: [],
+    activeQuestIds: [],
+    questProgressAtStart: {},
+    xpGained: 0,
+    roomsVisitedBeforeDepth: 0,
+    roomsCompletedBeforeDepth: 0
+  };
+}
+
 describe("death cost", () => {
   it("death loses the raid pack and all equipped gear", () => {
-    const run = generateDungeonRun({ seed: "death-cost-full" });
+    const run = buildFakeRun("death-cost-full");
     const rng = createRng("dc1");
     run.raidInventory = addItem(run.raidInventory, instanceFromTemplateId("material_bone_dust", rng, 3));
     run.raidInventory = { ...run.raidInventory, gold: 50 };
@@ -40,7 +65,7 @@ describe("death cost", () => {
   });
 
   it("quest items always survive death", () => {
-    const run = generateDungeonRun({ seed: "death-cost-quest" });
+    const run = buildFakeRun("death-cost-quest");
     const rng = createRng("dc2");
     const questItem = instanceFromTemplateId("quest_lost_sign", rng);
     run.raidInventory = addItem(run.raidInventory, questItem);
@@ -55,7 +80,7 @@ describe("death cost", () => {
 
   it("a designated keepsake survives death via resolveDeathOutcome", () => {
     const player = buildPlayer();
-    const run = generateDungeonRun({ seed: "death-cost-keepsake" });
+    const run = buildFakeRun("death-cost-keepsake");
     const rng = createRng("dc3");
     const keepsake = instanceFromTemplateId("trinket_minor_ward", rng); // weight 0
     run.raidInventory = addItem(run.raidInventory, keepsake);
@@ -68,7 +93,7 @@ describe("death cost", () => {
   });
 
   it("a non-weightless item cannot be a keepsake", () => {
-    const run = generateDungeonRun({ seed: "death-cost-keepsake-invalid" });
+    const run = buildFakeRun("death-cost-keepsake-invalid");
     const rng = createRng("dc3b");
     const heavyItem = instanceFromTemplateId("weapon_short_sword", rng); // has weight
     run.raidInventory = addItem(run.raidInventory, heavyItem);
@@ -84,7 +109,7 @@ describe("death cost", () => {
     const insuredWeapon = player.equipped.weapon!;
     const otherGear = player.equipped.offhand;
 
-    const run = generateDungeonRun({ seed: "death-cost-insurance" });
+    const run = buildFakeRun("death-cost-insurance");
     run.loadoutSnapshot = [insuredWeapon, ...(otherGear ? [otherGear] : [])];
     run.insuredInstanceId = insuredWeapon.instanceId;
 
@@ -102,50 +127,5 @@ describe("death cost", () => {
       expect(recoveredPlayer.equipped.offhand).toBeUndefined();
       expect(stash.items.some(i => i.instanceId === otherGear.instanceId)).toBe(false);
     }
-  });
-
-  it("loads an old save shape lacking keepsake/insurance fields on the active run", () => {
-    localStorage.clear();
-    const run = generateDungeonRun({ seed: "death-cost-legacy" });
-    const legacy = {
-      ...defaultGameState(),
-      version: 3,
-      activeRun: run
-    } as unknown as GameState;
-    // Simulate a pre-feature save: no keepsakeInstanceId/insuredInstanceId/pending* fields at all.
-    delete (legacy.activeRun as unknown as Record<string, unknown>).keepsakeInstanceId;
-    delete (legacy.activeRun as unknown as Record<string, unknown>).insuredInstanceId;
-
-    saveGame(legacy);
-    const loaded = loadGame();
-    expect(loaded?.version).toBe(SAVE_VERSION);
-    expect(loaded?.activeRun?.keepsakeInstanceId).toBeUndefined();
-    expect(loaded?.activeRun?.insuredInstanceId).toBeUndefined();
-    expect(loaded?.pendingKeepsakeInstanceId).toBeUndefined();
-    expect(loaded?.pendingInsuredInstanceId).toBeUndefined();
-  });
-
-  it("round-trips keepsake/insurance fields through save and load", () => {
-    localStorage.clear();
-    const rng = createRng("death-cost-roundtrip");
-    const run = generateDungeonRun({ seed: "death-cost-roundtrip" });
-    const keepsake = instanceFromTemplateId("trinket_minor_ward", rng);
-    run.raidInventory = addItem(run.raidInventory, keepsake);
-    run.keepsakeInstanceId = keepsake.instanceId;
-    run.insuredInstanceId = "some-weapon-instance-id";
-
-    const state: GameState = {
-      ...defaultGameState(),
-      activeRun: run,
-      pendingKeepsakeInstanceId: "pending-keepsake-id",
-      pendingInsuredInstanceId: "pending-insured-id"
-    };
-
-    saveGame(state);
-    const loaded = loadGame();
-    expect(loaded?.activeRun?.keepsakeInstanceId).toBe(keepsake.instanceId);
-    expect(loaded?.activeRun?.insuredInstanceId).toBe("some-weapon-instance-id");
-    expect(loaded?.pendingKeepsakeInstanceId).toBe("pending-keepsake-id");
-    expect(loaded?.pendingInsuredInstanceId).toBe("pending-insured-id");
   });
 });

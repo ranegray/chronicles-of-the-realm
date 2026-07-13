@@ -89,7 +89,7 @@ export function canPerformServiceAction(params: {
   reason?: string;
   cost?: ServiceActionDefinition["cost"];
 } {
-  if (params.gameState.activeRun) return { canPerform: false, reason: "Service actions are only available in the village." };
+  if (params.gameState.delveRun) return { canPerform: false, reason: "Service actions are only available in the village." };
   const action = getAvailableServiceActions(params).find(entry => entry.id === params.actionId);
   if (!action) return { canPerform: false, reason: "Action is locked." };
   if (action.cost && !canAffordResourceCost({ inventory: params.gameState.stash, cost: action.cost })) {

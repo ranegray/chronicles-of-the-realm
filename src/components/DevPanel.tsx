@@ -8,14 +8,11 @@ export function DevPanel() {
   const state = useGameStore(s => s.state);
   const newGame = useGameStore(s => s.newGame);
   const updateSettings = useGameStore(s => s.updateSettings);
-  const debugGenerateDungeonSeed = useGameStore(s => s.debugGenerateDungeonSeed);
   const debugGiveGold = useGameStore(s => s.debugGiveGold);
   const debugHealPlayer = useGameStore(s => s.debugHealPlayer);
   const debugSpawnTestLoot = useGameStore(s => s.debugSpawnTestLoot);
   const debugKillPlayer = useGameStore(s => s.debugKillPlayer);
-  const debugForceExtraction = useGameStore(s => s.debugForceExtraction);
   const debugCompleteQuest = useGameStore(s => s.debugCompleteQuest);
-  const startDelveRun = useGameStore(s => s.startDelveRun);
 
   const metrics = useMemo(() => calculateRunMetrics(state.runSummaries), [state.runSummaries]);
   const saveJson = useMemo(() => JSON.stringify(state, null, 2), [state]);
@@ -41,20 +38,11 @@ export function DevPanel() {
           >
             New Game
           </Button>
-          <Button variant="secondary" onClick={debugGenerateDungeonSeed}>New Seed</Button>
           <Button variant="secondary" onClick={debugGiveGold}>+100 Gold</Button>
           <Button variant="secondary" onClick={debugHealPlayer}>Heal</Button>
           <Button variant="secondary" onClick={debugSpawnTestLoot}>Spawn Loot</Button>
-          <Button variant="danger" onClick={debugKillPlayer} disabled={!state.activeRun}>Kill Player</Button>
-          <Button variant="danger" onClick={debugForceExtraction} disabled={!state.activeRun}>Force Extract</Button>
+          <Button variant="danger" onClick={debugKillPlayer} disabled={!state.delveRun}>Kill Player</Button>
           <Button variant="secondary" onClick={debugCompleteQuest} disabled={!state.village}>Complete Quest</Button>
-          <Button
-            variant="secondary"
-            onClick={() => startDelveRun("goblinWarrens")}
-            disabled={!state.player || Boolean(state.delveRun)}
-          >
-            Start Delve (Warrens)
-          </Button>
           <Button variant="ghost" onClick={() => setShowJson(value => !value)}>Save JSON</Button>
         </div>
 

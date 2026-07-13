@@ -1,8 +1,6 @@
 import { create } from "zustand";
 import type {
   Character,
-  CombatState,
-  DungeonRoom,
   DungeonRun,
   GameSettings,
   GameState,
@@ -14,8 +12,6 @@ import type {
   ItemState,
   ItemStateId,
   Quest,
-  QuestEvent,
-  RoomType,
   RunSummary,
   ScreenId,
   VillageState
@@ -27,42 +23,15 @@ import {
 } from "../game/characterCreation";
 import { generateVillage } from "../game/npcGenerator";
 import { seedVillageQuests } from "../game/questGenerator";
-import { applyQuestEventToList } from "../game/questGenerator";
-import { generateDungeonRun, getRoomById } from "../game/dungeonGenerator";
 import { defaultGameState, loadGame, resetGame, saveGame } from "../game/save";
 import { addItem, calculateInventoryWeight, createEmptyInventory, instanceFromTemplateId, removeItem } from "../game/inventory";
 import { getConsumableHealFormula, rollConsumableHealAmount } from "../game/itemEffects";
-import { generateLootForRoomLootTableId, generateMaterialLoot, rollGold } from "../game/lootGenerator";
-import { getLootTableForBiome } from "../data/lootTables";
-import { getBiome } from "../data/biomes";
-import { getEncounter, getEncountersForBiome } from "../data/encounters";
 import { getEnemy } from "../data/enemies";
 import { getAncestry } from "../data/ancestries";
 import { getClass } from "../data/classes";
-import { startCombat as startCombatBase, resolvePlayerAction, type CombatAction } from "../game/combat";
 import { applyExtractionRewards, applyXpAndLevel, resolveAbandonOutcome, resolveDeathOutcome, type DeathSummary, type ExtractionRewardSummary } from "../game/progression";
 import { appendRunSummary, buildRunSummary } from "../game/runSummary";
-import { getModifier, recalculateCharacterStats } from "../game/characterMath";
-import { THREAT_RULES } from "../game/constants";
-import type { CombatThreatDelta } from "../game/combat";
-import type { DungeonLogEntryType, ThreatChange, ThreatChangeReason, ThreatState } from "../game/types";
-import {
-  applyDelveStrainChange,
-  applyThreatChange,
-  calculateDescendStrainGain,
-  createThreatStateWithCarryover,
-  getThreatModifiers,
-  getThreatLevelFromPoints,
-  createInitialDelveStrainState
-} from "../game/threat";
-import { addDungeonLogEntry } from "../game/dungeonLog";
-import { clearPendingLoot, depositPendingLoot, getPendingLoot, hasPendingLoot } from "../game/pendingLoot";
-import { scoutAdjacentRooms } from "../game/scouting";
-import { searchCurrentRoom } from "../game/search";
-import { disarmTrap as disarmTrapCheck, triggerTrap } from "../game/traps";
-import { resolveEventChoice } from "../game/roomEvents";
-import { activateExtraction as activateExtractionFlow, canAttemptExtraction, pickGuardEncounter, resolveExtractionTurn } from "../game/extraction";
-import type { ExtractionActivationResult } from "../game/extraction";
+import { recalculateCharacterStats } from "../game/characterMath";
 import {
   canMerchantUpgrade,
   getBuyPrice,
@@ -73,16 +42,13 @@ import {
   upgradeItem,
   type EquipmentSlotId
 } from "../game/merchants";
-import type { Rng } from "../game/rng";
 import { createRng, randomSeed } from "../game/rng";
-import { addMaterials, formatMaterialVault } from "../game/materials";
 import { initializeVillageProgression, upgradeNpcService as upgradeNpcServiceBase } from "../game/villageProgression";
 import { initializeQuestChainsForVillage, advanceQuestChainAfterQuestClaim } from "../game/questChains";
 import { craftRecipe as craftRecipeBase } from "../game/crafting";
 import { performServiceAction as performServiceActionBase } from "../game/services";
 import {
   purchaseRunPreparation as purchaseRunPreparationBase,
-  applyRunPreparationsToRun,
   purchaseInsurance as purchaseInsuranceBase,
   cancelInsurance as cancelInsuranceBase,
   setKeepsake as setKeepsakeBase,
@@ -97,7 +63,6 @@ import {
 import { learnTalent as learnTalentBase } from "../game/talents";
 import { previewEquipmentChange as previewEquipmentChangeBase } from "../game/equipment";
 import { addItemState, removeItemState } from "../game/itemStates";
-import { resolveCombatAction as resolveCombatActionBase } from "../game/combatActions";
 import { playSfx, setAudioMuted } from "../game/audio";
 import { createDelveRun, applyDelveAction } from "../game/delve/delveRun";
 import type { DelveAction, DelveRunDeps, DelveRunState } from "../game/delve/types";
@@ -134,36 +99,10 @@ export interface GameStore {
   draftSelectKit: (kitId: string) => void;
   finalizeCharacter: () => void;
 
-  // Village / dungeon
+  // Village
   enterVillage: () => void;
   toggleQuestActive: (questId: string) => void;
-  startDungeonRun: (questIds?: string[]) => void;
-  abandonRun: () => void;
   openMerchant: (npcId: string) => void;
-
-  // Dungeon actions
-  moveToRoom: (roomId: string) => void;
-  searchRoom: () => void;
-  disarmTrap: () => void;
-  chooseRoomEventOption: (choiceId: string) => void;
-  lootRoom: () => void;
-  leaveRoomLoot: () => void;
-  attemptExtract: () => void;
-  continueExtraction: () => void;
-  descendDungeon: () => void;
-  takeItemFromRoom: (item: ItemInstance) => void;
-  useRaidConsumable: (itemInstanceId: string) => void;
-  equipItemFromRaid: (itemInstanceId: string, preferredSlot?: EquipmentSlotId) => void;
-  unequipItemToRaid: (slot: EquipmentSlotId) => void;
-  dropRaidItem: (itemInstanceId: string) => void;
-
-  // Combat
-  engageCurrentRoomCombat: () => void;
-  performCombatAction: (action: CombatAction) => void;
-  useCombatInventoryItem: (itemInstanceId: string) => void;
-  performAutoCombat: () => void;
-  closeCombatVictory: () => void;
-  closeCombatFlee: () => void;
 
   // Inventory / village actions
   useStashConsumable: (itemInstanceId: string) => void;
@@ -191,9 +130,8 @@ export interface GameStore {
   cancelInsurance: () => void;
   setKeepsake: (itemInstanceId: string) => void;
   clearKeepsake: () => void;
-  startDungeonRunWithPreparations: (params?: { biome?: import("../game/types").DungeonBiome; seed?: string }) => void;
 
-  // The Delve (v0.5 run layer)
+  // The Delve (v0.5 run layer) — the only way to run a dungeon
   startDelveRun: (placeId: string) => void;
   performDelveAction: (action: DelveAction) => void;
   resolveDelveRunEnd: () => void;
@@ -207,36 +145,19 @@ export interface GameStore {
   equipItem: (itemInstanceId: string, slot: EquipmentSlotName) => void;
   unequipItem: (slot: EquipmentSlotName) => void;
   previewEquipmentChange: (itemInstanceId: string, slot: EquipmentSlotName) => EquipmentChangePreview | undefined;
-  useCombatAction: (actionId: string, targetEnemyInstanceId?: string) => void;
   repairDamagedItem: (itemInstanceId: string) => void;
   applyItemStateFromService: (itemInstanceId: string, stateId: ItemStateId) => void;
 
   // Dev tools
-  debugGenerateDungeonSeed: () => void;
   debugGiveGold: () => void;
   debugHealPlayer: () => void;
   debugSpawnTestLoot: () => void;
   debugKillPlayer: () => void;
-  debugForceExtraction: () => void;
   debugCompleteQuest: () => void;
 }
 
-// Only used now as a one-shot "already interacted" guard for npcEvent/questObjective
-// rooms, which have no loot of their own. Loot lives in room.pendingLoot (persisted).
-interface RoomScratch {
-  searched?: boolean;
-}
-
-const roomScratch = new Map<string, RoomScratch>();
-
 function persist(state: GameState) {
   saveGame(state);
-}
-
-function notifyQuestEvent(state: GameState, event: QuestEvent): GameState {
-  if (!state.village) return state;
-  const newQuests = applyQuestEventToList(state.village.quests, event);
-  return { ...state, village: { ...state.village, quests: newQuests } };
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -256,7 +177,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   resetSave: () => {
     resetGame();
-    roomScratch.clear();
     setAudioMuted(false);
     set({
       screen: "mainMenu",
@@ -272,7 +192,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   newGame: () => {
     resetGame();
-    roomScratch.clear();
     const fresh = defaultGameState();
     setAudioMuted(fresh.settings.audioMuted);
     set({
@@ -295,10 +214,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const s = get().state;
     if (!s.player) {
       get().startCharacterCreation();
-    } else if (s.activeCombat && !s.activeCombat.over) {
-      set({ screen: "combat" });
-    } else if (s.activeRun && s.activeRun.status === "active") {
-      set({ screen: "dungeon" });
+    } else if (s.delveRun && s.delveRun.status === "active") {
+      set({ screen: "delve" });
     } else {
       set({ screen: "village" });
     }
@@ -412,100 +329,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
     const next: GameState = { ...s, village: { ...s.village, quests: newQuests } };
     set({ state: next });
-    persist(next);
-  },
-
-  startDungeonRun: questIds => {
-    const s = get().state;
-    if (!s.player) return;
-    const seed = randomSeed();
-    const activeIds: string[] = questIds ??
-      (s.village?.quests.filter(q => q.status === "active").map(q => q.id) ?? []);
-
-    let run = generateDungeonRun({ seed, activeQuestIds: activeIds });
-    run.raidInventory = s.preparedInventory ?? createEmptyInventory();
-    run.loadoutSnapshot = collectLoadoutSnapshot(s.player);
-    run.questProgressAtStart = captureQuestProgress(s.village, activeIds);
-    run.keepsakeInstanceId = resolveKeepsakeForRun(s, run.raidInventory);
-    run.insuredInstanceId = resolveInsuredForRun(s, s.player);
-    const prepared = applyRunPreparationsToRun({
-      run,
-      character: s.player,
-      preparations: s.pendingRunPreparations ?? [],
-      rng: createRng(`prep:${seed}`)
-    });
-    run = scoutFromCurrent(prepared.run, prepared.character, s.village);
-    roomScratch.clear();
-    const next: GameState = {
-      ...s,
-      player: prepared.character,
-      activeRun: run,
-      preparedInventory: createEmptyInventory(),
-      pendingRunPreparations: (s.pendingRunPreparations ?? []).filter(prep => !prepared.appliedPreparations.some(applied => applied.id === prep.id)),
-      pendingKeepsakeInstanceId: undefined,
-      pendingInsuredInstanceId: undefined
-    };
-    set({ state: next, screen: "dungeon", lastRoomMessage: `You enter ${getBiome(run.biome).name}.` });
-    persist(next);
-  },
-
-  startDungeonRunWithPreparations: params => {
-    const s = get().state;
-    if (!s.player) return;
-    const seed = params?.seed ?? randomSeed();
-    const activeIds = s.village?.quests.filter(q => q.status === "active").map(q => q.id) ?? [];
-    let run = generateDungeonRun({ seed, biome: params?.biome, activeQuestIds: activeIds });
-    run.raidInventory = s.preparedInventory ?? createEmptyInventory();
-    run.loadoutSnapshot = collectLoadoutSnapshot(s.player);
-    run.questProgressAtStart = captureQuestProgress(s.village, activeIds);
-    run.keepsakeInstanceId = resolveKeepsakeForRun(s, run.raidInventory);
-    run.insuredInstanceId = resolveInsuredForRun(s, s.player);
-    const prepared = applyRunPreparationsToRun({
-      run,
-      character: s.player,
-      preparations: s.pendingRunPreparations ?? [],
-      rng: createRng(`prep:${seed}`)
-    });
-    run = scoutFromCurrent(prepared.run, prepared.character, s.village);
-    roomScratch.clear();
-    const next: GameState = {
-      ...s,
-      player: prepared.character,
-      activeRun: run,
-      preparedInventory: createEmptyInventory(),
-      pendingRunPreparations: (s.pendingRunPreparations ?? []).filter(prep => !prepared.appliedPreparations.some(applied => applied.id === prep.id)),
-      pendingKeepsakeInstanceId: undefined,
-      pendingInsuredInstanceId: undefined
-    };
-    set({ state: next, screen: "dungeon", lastRoomMessage: `You enter the ${run.biome} (${run.seed}).` });
-    persist(next);
-  },
-
-  abandonRun: () => {
-    const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    const { run, player, stash, summary } = resolveAbandonOutcome({
-      run: s.activeRun,
-      player: s.player,
-      stash: s.stash
-    });
-    const runSummary = buildRunSummary({
-      run,
-      village: s.village,
-      reason: "abandoned",
-      reasonText: "You cut the line and left the raid pack behind.",
-      death: summary
-    });
-    const next: GameState = {
-      ...s,
-      player,
-      stash,
-      activeRun: undefined,
-      completedRuns: [...s.completedRuns, run],
-      lastRunSummary: runSummary,
-      runSummaries: appendRunSummary(s.runSummaries, runSummary)
-    };
-    set({ state: next, lastDeathSummary: summary, lastExtractionSummary: undefined, screen: "runSummary" });
     persist(next);
   },
 
@@ -626,822 +449,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const s = get().state;
     if (!s.delveRun || !s.player) return;
     finishDelveRunAbandoned(get, set, s, s.delveRun);
-  },
-
-  moveToRoom: roomId => {
-    const s = get().state;
-    const run = s.activeRun;
-    if (!run) return;
-    const current = getRoomById(run.roomGraph, run.currentRoomId);
-    const target = getRoomById(run.roomGraph, roomId);
-    if (!current || !target || !current.connectedRoomIds.includes(roomId)) return;
-
-    const wasVisited = run.visitedRoomIds.includes(roomId);
-    const updatedRooms: DungeonRoom[] = run.roomGraph.map(r =>
-      r.id === roomId ? { ...r, visited: true } : r
-    );
-    let updatedRun: DungeonRun = {
-      ...run,
-      currentRoomId: roomId,
-      roomGraph: updatedRooms,
-      visitedRoomIds: wasVisited ? run.visitedRoomIds : [...run.visitedRoomIds, roomId]
-    };
-
-    updatedRun = logInRun(
-      updatedRun,
-      "info",
-      wasVisited
-        ? `You step back into ${target.title}.`
-        : `You enter ${target.title}.`,
-      roomId
-    );
-
-    const threatAmount = wasVisited
-      ? THREAT_RULES.gains.revisitedRoom
-      : THREAT_RULES.gains.enteredNewRoom;
-    const threatReason: ThreatChangeReason = "enteredRoom";
-    updatedRun = applyRunThreat(
-      updatedRun,
-      threatAmount,
-      threatReason,
-      roomId
-    ).run;
-
-    updatedRun = scoutFromCurrent(updatedRun, s.player, s.village);
-
-    let next: GameState = { ...s, activeRun: updatedRun };
-
-    next = notifyQuestEvent(next, {
-      kind: "roomScouted",
-      roomType: target.type,
-      biome: target.biome
-    });
-    next = notifyQuestEvent(next, {
-      kind: "depthReached",
-      roomCount: next.activeRun!.visitedRoomIds.length,
-      biome: target.biome
-    });
-
-    set({ state: next, lastRoomMessage: undefined });
-    persist(next);
-
-    // Auto-trigger encounters on entering a combat room.
-    // Trap rooms no longer fire on entry — search to detect/disarm/trigger.
-    if ((target.type === "combat" || target.type === "boss" || target.type === "eliteCombat") && !target.completed) {
-      maybeStartCombatForRoom(get, set, target);
-    }
-  },
-
-  searchRoom: () => {
-    const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    const run = s.activeRun;
-    const room = getRoomById(run.roomGraph, run.currentRoomId);
-    if (!room) return;
-
-    // Trap rooms and general "look-for-hidden" rooms go through the new search system.
-    if (isNewSearchRoomType(room.type)) {
-      const searchResult = searchCurrentRoom({ run, character: s.player });
-      const nextRun = searchResult.run;
-      const nextPlayer: Character = searchResult.character;
-      const nextState: GameState = { ...s, activeRun: nextRun, player: nextPlayer };
-      if (searchResult.result.type === "ambush") {
-        const ambushRng = createRng(`ambush:${nextRun.seed}:${room.id}:${Date.now()}`);
-        const encId = pickGuardEncounter(nextRun.biome, nextRun.tier, ambushRng);
-        if (encId) {
-          const enc = getEncounter(encId);
-          const combat = startCombatBase(enc, ambushRng, room.id, nextRun.tier);
-          const combatState: GameState = { ...nextState, activeCombat: combat };
-          set({ state: combatState, screen: "combat", lastRoomMessage: searchResult.result.message });
-          saveGame(combatState);
-          playSfx("threat");
-          return;
-        }
-      }
-      set({ state: nextState, lastRoomMessage: searchResult.result.message });
-      persist(nextState);
-      if (nextRun.threat.points > run.threat.points) playSfx("threat");
-      if (searchResult.result.type === "hiddenLoot") playSfx("loot");
-      if (nextPlayer.hp <= 0) {
-        finishRunWithDeath(get, set, nextRun, nextPlayer);
-      }
-      return;
-    }
-
-    // npcEvent / questObjective rooms have no loot of their own — they just need
-    // a one-shot "already interacted" guard, which roomScratch still tracks.
-    if (room.type === "npcEvent" || room.type === "questObjective") {
-      const scratch = roomScratch.get(room.id) ?? {};
-      if (scratch.searched) {
-        set({ lastRoomMessage: "You have searched here already." });
-        return;
-      }
-      scratch.searched = true;
-      roomScratch.set(room.id, scratch);
-      const rng = createRng(`search:${run.seed}:${room.id}`);
-      const resolved = room.type === "npcEvent"
-        ? resolveVoiceRoom(s, run, room, rng)
-        : resolveQuestObjectiveRoom(s, run, room, rng);
-      set({ state: resolved.state, lastRoomMessage: resolved.message });
-      persist(resolved.state);
-      return;
-    }
-
-    // Treasure / lockedChest / shrine rooms deposit finds into the room's
-    // persisted pendingLoot pool; the "already searched" guard lives on
-    // room.searchState (set by updateRoomAfterScratchSearch) so it survives reloads.
-    if (room.searchState?.searched) {
-      set({ lastRoomMessage: "You have searched here already." });
-      return;
-    }
-    const rng = createRng(`search:${run.seed}:${room.id}`);
-    const items: ItemInstance[] = [];
-    let gold = 0;
-    if (room.type === "lockedChest") {
-      const lock = resolveLockedChestAttempt(s.player, run, room);
-      if (!lock.opened) {
-        const nextRun = updateRoomAfterScratchSearch(run, room.id, false);
-        const next: GameState = { ...s, activeRun: nextRun };
-        set({
-          state: next,
-          lastRoomMessage: "The lock holds under your tools. You find no clean way in."
-        });
-        persist(next);
-        playSfx("miss");
-        return;
-      }
-    }
-
-    if (room.lootTableId) {
-      const count = room.type === "lockedChest" ? 2 : 1;
-      items.push(...generateLootForRoomLootTableId(room.lootTableId, rng, count, {
-        biome: run.biome,
-        tier: run.tier,
-        roomType: room.type,
-        source: room.type === "lockedChest" ? "treasure" : "treasure",
-        threatLevel: run.threat.level,
-        playerClassId: s.player.classId
-      }));
-      gold = rollGold(rng, run.tier);
-    } else if (room.type === "shrine") {
-      gold = rollGold(rng, run.tier);
-    }
-    const materials = generateMaterialLoot({ biome: room.biome, roomType: room.type, tier: run.tier, rng });
-
-    let next = s;
-    if (room.type === "lockedChest") {
-      next = notifyQuestEvent(next, { kind: "chestOpened", biome: room.biome });
-    }
-    const hasFinds = items.length > 0 || gold > 0 || Object.keys(materials).length > 0;
-    const materialText = formatMaterialVault(materials);
-    let nextRun = updateRoomAfterScratchSearch(run, room.id, hasFinds);
-    nextRun = depositPendingLoot(nextRun, room.id, { items, gold, materials });
-    next = { ...next, activeRun: nextRun };
-    set({
-      state: next,
-      lastRoomMessage:
-        !hasFinds
-          ? "Nothing of worth in this room."
-          : `Found ${items.length} item(s)${gold > 0 ? ` and ${gold} gold` : ""}${materialText ? ` and ${materialText}` : ""}. Left in the room to claim.`
-    });
-    persist(next);
-    if (hasFinds) playSfx("loot");
-  },
-
-  disarmTrap: () => {
-    const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    const run = s.activeRun;
-    const room = getRoomById(run.roomGraph, run.currentRoomId);
-    if (!room || !room.activeTrap) return;
-    if (!room.activeTrap.detected || room.activeTrap.disarmed || room.activeTrap.triggered) return;
-
-    const rng = createRng(`disarm:${run.seed}:${room.id}:${room.searchState?.searchCount ?? 0}`);
-    const result = disarmTrapCheck({ run, character: s.player, trap: room.activeTrap, rng });
-
-    let nextRun = run;
-    let nextPlayer: Character = s.player;
-    const now = Date.now();
-
-    if (result.disarmed) {
-      nextRun = {
-        ...nextRun,
-        roomGraph: nextRun.roomGraph.map(r =>
-          r.id === room.id
-            ? { ...r, activeTrap: { ...r.activeTrap!, disarmed: true }, completed: true }
-            : r
-        )
-      };
-      nextRun = addDungeonLogEntry({
-        run: nextRun, type: "trap", now, roomId: room.id,
-        message: result.message
-      });
-    } else if (result.triggered) {
-      const freshTrap = getRoomById(nextRun.roomGraph, room.id)?.activeTrap!;
-      const trig = triggerTrap({
-        run: nextRun, character: nextPlayer, room, trap: freshTrap, rng, now
-      });
-      nextRun = trig.run;
-      nextPlayer = trig.character;
-      nextRun = {
-        ...nextRun,
-        roomGraph: nextRun.roomGraph.map(r =>
-          r.id === room.id
-            ? { ...r, activeTrap: { ...r.activeTrap!, triggered: true, detected: true }, completed: true }
-            : r
-        )
-      };
-    }
-
-    const next: GameState = { ...s, activeRun: nextRun, player: nextPlayer };
-    set({ state: next, lastRoomMessage: result.message });
-    persist(next);
-    playSfx(result.disarmed ? "loot" : result.triggered ? "threat" : "miss");
-    if (nextPlayer.hp <= 0) {
-      finishRunWithDeath(get, set, nextRun, nextPlayer);
-    }
-  },
-
-  chooseRoomEventOption: (choiceId: string) => {
-    const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    const run = s.activeRun;
-    const room = getRoomById(run.roomGraph, run.currentRoomId);
-    if (!room || !room.activeEvent || room.activeEvent.resolved) return;
-
-    const rng = createRng(`${run.seed}:event:${room.id}:${choiceId}:${Date.now()}`);
-    const result = resolveEventChoice({
-      run, character: s.player, event: room.activeEvent, choiceId, rng
-    });
-    const next: GameState = { ...s, activeRun: result.run, player: result.character };
-    set({ state: next, lastRoomMessage: result.resultMessage });
-    persist(next);
-    if (result.run.threat.points > run.threat.points) playSfx("threat");
-    if (result.character.hp <= 0) {
-      finishRunWithDeath(get, set, result.run, result.character);
-    }
-  },
-
-  lootRoom: () => {
-    const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    const run = s.activeRun;
-    const room = getRoomById(run.roomGraph, run.currentRoomId);
-    if (!room) return;
-    if (!hasPendingLoot(room)) {
-      set({ lastRoomMessage: "There is nothing here to take." });
-      return;
-    }
-    const pending = getPendingLoot(room);
-    const items = pending.items;
-    const gold = pending.gold;
-    const materials = pending.materials;
-    let raid = run.raidInventory;
-    const cap = s.player.derivedStats.carryCapacity;
-    const remaining: ItemInstance[] = [];
-    let next = s;
-    for (const item of items) {
-      const w = calculateInventoryWeight(raid) + item.weight * item.quantity;
-      if (w <= cap) {
-        raid = addItem(raid, item);
-        next = notifyQuestEvent(next, { kind: "itemRetrieved", templateId: item.templateId, biome: room.biome });
-        for (const tag of item.tags ?? []) {
-          next = notifyQuestEvent(next, { kind: "materialCollected", tag, biome: room.biome });
-        }
-        if (item.tags?.includes("sign")) {
-          next = notifyQuestEvent(next, { kind: "signFound", biome: room.biome });
-        }
-      } else {
-        remaining.push(item);
-      }
-    }
-    raid = { ...raid, gold: raid.gold + gold };
-    raid = addMaterials({ inventory: raid, materials });
-    for (const [id, amount] of Object.entries(materials)) {
-      for (let i = 0; i < (amount ?? 0); i++) {
-        next = notifyQuestEvent(next, { kind: "materialCollected", tag: id, biome: room.biome });
-      }
-    }
-
-    const updatedRooms = run.roomGraph.map(r =>
-      r.id === room.id
-        ? { ...r, pendingLoot: { items: remaining, gold: 0, materials: {} }, completed: true }
-        : r
-    );
-    next = {
-      ...next,
-      activeRun: { ...run, raidInventory: raid, roomGraph: updatedRooms }
-    };
-    set({
-      state: next,
-      lastRoomMessage:
-        remaining.length > 0
-          ? "You take what you can carry. Some loot is left behind."
-          : "Loot and materials taken into your raid pack."
-    });
-    persist(next);
-    if (items.length > 0 || gold > 0 || Object.keys(materials).length > 0) playSfx("loot");
-  },
-
-  leaveRoomLoot: () => {
-    const s = get().state;
-    if (!s.activeRun) return;
-    const run = s.activeRun;
-    const room = getRoomById(run.roomGraph, run.currentRoomId);
-    if (!room) return;
-    if (!hasPendingLoot(room)) return;
-    let nextRun = clearPendingLoot(run, room.id);
-    nextRun = {
-      ...nextRun,
-      roomGraph: nextRun.roomGraph.map(r => r.id === room.id ? { ...r, completed: true } : r)
-    };
-    nextRun = addDungeonLogEntry({
-      run: nextRun, type: "info", now: Date.now(), roomId: room.id,
-      message: "You leave the loot where it lies and move on."
-    });
-    const next: GameState = { ...s, activeRun: nextRun };
-    set({ state: next, lastRoomMessage: "You leave it behind." });
-    persist(next);
-  },
-
-  takeItemFromRoom: (item: ItemInstance) => {
-    const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    const run = s.activeRun;
-    const room = getRoomById(run.roomGraph, run.currentRoomId);
-    if (!room) return;
-    const pending = getPendingLoot(room);
-    const found = pending.items.find(i => i.instanceId === item.instanceId);
-    if (!found) return;
-    const remaining = pending.items.filter(i => i.instanceId !== item.instanceId);
-    const cap = s.player.derivedStats.carryCapacity;
-    const newWeight = calculateInventoryWeight(run.raidInventory) + found.weight * found.quantity;
-    if (newWeight > cap) {
-      set({ lastRoomMessage: "Too heavy to carry." });
-      return;
-    }
-    let raid = addItem(run.raidInventory, found);
-    let next: GameState = { ...s, activeRun: { ...run, raidInventory: raid } };
-    next = notifyQuestEvent(next, { kind: "itemRetrieved", templateId: found.templateId, biome: room.biome });
-    for (const tag of found.tags ?? []) {
-      next = notifyQuestEvent(next, { kind: "materialCollected", tag, biome: room.biome });
-    }
-    if (found.tags?.includes("sign")) {
-      next = notifyQuestEvent(next, { kind: "signFound", biome: room.biome });
-    }
-    const stillPending = remaining.length > 0 || pending.gold > 0 || Object.keys(pending.materials).length > 0;
-    const updatedRooms = next.activeRun!.roomGraph.map(r =>
-      r.id === room.id
-        ? { ...r, pendingLoot: { ...pending, items: remaining }, completed: stillPending ? r.completed : true }
-        : r
-    );
-    next = { ...next, activeRun: { ...next.activeRun!, roomGraph: updatedRooms } };
-    set({ state: next, lastRoomMessage: `You pocket the ${found.name}.` });
-    persist(next);
-    playSfx("loot");
-  },
-
-  useRaidConsumable: itemInstanceId => {
-    const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    const item = s.activeRun.raidInventory.items.find(i => i.instanceId === itemInstanceId);
-    if (!item) return;
-    const healFormula = getConsumableHealFormula(item);
-    if (!healFormula) {
-      set({ lastRoomMessage: `${item.name} cannot be used here.` });
-      return;
-    }
-    if (s.player.hp >= s.player.maxHp) {
-      set({ lastRoomMessage: `${s.player.name} is already at full health.` });
-      return;
-    }
-    const rng = createRng(`raidItem:${s.activeRun.runId}:${item.instanceId}:${Date.now()}`);
-    const heal = rollConsumableHealAmount(item, rng);
-    const player = {
-      ...s.player,
-      hp: Math.min(s.player.maxHp, s.player.hp + heal),
-      wounded: undefined
-    };
-    const run = {
-      ...s.activeRun,
-      raidInventory: removeItem(s.activeRun.raidInventory, itemInstanceId, 1)
-    };
-    const next: GameState = { ...s, player, activeRun: run };
-    set({ state: next, lastRoomMessage: `${item.name} restored ${heal} HP.` });
-    persist(next);
-    playSfx("heal");
-  },
-
-  equipItemFromRaid: (itemInstanceId, preferredSlot) => {
-    const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    const item = s.activeRun.raidInventory.items.find(i => i.instanceId === itemInstanceId);
-    if (!item) return;
-    let slot = preferredSlot ?? slotForItem(item);
-    if (!slot) {
-      set({ lastRoomMessage: `${item.name} cannot be equipped.` });
-      return;
-    }
-    if (item.category === "trinket" && !preferredSlot) {
-      slot = s.player.equipped.trinket1 ? "trinket2" : "trinket1";
-    }
-    if (item.category === "trinket" && slot !== "trinket1" && slot !== "trinket2") {
-      set({ lastRoomMessage: `${item.name} needs a trinket slot.` });
-      return;
-    }
-
-    const oldItem = s.player.equipped[slot];
-    let raidInventory = removeItem(s.activeRun.raidInventory, itemInstanceId, item.quantity);
-    if (oldItem) {
-      const nextWeight = calculateInventoryWeight(raidInventory) + oldItem.weight * oldItem.quantity;
-      if (nextWeight > s.player.derivedStats.carryCapacity) {
-        set({ lastRoomMessage: `No room in the raid pack for ${oldItem.name}.` });
-        return;
-      }
-      raidInventory = addItem(raidInventory, oldItem);
-    }
-
-    const player = recalculatePlayer({
-      ...s.player,
-      equipped: { ...s.player.equipped, [slot]: item }
-    });
-    const run = {
-      ...s.activeRun,
-      raidInventory,
-      loadoutSnapshot: collectLoadoutSnapshot(player)
-    };
-    const next: GameState = { ...s, player, activeRun: run };
-    set({ state: next, lastRoomMessage: `${item.name} equipped.` });
-    persist(next);
-    playSfx("equip");
-  },
-
-  unequipItemToRaid: slot => {
-    const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    const item = s.player.equipped[slot];
-    if (!item) return;
-    const nextWeight = calculateInventoryWeight(s.activeRun.raidInventory) + item.weight * item.quantity;
-    if (nextWeight > s.player.derivedStats.carryCapacity) {
-      set({ lastRoomMessage: `No room in the raid pack for ${item.name}.` });
-      return;
-    }
-    const equipped = { ...s.player.equipped, [slot]: undefined };
-    const player = recalculatePlayer({ ...s.player, equipped });
-    const run = {
-      ...s.activeRun,
-      raidInventory: addItem(s.activeRun.raidInventory, item),
-      loadoutSnapshot: collectLoadoutSnapshot(player)
-    };
-    const next: GameState = { ...s, player, activeRun: run };
-    set({ state: next, lastRoomMessage: `${item.name} moved to the raid pack.` });
-    persist(next);
-  },
-
-  dropRaidItem: itemInstanceId => {
-    const s = get().state;
-    if (!s.activeRun) return;
-    const item = s.activeRun.raidInventory.items.find(i => i.instanceId === itemInstanceId);
-    if (!item) return;
-    const run = {
-      ...s.activeRun,
-      raidInventory: removeItem(s.activeRun.raidInventory, itemInstanceId, item.quantity)
-    };
-    const next: GameState = { ...s, activeRun: run };
-    set({ state: next, lastRoomMessage: `${item.name} left behind.` });
-    persist(next);
-    playSfx("miss");
-  },
-
-  attemptExtract: () => {
-    const s = get().state;
-    if (!s.activeRun || !s.player || !s.village) return;
-    const run = s.activeRun;
-    const room = getRoomById(run.roomGraph, run.currentRoomId);
-    if (!room || !room.extractionPoint) return;
-
-    if (!room.extraction) {
-      // Legacy fallback — should only apply to pre-migration data.
-      finishRunWithExtraction(get, set, run, "extracted", "You extracted from a marked exit with the loot you carried.");
-      return;
-    }
-
-    const rng = createRng(`extraction:${run.seed}:${room.id}:activate:${Date.now()}`);
-    const result = activateExtractionFlow({ run, character: s.player, room, rng });
-    handleExtractionResult(get, set, result, room.id);
-  },
-
-  continueExtraction: () => {
-    const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    const run = s.activeRun;
-    const room = getRoomById(run.roomGraph, run.currentRoomId);
-    if (!room || !room.extraction) return;
-    const rng = createRng(`extraction:${run.seed}:${room.id}:turn:${Date.now()}`);
-    const result = resolveExtractionTurn({ run, character: s.player, room, rng });
-    handleExtractionResult(get, set, result, room.id);
-  },
-
-  descendDungeon: () => {
-    const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    const run = s.activeRun;
-    const room = getRoomById(run.roomGraph, run.currentRoomId);
-    if (!room || room.type !== "boss" || !room.completed) return;
-
-    const nextTier = run.tier + 1;
-    const nextSeed = `${run.seed}:depth:${nextTier}`;
-    let nextRun = generateDungeonRun({
-      seed: nextSeed,
-      biome: run.biome,
-      tier: nextTier,
-      activeQuestIds: run.activeQuestIds
-    });
-    const completedThisDepth = run.roomGraph.filter(room => room.completed).length;
-    nextRun.runId = run.runId;
-    nextRun.startedAt = run.startedAt;
-    nextRun.raidInventory = run.raidInventory;
-    nextRun.loadoutSnapshot = run.loadoutSnapshot;
-    nextRun.questProgressAtStart = run.questProgressAtStart;
-    nextRun.keepsakeInstanceId = run.keepsakeInstanceId;
-    nextRun.insuredInstanceId = run.insuredInstanceId;
-    nextRun.xpGained = run.xpGained;
-    nextRun.roomsVisitedBeforeDepth = (run.roomsVisitedBeforeDepth ?? 0) + run.visitedRoomIds.length;
-    nextRun.roomsCompletedBeforeDepth = (run.roomsCompletedBeforeDepth ?? 0) + completedThisDepth;
-    nextRun.dangerLevel = nextTier;
-    nextRun.threat = createThreatStateWithCarryover({ previousThreat: run.threat });
-    const strainGain = calculateDescendStrainGain({ nextDepth: nextTier, previousThreat: run.threat });
-    const strainResult = applyDelveStrainChange({
-      strain: run.delveStrain,
-      amount: strainGain,
-      depth: nextTier,
-      reason: "descended",
-      message: `The descent to depth ${nextTier} strains the delve.`
-    });
-    nextRun.delveStrain = strainResult.strain;
-    nextRun = addDungeonLogEntry({
-      run: nextRun,
-      type: "warning",
-      message: strainResult.change.message,
-      now: strainResult.change.timestamp
-    });
-    nextRun = scoutFromCurrent(nextRun, s.player, s.village);
-    roomScratch.clear();
-
-    const next: GameState = {
-      ...s,
-      activeRun: nextRun
-    };
-    set({
-      state: next,
-      screen: "dungeon",
-      lastRoomMessage: `You descend below the boss chamber. Depth ${nextTier} begins. The halls quiet for a moment, but the way back feels less forgiving.`
-    });
-    persist(next);
-    playSfx("descend");
-  },
-
-  engageCurrentRoomCombat: () => {
-    const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    const run = s.activeRun;
-    const room = getRoomById(run.roomGraph, run.currentRoomId);
-    if (!room || room.completed || !room.encounterId) return;
-    if (!(room.type === "combat" || room.type === "boss" || room.type === "eliteCombat")) return;
-    maybeStartCombatForRoom(get, set, room);
-  },
-
-  performCombatAction: action => {
-    const s = get().state;
-    const combat = s.activeCombat;
-    if (!s.player || !combat) return;
-    const rng = createRng(`combat:${s.activeRun?.seed ?? "x"}:${combat.encounterId}:${combat.turn}`);
-    const threatLevel = s.activeRun?.threat.level ?? 0;
-    const result = resolvePlayerAction(
-      combat,
-      s.player,
-      action,
-      rng,
-      s.activeRun?.raidInventory.items ?? [],
-      threatLevel
-    );
-    let nextPlayer: Character = result.player;
-    let nextRun = s.activeRun;
-
-    // Remove consumed items
-    if (result.consumedItems.length > 0) {
-      const equipped = { ...nextPlayer.equipped };
-      if (nextRun) {
-        let raidInventory = nextRun.raidInventory;
-        for (const id of result.consumedItems) {
-          raidInventory = removeItem(raidInventory, id, 1);
-        }
-        nextRun = { ...nextRun, raidInventory };
-      }
-      for (const id of result.consumedItems) {
-        for (const slot of ["weapon", "offhand", "armor", "trinket1", "trinket2"] as const) {
-          const it = equipped[slot];
-          if (it && it.instanceId === id) {
-            const newQty = it.quantity - 1;
-            if (newQty <= 0) {
-              equipped[slot] = undefined;
-            } else {
-              equipped[slot] = { ...it, quantity: newQty };
-            }
-          }
-        }
-      }
-      nextPlayer = { ...nextPlayer, equipped };
-    }
-
-    if (nextRun && result.threatDeltas.length > 0) {
-      nextRun = applyCombatThreatDeltas(nextRun, result.threatDeltas, combat.fromRoomId);
-    }
-
-    const nextState: GameState = { ...s, player: nextPlayer, activeRun: nextRun, activeCombat: result.combat };
-    set({ state: nextState });
-    persist(nextState);
-    playCombatSfx({ before: combat, after: result.combat, playerBefore: s.player, playerAfter: nextPlayer });
-
-    if (result.combat.over) {
-      handleCombatOutcome(get, set);
-    }
-  },
-
-  useCombatInventoryItem: itemInstanceId => {
-    get().performCombatAction({ kind: "useItem", itemInstanceId });
-    const activeCombat = get().state.activeCombat;
-    if (activeCombat) {
-      set({ screen: "combat" });
-    }
-  },
-
-  performAutoCombat: () => {
-    const s = get().state;
-    let combat = s.activeCombat;
-    let player = s.player;
-    let run = s.activeRun;
-    if (!player || !combat || combat.over) return;
-
-    const maxSteps = 12;
-    let stopReason: string | undefined;
-    for (let step = 0; step < maxSteps && !combat.over; step++) {
-      if (player.hp <= Math.ceil(player.maxHp * 0.35)) {
-        stopReason = "Auto combat stops while you still have a chance to recover.";
-        break;
-      }
-      const target = combat.enemies.find(e => e.hp > 0);
-      if (!target) break;
-      const rng = createRng(`combat:${s.activeRun?.seed ?? "x"}:${combat.encounterId}:${combat.turn}:auto:${step}`);
-      const threatLevel = run?.threat.level ?? 0;
-      const result = resolvePlayerAction(
-        combat,
-        player,
-        { kind: "attack", targetId: target.instanceId },
-        rng,
-        s.activeRun?.raidInventory.items ?? [],
-        threatLevel
-      );
-      combat = result.combat;
-      player = result.player;
-      if (run && result.threatDeltas.length > 0) {
-        run = applyCombatThreatDeltas(run, result.threatDeltas, combat.fromRoomId);
-      }
-    }
-
-    if (!combat.over && !stopReason) {
-      stopReason = "Auto combat pauses so you can reassess.";
-    }
-    if (stopReason) {
-      combat = { ...combat, log: [...combat.log, stopReason] };
-    }
-
-    const nextState: GameState = { ...s, player, activeCombat: combat, activeRun: run };
-    set({ state: nextState });
-    persist(nextState);
-    playCombatSfx({ before: s.activeCombat, after: combat, playerBefore: s.player, playerAfter: player });
-
-    if (combat.over) {
-      handleCombatOutcome(get, set);
-    }
-  },
-
-  closeCombatVictory: () => {
-    const s = get().state;
-    const combat = s.activeCombat;
-    if (!s.player || !combat || !s.activeRun) {
-      const clearedState: GameState = { ...s, activeCombat: undefined };
-      set({ state: clearedState, screen: "dungeon" });
-      persist(clearedState);
-      return;
-    }
-    const run = s.activeRun;
-    const room = getRoomById(run.roomGraph, combat.fromRoomId);
-    if (!room) {
-      const clearedState: GameState = { ...s, activeCombat: undefined };
-      set({ state: clearedState, screen: "dungeon" });
-      persist(clearedState);
-      return;
-    }
-    // If the combat came from a guarded-extraction encounter, mark the guard
-    // as defeated rather than completing the room (so the player can still
-    // activate the extraction afterwards).
-    const isExtractionGuardWin =
-      room.type === "extraction" &&
-      room.extraction?.variant === "guarded" &&
-      room.extraction.guardEncounterId === combat.encounterId &&
-      !room.extraction.guardDefeated;
-    const updatedRooms = run.roomGraph.map(r => {
-      if (r.id !== room.id) return r;
-      if (isExtractionGuardWin && r.extraction) {
-        return { ...r, extraction: { ...r.extraction, guardDefeated: true, state: "available" as const } };
-      }
-      return { ...r, completed: true };
-    });
-    let next: GameState = {
-      ...s,
-      activeCombat: undefined,
-      activeRun: { ...run, roomGraph: updatedRooms }
-    };
-    // Generate room and enemy loot — all of it is deposited into the room's
-    // pending loot pool rather than banked directly; the player must take it
-    // (or leave it) explicitly.
-    const rng = createRng(`combatLoot:${run.seed}:${room.id}`);
-    const lootMessages: string[] = [];
-    if (room.lootTableId) {
-      const items = generateLootForRoomLootTableId(room.lootTableId, rng, 1, {
-        biome: run.biome,
-        tier: run.tier,
-        roomType: room.type,
-        source: "combat",
-        threatLevel: run.threat.level,
-        playerClassId: s.player.classId
-      });
-      if (items.length > 0 && next.activeRun) {
-        lootMessages.push(...items.map(item => item.name));
-        next = { ...next, activeRun: depositPendingLoot(next.activeRun, room.id, { items }) };
-      }
-    }
-    const materialLoot = generateMaterialLoot({ biome: room.biome, roomType: room.type, tier: run.tier, rng });
-    if (Object.keys(materialLoot).length > 0 && next.activeRun) {
-      next = { ...next, activeRun: depositPendingLoot(next.activeRun, room.id, { materials: materialLoot }) };
-      for (const [id, amount] of Object.entries(materialLoot)) {
-        if (amount) lootMessages.push(formatMaterialVault({ [id]: amount }));
-      }
-    }
-    const enc = getEncounter(combat.encounterId);
-    let xpGain = 0;
-    for (const enemyId of enc.enemyIds) {
-      const def = getEnemy(enemyId);
-      xpGain += def.xpReward;
-      next = notifyQuestEvent(next, { kind: "enemySlain", enemyId, biome: room.biome });
-      if (room.type === "boss" || room.type === "eliteCombat") {
-        next = notifyQuestEvent(next, { kind: "miniBossDefeated", biome: room.biome });
-      }
-    }
-    // While an extraction is charging, the room's loot panel is hidden and
-    // stays hidden until the run ends — so any combat drops rolled during a
-    // per-turn ambush here would be undepositable/unclaimable. Suppress the
-    // drop at the source rather than generating an item nobody can claim.
-    const isChargingExtraction = room.type === "extraction" && room.extraction?.state === "charging";
-    const enemyDrops = isChargingExtraction ? [] : rollCombatDrops(room, run, rng);
-    if (enemyDrops.length > 0 && next.activeRun) {
-      lootMessages.push(...enemyDrops.map(item => item.name));
-      next = { ...next, activeRun: depositPendingLoot(next.activeRun, room.id, { items: enemyDrops }) };
-    }
-    if (next.player) {
-      const xpd: Character = { ...next.player, xp: next.player.xp + xpGain };
-      next = { ...next, player: xpd };
-    }
-    if (next.activeRun) {
-      next = { ...next, activeRun: { ...next.activeRun, xpGained: (next.activeRun.xpGained ?? 0) + xpGain } };
-    }
-    const lootText = lootMessages.length > 0 ? ` Left to claim: ${lootMessages.join(", ")}.` : "";
-    const descendText = room.type === "boss"
-      ? " A stair descends beyond the chamber."
-      : "";
-    if (next.activeRun) {
-      const now = Date.now();
-      const logMessage = isExtractionGuardWin
-        ? `Guard down at the extraction. +${xpGain} XP${lootMessages.length > 0 ? `, ${lootMessages.join(", ")}` : ""}.`
-        : `Victory: ${enc.name}. +${xpGain} XP${lootMessages.length > 0 ? `, ${lootMessages.join(", ")}` : ""}.`;
-      const loggedRun = addDungeonLogEntry({
-        run: next.activeRun, type: "combat", now, roomId: room.id,
-        message: logMessage
-      });
-      next = { ...next, activeRun: loggedRun };
-    }
-    set({ state: next, screen: "dungeon", lastRoomMessage: `Victory! You gained ${xpGain} XP.${lootText}${descendText}` });
-    persist(next);
-    playSfx(lootMessages.length > 0 ? "loot" : "hit");
-  },
-
-  closeCombatFlee: () => {
-    const s = get().state;
-    const next: GameState = { ...s, activeCombat: undefined };
-    set({ state: next, screen: "dungeon", lastRoomMessage: "You broke away. The room is still dangerous." });
-    persist(next);
-    playSfx("flee");
   },
 
   useStashConsumable: itemInstanceId => {
@@ -1764,10 +771,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   equipItem: (itemInstanceId, slot) => {
     const s = get().state;
-    if (s.activeRun?.raidInventory.items.some(item => item.instanceId === itemInstanceId)) {
-      get().equipItemFromRaid(itemInstanceId, slot);
-      return;
-    }
     if (s.preparedInventory.items.some(item => item.instanceId === itemInstanceId)) {
       equipPreparedItem(get, set, itemInstanceId, slot);
       return;
@@ -1776,11 +779,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   unequipItem: slot => {
-    if (get().state.activeRun) {
-      get().unequipItemToRaid(slot);
-    } else {
-      get().unequipItemToStash(slot);
-    }
+    get().unequipItemToStash(slot);
   },
 
   previewEquipmentChange: (itemInstanceId, slot) => {
@@ -1795,57 +794,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ancestry: getAncestry(s.player.ancestryId),
       classDefinition: getClass(s.player.classId)
     });
-  },
-
-  useCombatAction: (actionId, targetEnemyInstanceId) => {
-    const s = get().state;
-    const combat = s.activeCombat;
-    const player = s.player;
-    if (!combat || !player || combat.over) return;
-    const target = targetEnemyInstanceId ?? combat.enemies.find(enemy => enemy.hp > 0)?.instanceId;
-    if (actionId === "attack" && target) {
-      get().performCombatAction({ kind: "attack", targetId: target });
-      return;
-    }
-    if (actionId === "power-attack" && target) {
-      get().performCombatAction({ kind: "powerAttack", targetId: target });
-      return;
-    }
-    if (actionId === "defend") {
-      get().performCombatAction({ kind: "defend" });
-      return;
-    }
-    if (actionId === "flee") {
-      get().performCombatAction({ kind: "flee" });
-      return;
-    }
-    const rng = createRng(`classAction:${s.activeRun?.seed ?? "x"}:${combat.encounterId}:${combat.turn}:${actionId}`);
-    const result = resolveCombatActionBase({
-      character: player,
-      combatState: { ...combat, actionThreatDeltas: [] },
-      actionId,
-      targetEnemyInstanceId,
-      rng
-    });
-    let nextRun = s.activeRun;
-    if (nextRun && (result.combatState.actionThreatDeltas?.length ?? 0) > 0) {
-      nextRun = applyCombatThreatDeltas(
-        nextRun,
-        result.combatState.actionThreatDeltas!.map(delta => ({
-          amount: delta.amount,
-          reason: delta.reason,
-          message: delta.message
-        })),
-        combat.fromRoomId
-      );
-    }
-    const nextCombat: CombatState = { ...result.combatState, actionThreatDeltas: [] };
-    const next: GameState = { ...s, player: result.character, activeCombat: nextCombat, activeRun: nextRun };
-    set({ state: next });
-    persist(next);
-    if (nextCombat.over) {
-      handleCombatOutcome(get, set);
-    }
   },
 
   repairDamagedItem: itemInstanceId => {
@@ -1864,34 +812,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
     const next = mapItemEverywhere(s, itemInstanceId, item => addItemState({ item, state }));
     set({ state: next, lastVillageMessage: `${formatTalentName(stateId)} applied to item.` });
-    persist(next);
-  },
-
-  debugGenerateDungeonSeed: () => {
-    const s = get().state;
-    if (!s.player) return;
-    const existing = s.activeRun;
-    const activeIds = existing?.activeQuestIds ??
-      (s.village?.quests.filter(quest => quest.status === "active").map(quest => quest.id) ?? []);
-    let run = generateDungeonRun({
-      seed: randomSeed(),
-      biome: existing?.biome,
-      tier: existing?.tier ?? 1,
-      activeQuestIds: activeIds
-    });
-    run.raidInventory = existing?.raidInventory ?? s.preparedInventory ?? createEmptyInventory();
-    run.loadoutSnapshot = collectLoadoutSnapshot(s.player);
-    run.questProgressAtStart = existing?.questProgressAtStart ?? captureQuestProgress(s.village, activeIds);
-    run.xpGained = existing?.xpGained ?? 0;
-    run = scoutFromCurrent(run, s.player, s.village);
-    roomScratch.clear();
-    const next: GameState = {
-      ...s,
-      activeRun: run,
-      activeCombat: undefined,
-      preparedInventory: existing ? s.preparedInventory : createEmptyInventory()
-    };
-    set({ state: next, screen: "dungeon", lastRoomMessage: `Dev: generated dungeon seed ${run.seed}.` });
     persist(next);
   },
 
@@ -1917,10 +837,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const item = instanceFromTemplateId("weapon_keen_dagger", rng, 1);
     const potion = instanceFromTemplateId("consumable_strong_draught", rng, 2);
     const gold = 25;
-    const targetRun = s.activeRun;
-    if (targetRun) {
-      const raidInventory = addItem(addItem({ ...targetRun.raidInventory, gold: targetRun.raidInventory.gold + gold }, item), potion);
-      const next: GameState = { ...s, activeRun: { ...targetRun, raidInventory } };
+    if (s.delveRaidPack) {
+      const pack = addItem(addItem({ ...s.delveRaidPack, gold: s.delveRaidPack.gold + gold }, item), potion);
+      const next: GameState = { ...s, delveRaidPack: pack };
       set({ state: next, lastRoomMessage: "Dev: spawned test loot in the raid pack." });
       persist(next);
       return;
@@ -1933,14 +852,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   debugKillPlayer: () => {
     const s = get().state;
-    if (!s.activeRun || !s.player) return;
-    finishRunWithDeath(get, set, s.activeRun, { ...s.player, hp: 0 });
-  },
-
-  debugForceExtraction: () => {
-    const s = get().state;
-    if (!s.activeRun) return;
-    finishRunWithExtraction(get, set, s.activeRun, "debugExtracted", "Dev tools forced extraction from the current room.");
+    if (!s.delveRun || !s.player) return;
+    finishDelveRunWithDeath(get, set, s, s.delveRun);
   },
 
   debugCompleteQuest: () => {
@@ -1983,7 +896,7 @@ function findItemInGameState(state: GameState, itemInstanceId: string): ItemInst
   return [
     ...state.stash.items,
     ...state.preparedInventory.items,
-    ...(state.activeRun?.raidInventory.items ?? []),
+    ...(state.delveRaidPack?.items ?? []),
     ...(equipped.filter(Boolean) as ItemInstance[])
   ].find(item => item.instanceId === itemInstanceId);
 }
@@ -2009,15 +922,9 @@ function mapItemEverywhere(
     player,
     stash: { ...state.stash, items: mapItems(state.stash.items) },
     preparedInventory: { ...state.preparedInventory, items: mapItems(state.preparedInventory.items) },
-    activeRun: state.activeRun
-      ? {
-        ...state.activeRun,
-        raidInventory: {
-          ...state.activeRun.raidInventory,
-          items: mapItems(state.activeRun.raidInventory.items)
-        }
-      }
-      : state.activeRun
+    delveRaidPack: state.delveRaidPack
+      ? { ...state.delveRaidPack, items: mapItems(state.delveRaidPack.items) }
+      : state.delveRaidPack
   };
 }
 
@@ -2051,110 +958,6 @@ function formatTalentName(id: string): string {
     .join(" ");
 }
 
-function applyRunThreat(
-  run: DungeonRun,
-  amount: number,
-  reason: ThreatChangeReason,
-  roomId?: string,
-  message?: string,
-  now?: number
-): { run: DungeonRun; change: ThreatChange } {
-  const { threat, change } = applyThreatChange({ threat: run.threat, amount, reason, now, message });
-  let updated: DungeonRun = { ...run, threat };
-  updated = addDungeonLogEntry({
-    run: updated,
-    type: "threat",
-    message: formatThreatLogMessage(change),
-    roomId,
-    now: change.timestamp
-  });
-  if (amount > 0) playSfx("threat");
-  return { run: updated, change };
-}
-
-function formatThreatLogMessage(change: ThreatChange): string {
-  return change.message.replace(/\s*\(\d+\)\.?$/, ".");
-}
-
-function playCombatSfx(params: {
-  before?: CombatState;
-  after: CombatState;
-  playerBefore?: Character;
-  playerAfter?: Character;
-}): void {
-  const { before, after, playerBefore, playerAfter } = params;
-  const previousLogLength = before?.log.length ?? 0;
-  const newLines = after.log.slice(previousLogLength);
-  const text = newLines.join(" ").toLowerCase();
-
-  if (text.includes("(crit")) {
-    playSfx("crit");
-    return;
-  }
-  if (text.includes("drink") || (playerBefore && playerAfter && playerAfter.hp > playerBefore.hp)) {
-    playSfx("heal");
-    return;
-  }
-  if (after.outcome === "fled" || text.includes("break away")) {
-    playSfx("flee");
-    return;
-  }
-  if (text.includes("miss") || text.includes("stumble")) {
-    playSfx("miss");
-    return;
-  }
-  if (
-    text.includes("strike") ||
-    text.includes("hammer") ||
-    text.includes("falls") ||
-    (playerBefore && playerAfter && playerAfter.hp < playerBefore.hp)
-  ) {
-    playSfx("hit");
-  }
-}
-
-function logInRun(
-  run: DungeonRun,
-  type: DungeonLogEntryType,
-  message: string,
-  roomId?: string,
-  now?: number
-): DungeonRun {
-  return addDungeonLogEntry({ run, type, message, roomId, now });
-}
-
-function applyCombatThreatDeltas(
-  run: DungeonRun,
-  deltas: CombatThreatDelta[],
-  roomId?: string
-): DungeonRun {
-  let next = run;
-  for (const delta of deltas) {
-    const result = applyRunThreat(next, delta.amount, delta.reason, roomId, delta.message);
-    next = result.run;
-  }
-  return next;
-}
-
-function scoutFromCurrent(
-  run: DungeonRun,
-  character: Character | undefined,
-  village: VillageState | undefined,
-  now?: number
-): DungeonRun {
-  if (!character) return run;
-  const knownRoomIntel = scoutAdjacentRooms({ run, character, village, now });
-  if (knownRoomIntel === run.knownRoomIntel) return run;
-  return { ...run, knownRoomIntel };
-}
-
-function collectLoadoutSnapshot(player: Character): ItemInstance[] {
-  const slots = player.equipped;
-  return [slots.weapon, slots.offhand, slots.armor, slots.trinket1, slots.trinket2].filter(
-    Boolean
-  ) as ItemInstance[];
-}
-
 function resolveKeepsakeForRun(state: GameState, raidInventory: Inventory): string | undefined {
   const instanceId = state.pendingKeepsakeInstanceId;
   if (!instanceId) return undefined;
@@ -2169,19 +972,15 @@ function resolveInsuredForRun(state: GameState, player: Character): string | und
   return equipped.some(item => item.instanceId === instanceId) ? instanceId : undefined;
 }
 
-function captureQuestProgress(village: VillageState | undefined, questIds: string[]): Record<string, number> {
-  if (!village) return {};
-  return Object.fromEntries(
-    village.quests
-      .filter(quest => questIds.includes(quest.id))
-      .map(quest => [quest.id, quest.currentCount])
-  );
+function collectLoadoutSnapshot(player: Character): ItemInstance[] {
+  const slots = player.equipped;
+  return [slots.weapon, slots.offhand, slots.armor, slots.trinket1, slots.trinket2].filter(
+    Boolean
+  ) as ItemInstance[];
 }
 
 function getScreenForLoadedState(state: GameState): ScreenId {
   if (!state.player) return "mainMenu";
-  if (state.activeCombat && !state.activeCombat.over) return "combat";
-  if (state.activeRun?.status === "active") return "dungeon";
   if (state.delveRun?.status === "active") return "delve";
   return "village";
 }
@@ -2199,178 +998,22 @@ function recalculatePlayer(character: Character): Character {
   );
 }
 
-function resolveVoiceRoom(
-  state: GameState,
-  run: DungeonRun,
-  room: DungeonRoom,
-  rng: Rng
-): { state: GameState; message: string } {
-  const completedRun = completeRoom(run, room.id);
-  if (state.player && state.player.hp < state.player.maxHp && rng.nextFloat() < 0.65) {
-    const heal = rng.nextInt(4, 8) + run.tier;
-    const player: Character = {
-      ...state.player,
-      hp: Math.min(state.player.maxHp, state.player.hp + heal),
-      wounded: undefined
-    };
-    return {
-      state: { ...state, player, activeRun: completedRun },
-      message: `The voice steadies your breathing. ${player.name} recovers ${heal} HP.`
-    };
-  }
-
-  const gold = rollGold(rng, run.tier);
-  const nextRun: DungeonRun = {
-    ...completedRun,
-    raidInventory: { ...completedRun.raidInventory, gold: completedRun.raidInventory.gold + gold }
-  };
-  return {
-    state: { ...state, activeRun: nextRun },
-    message: `The voice names a loose stone. Behind it, you find ${gold} gold.`
-  };
-}
-
-function resolveQuestObjectiveRoom(
-  state: GameState,
-  run: DungeonRun,
-  room: DungeonRoom,
-  rng: Rng
-): { state: GameState; message: string } {
-  const proof = instanceFromTemplateId("quest_lost_sign", rng, 1);
-  const nextRun: DungeonRun = {
-    ...completeRoom(run, room.id),
-    raidInventory: addItem(run.raidInventory, proof)
-  };
-  let next: GameState = { ...state, activeRun: nextRun };
-  next = notifyQuestEvent(next, { kind: "itemRetrieved", templateId: proof.templateId, biome: room.biome });
-  next = notifyQuestEvent(next, { kind: "signFound", biome: room.biome });
-  return {
-    state: next,
-    message: `You recover ${proof.name}. It should satisfy someone back in the village.`
-  };
-}
-
-function completeRoom(run: DungeonRun, roomId: string): DungeonRun {
-  return {
-    ...run,
-    roomGraph: run.roomGraph.map(r =>
-      r.id === roomId ? { ...r, completed: true } : r
-    )
-  };
-}
-
-function rollCombatDrops(room: DungeonRoom, run: DungeonRun, rng: Rng): ItemInstance[] {
-  const dropChance =
-    room.type === "boss" ? 1 :
-    room.type === "eliteCombat" ? 0.7 :
-    room.type === "combat" ? 0.4 :
-    0.2;
-
-  if (rng.nextFloat() > dropChance) return [];
-  const itemCount = room.type === "boss" ? 2 : 1;
-  const lootTable = getLootTableForBiome(room.biome, run.tier);
-  return generateLootForRoomLootTableId(lootTable.id, rng, itemCount, {
-    biome: run.biome,
-    tier: run.tier,
-    roomType: room.type,
-    source: room.type === "boss" ? "boss" : "combat",
-    threatLevel: run.threat.level
-  });
-}
-
-function finishRunWithDeath(
-  get: () => GameStore,
-  set: (partial: Partial<GameStore>) => void,
-  run: DungeonRun,
-  player: Character
-) {
-  const s = get().state;
-  const now = Date.now();
-  const runWithLog = addDungeonLogEntry({
-    run, type: "danger", now, roomId: run.currentRoomId,
-    message: `${player.name} falls here. The dungeon keeps the raid pack.`
-  });
-  const { run: deadRun, player: recoveredPlayer, stash, summary } = resolveDeathOutcome({
-    run: runWithLog,
-    player,
-    stash: s.stash
-  });
-  const runSummary = buildRunSummary({
-    run: deadRun,
-    village: s.village,
-    reason: "dead",
-    reasonText: "You fell before reaching the road home. Anything unprotected was left below.",
-    death: summary
-  });
-  const next: GameState = {
-    ...s,
-    player: recoveredPlayer,
-    stash,
-    activeRun: undefined,
-    activeCombat: undefined,
-    completedRuns: [...s.completedRuns, deadRun],
-    lastRunSummary: runSummary,
-    runSummaries: appendRunSummary(s.runSummaries, runSummary)
-  };
-  set({ state: next, lastDeathSummary: summary, lastExtractionSummary: undefined, screen: "runSummary" });
-  persist(next);
-  playSfx("death");
-}
-
-function finishRunWithExtraction(
-  get: () => GameStore,
-  set: (partial: Partial<GameStore>) => void,
-  run: DungeonRun,
-  reason: "extracted" | "debugExtracted",
-  reasonText: string
-) {
-  const s = get().state;
-  if (!s.player || !s.village) return;
-  const rng = createRng(`extract:${run.seed}:${reason}`);
-  const result = applyExtractionRewards({
-    player: s.player,
-    village: s.village,
-    stash: s.stash,
-    run,
-    rng
-  });
-  const finishedRun: DungeonRun = { ...run, status: "extracted", raidInventory: createEmptyInventory() };
-  const leveledPlayer = applyXpAndLevel(result.player);
-  const runSummary = buildRunSummary({
-    run,
-    village: result.village,
-    reason,
-    reasonText,
-    extraction: result.summary
-  });
-
-  const next: GameState = {
-    ...s,
-    player: leveledPlayer,
-    village: result.village,
-    stash: result.stash,
-    activeRun: undefined,
-    activeCombat: undefined,
-    completedRuns: [...s.completedRuns, finishedRun],
-    lastRunSummary: runSummary,
-    runSummaries: appendRunSummary(s.runSummaries, runSummary)
-  };
-  set({ state: next, lastExtractionSummary: result.summary, lastDeathSummary: undefined, screen: "runSummary" });
-  persist(next);
-  playSfx("extract");
-}
-
 // ---------------------------------------------------------------------------
 // The Delve (v0.5 run layer) — the pure engine in src/game/delve/ knows
 // nothing about Character/Inventory/village progression, so the store bridges
 // it to the existing v0.4 run-summary / death-cost / extraction-reward flows
-// via a lightweight adapter object shaped like a DungeonRun. Those flows only
-// ever read raidInventory, xpGained, loadoutSnapshot, keepsakeInstanceId,
-// insuredInstanceId, and (on death) roomGraph/visitedRoomIds for the
-// "how far from an extract" stat — all safe to fake or leave empty here.
-// See friction notes in the PR description: quests and run preparations
-// aren't wired into delve runs yet (that's the village-integration work in
-// issue #38), so activeQuestIds/questProgressAtStart are empty.
+// via a lightweight adapter object shaped like a (slimmed) DungeonRun. Those
+// flows only ever read raidInventory, xpGained, loadoutSnapshot,
+// keepsakeInstanceId, insuredInstanceId, and (on death) roomGraph/
+// visitedRoomIds for the "how far from an extract" stat — all safe to fake
+// or leave empty here.
+//
+// Quests and run preparations aren't wired into delve runs yet (that's the
+// village-integration work in issue #38's follow-up), so activeQuestIds/
+// questProgressAtStart are empty and roomGraph is always [] — which means
+// runSummary's death-extraction-distance stat is permanently undefined for
+// delve runs (see src/game/pathing.ts; it BFSes an empty graph). That's a
+// known, accepted gap, not a bug — flagged in the cutover report.
 // ---------------------------------------------------------------------------
 
 function appendDelveNarrativeEntry(run: DelveRunState, text: string): DelveRunState {
@@ -2399,7 +1042,6 @@ function buildDelveRunAdapter(
   return {
     runId: `delve:${delveRun.placeId}:${delveRun.seed}`,
     seed: delveRun.seed,
-    generatorVersion: 1,
     biome: delveRun.placeId as DungeonRun["biome"],
     tier: delveRun.tier,
     status,
@@ -2414,23 +1056,12 @@ function buildDelveRunAdapter(
     xpGained,
     roomsVisitedBeforeDepth: 0,
     roomsCompletedBeforeDepth: 0,
-    dangerLevel: 0,
-    threat: {
-      points: delveRun.alertness,
-      level: getThreatLevelFromPoints(delveRun.alertness),
-      maxLevel: THREAT_RULES.maxLevel as ThreatState["maxLevel"],
-      lastChangedAt: Date.now(),
-      changes: []
-    },
-    delveStrain: createInitialDelveStrainState(),
-    knownRoomIntel: {},
-    dungeonLog: [],
     keepsakeInstanceId: meta?.keepsakeInstanceId,
     insuredInstanceId: meta?.insuredInstanceId
   };
 }
 
-function clearDelveRunState(s: GameState): Pick<GameState, "delveRun" | "delveRaidPack" | "delveMeta"> {
+function clearDelveRunState(): Pick<GameState, "delveRun" | "delveRaidPack" | "delveMeta"> {
   return { delveRun: undefined, delveRaidPack: undefined, delveMeta: undefined };
 }
 
@@ -2441,7 +1072,7 @@ function finishDelveRunWithExtraction(
   delveRun: DelveRunState
 ) {
   if (!s.player || !s.village) {
-    const cleared: GameState = { ...s, ...clearDelveRunState(s) };
+    const cleared: GameState = { ...s, ...clearDelveRunState() };
     set({ state: cleared, screen: "village" });
     persist(cleared);
     return;
@@ -2461,7 +1092,7 @@ function finishDelveRunWithExtraction(
   });
   const finalState: GameState = {
     ...s,
-    ...clearDelveRunState(s),
+    ...clearDelveRunState(),
     player: leveledPlayer,
     village: result.village,
     stash: result.stash,
@@ -2483,13 +1114,13 @@ function finishDelveRunWithDeath(
   const pack = s.delveRaidPack ?? createEmptyInventory();
   const xpGained = s.delveMeta?.xpGained ?? 0;
   const fakeRun = buildDelveRunAdapter(s, delveRun, pack, xpGained, "dead");
-  const { run: deadRun, player: recoveredPlayer, stash, summary } = resolveDeathOutcome({
+  const { player: recoveredPlayer, stash, summary } = resolveDeathOutcome({
     run: fakeRun,
     player: s.player,
     stash: s.stash
   });
   const runSummary = buildRunSummary({
-    run: deadRun,
+    run: fakeRun,
     village: s.village,
     reason: "dead",
     reasonText: "The Warrens keep what they took. You do not come back up.",
@@ -2497,7 +1128,7 @@ function finishDelveRunWithDeath(
   });
   const finalState: GameState = {
     ...s,
-    ...clearDelveRunState(s),
+    ...clearDelveRunState(),
     player: recoveredPlayer,
     stash,
     lastRunSummary: runSummary,
@@ -2518,9 +1149,9 @@ function finishDelveRunAbandoned(
   const pack = s.delveRaidPack ?? createEmptyInventory();
   const xpGained = s.delveMeta?.xpGained ?? 0;
   const fakeRun = buildDelveRunAdapter(s, delveRun, pack, xpGained, "abandoned");
-  const { run, player, stash, summary } = resolveAbandonOutcome({ run: fakeRun, player: s.player, stash: s.stash });
+  const { player, stash, summary } = resolveAbandonOutcome({ run: fakeRun, player: s.player, stash: s.stash });
   const runSummary = buildRunSummary({
-    run,
+    run: fakeRun,
     village: s.village,
     reason: "abandoned",
     reasonText: "You cut the line and left the raid pack behind.",
@@ -2528,7 +1159,7 @@ function finishDelveRunAbandoned(
   });
   const finalState: GameState = {
     ...s,
-    ...clearDelveRunState(s),
+    ...clearDelveRunState(),
     player,
     stash,
     lastRunSummary: runSummary,
@@ -2536,137 +1167,4 @@ function finishDelveRunAbandoned(
   };
   set({ state: finalState, lastDeathSummary: summary, lastExtractionSummary: undefined, screen: "runSummary" });
   persist(finalState);
-}
-
-function handleExtractionResult(
-  get: () => GameStore,
-  set: (partial: Partial<GameStore>) => void,
-  result: ExtractionActivationResult,
-  roomId: string
-) {
-  const s = get().state;
-  let nextState: GameState = {
-    ...s,
-    activeRun: result.run,
-    player: result.character
-  };
-
-  if (result.extracted) {
-    set({ state: nextState });
-    persist(nextState);
-    finishRunWithExtraction(get, set, result.run, "extracted", result.message);
-    return;
-  }
-
-  if (result.character.hp <= 0) {
-    set({ state: nextState });
-    persist(nextState);
-    finishRunWithDeath(get, set, result.run, result.character);
-    return;
-  }
-
-  if (result.startedCombat && result.combatEncounterId && result.fromRoomId) {
-    const enc = getEncounter(result.combatEncounterId);
-    const rng = createRng(`enc:${roomId}:${Date.now()}`);
-    const combat = startCombatBase(enc, rng, result.fromRoomId, result.run.tier);
-    nextState = { ...nextState, activeCombat: combat };
-    set({ state: nextState, screen: "combat", lastRoomMessage: result.message });
-    saveGame(nextState);
-    playSfx("threat");
-    return;
-  }
-
-  set({ state: nextState, lastRoomMessage: result.message });
-  persist(nextState);
-}
-
-const NEW_SEARCH_ROOM_TYPES: RoomType[] = [
-  "trap", "combat", "eliteCombat", "empty", "extraction", "boss"
-];
-
-function updateRoomAfterScratchSearch(run: DungeonRun, roomId: string, hasFinds: boolean): DungeonRun {
-  return {
-    ...run,
-    roomGraph: run.roomGraph.map(room => {
-      if (room.id !== roomId) return room;
-      const previous = room.searchState ?? {
-        searched: false,
-        searchCount: 0,
-        hiddenLootClaimed: false,
-        trapChecked: false,
-        eventRevealed: false
-      };
-      return {
-        ...room,
-        completed: hasFinds ? room.completed : true,
-        searchState: {
-          ...previous,
-          searched: true,
-          searchCount: previous.searchCount + 1,
-          hiddenLootClaimed: hasFinds || previous.hiddenLootClaimed
-        }
-      };
-    })
-  };
-}
-
-function resolveLockedChestAttempt(character: Character, run: DungeonRun, room: DungeonRoom): {
-  opened: boolean;
-} {
-  const rng = createRng(`lockedChest:${run.seed}:${room.id}`);
-  const roll = rng.nextInt(1, 20);
-  const bonus = getModifier(character.abilityScores.agility) + Math.floor((character.derivedStats.trapSense ?? 0) / 2);
-  const difficulty = 10 + Math.floor(Math.max(1, run.tier) / 2) + Math.max(0, room.dangerRating - 1);
-  const total = roll + bonus;
-  return { opened: total >= difficulty };
-}
-
-function isNewSearchRoomType(type: RoomType): boolean {
-  return NEW_SEARCH_ROOM_TYPES.includes(type);
-}
-
-function maybeStartCombatForRoom(
-  get: () => GameStore,
-  set: (partial: Partial<GameStore>) => void,
-  room: DungeonRoom
-) {
-  if (!room.encounterId) return;
-  const state = get().state;
-  const run = state.activeRun;
-  const rng = createRng(`enc:${room.id}:${Date.now()}`);
-  let encounterId = room.encounterId;
-  if (run) {
-    const modifiers = getThreatModifiers(run.threat.level);
-    const eliteChance = modifiers.eliteEncounterChanceBonus ?? 0;
-    if (eliteChance > 0 && rng.nextFloat() < eliteChance) {
-      const pool = getEncountersForBiome(run.biome, run.tier).filter(e => e.dangerRating >= 2);
-      if (pool.length > 0) {
-        const entries = pool.map(e => ({ value: e.id, weight: e.weight }));
-        encounterId = rng.pickWeighted(entries);
-      }
-    }
-  }
-  const enc = getEncounter(encounterId);
-  const combat = startCombatBase(enc, rng, room.id, run?.tier ?? 1);
-  const next: GameState = { ...state, activeCombat: combat };
-  set({ state: next, screen: "combat" });
-  saveGame(next);
-}
-
-function handleCombatOutcome(
-  get: () => GameStore,
-  set: (partial: Partial<GameStore>) => void
-) {
-  const s = get().state;
-  const combat = s.activeCombat;
-  if (!combat || !s.player) return;
-  if (combat.outcome === "victory") {
-    // Stay on combat screen so player sees log; user clicks "Continue"
-    return;
-  }
-  if (combat.outcome === "defeat") {
-    if (!s.activeRun) return;
-    finishRunWithDeath(get, set, s.activeRun, s.player);
-  }
-  // "fled" keeps activeCombat in state until user clicks close; that flow clears it.
 }

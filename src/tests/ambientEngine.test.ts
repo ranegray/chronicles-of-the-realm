@@ -104,13 +104,13 @@ describe("AmbientEngine bed revival", () => {
   it("keeps the dungeon bed alive when a menu detour is shorter than the crossfade window", () => {
     const engine = new AmbientEngine();
     engine.resume();
-    engine.setScreen("dungeon");
+    engine.setScreen("delve");
 
     expect((engine as unknown as EngineInternals).dungeonBed).toBeDefined();
 
     engine.setScreen("character");
     vi.advanceTimersByTime(500);
-    engine.setScreen("dungeon");
+    engine.setScreen("delve");
     vi.advanceTimersByTime(3000);
 
     expect((engine as unknown as EngineInternals).dungeonBed).toBeDefined();

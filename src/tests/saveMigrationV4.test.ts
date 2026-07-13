@@ -2,9 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { defaultGameState, loadGame, saveGame } from "../game/save";
 import { SAVE_VERSION, STORAGE_KEY } from "../game/constants";
 import { CharacterCreationService, createEmptyDraft } from "../game/characterCreation";
-import { generateDungeonRun } from "../game/dungeonGenerator";
 import { generateVillage } from "../game/npcGenerator";
-import { addItem, instanceFromTemplateId } from "../game/inventory";
+import { instanceFromTemplateId } from "../game/inventory";
 import { createRng } from "../game/rng";
 import type { Character, GameState, RunSummary } from "../game/types";
 
@@ -42,44 +41,20 @@ describe("save migration v4", () => {
     void progression;
 
     const stashItem = stripV4ItemFields(instanceFromTemplateId("trinket_pilgrim_charm", rng));
-    const raidItem = stripV4ItemFields(instanceFromTemplateId("material_bone_dust", rng, 2));
     const loadoutItem = stripV4ItemFields({
       ...instanceFromTemplateId("shield_oak_buckler", rng),
       protected: true
     });
     const village = generateVillage(createRng("migration-v4-village"));
-    const run = generateDungeonRun({ seed: "migration-v4-run", biome: "crypt", tier: 1 });
-    const { delveStrain, ...legacyRunFields } = run;
-    void delveStrain;
-    run.raidInventory = addItem(run.raidInventory, raidItem);
-    run.loadoutSnapshot = [loadoutItem];
-    run.appliedRunPreparations = [{
-      id: "prep-1",
-      optionId: "cartographer-extra-scouting",
-      sourceNpcId: village.npcs[0]!.id,
-      effect: {
-        type: "improveScouting",
-        amount: 1,
-        durationRuns: 1
-      },
-      createdAt: 123,
-      consumed: true
-    }];
-    run.dungeonLog = [{
-      id: "log-1",
-      timestamp: 123,
-      message: "Legacy log entry.",
-      type: "info"
-    }];
 
     const runSummary: RunSummary = {
       id: "summary-1",
-      runId: run.runId,
-      seed: run.seed,
-      biome: run.biome,
-      tier: run.tier,
-      startedAt: run.startedAt,
-      endedAt: run.startedAt + 100,
+      runId: "legacy-run",
+      seed: "legacy-run",
+      biome: "crypt",
+      tier: 1,
+      startedAt: 0,
+      endedAt: 100,
       reason: "dead",
       reasonText: "Legacy death.",
       roomsVisited: 2,
@@ -112,16 +87,9 @@ describe("save migration v4", () => {
         renown: 7,
         completedRunPreparationIds: ["cartographer-extra-scouting"]
       },
-      activeRun: {
-        ...legacyRunFields,
-        raidInventory: run.raidInventory,
-        loadoutSnapshot: run.loadoutSnapshot,
-        appliedRunPreparations: run.appliedRunPreparations,
-        dungeonLog: run.dungeonLog
-      },
       runSummaries: [runSummary],
       lastRunSummary: runSummary,
-      pendingRunPreparations: run.appliedRunPreparations
+      pendingRunPreparations: []
     } as unknown as GameState;
 
     saveGame(legacy);
@@ -145,23 +113,32 @@ describe("save migration v4", () => {
     expect(loaded.stash.items[0]).toMatchObject({ affixes: [], states: [], tags: [] });
     expect(loaded.player?.equipped.weapon?.affixes).toEqual([]);
     expect(loaded.player?.equipped.weapon?.states?.some(state => state.id === "protected")).toBe(true);
-    expect(loaded.activeRun?.raidInventory.items[0]).toMatchObject({ affixes: [], states: [], tags: [] });
-    expect(loaded.activeRun?.loadoutSnapshot[0]?.states?.some(state => state.id === "protected")).toBe(true);
     expect(loaded.runSummaries[0]?.lootExtracted[0]).toMatchObject({ affixes: [], states: [], tags: [] });
     expect(loaded.lastRunSummary?.questRewards[0]).toMatchObject({ affixes: [], states: [], tags: [] });
 
-    expect(loaded.activeRun?.threat).toBeDefined();
-    expect(loaded.activeRun?.delveStrain).toMatchObject({ points: 0, level: 0, changes: [] });
-    expect(loaded.activeRun?.knownRoomIntel).toBeDefined();
-    expect(loaded.activeRun?.dungeonLog[0]?.message).toBe("Legacy log entry.");
-    expect(loaded.activeRun?.appliedRunPreparations).toEqual(run.appliedRunPreparations);
-    expect(loaded.pendingRunPreparations).toEqual(run.appliedRunPreparations);
     expect(loaded.village?.renown).toBe(7);
     expect(loaded.village?.npcs[0]?.service).toBeDefined();
     expect(loaded.village?.questChains).toBeDefined();
     expect(loaded.village?.completedRunPreparationIds).toEqual(["cartographer-extra-scouting"]);
 
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).version).toBe(SAVE_VERSION);
+  });
+
+  it("v5: drops old activeRun/activeCombat fields from a pre-delve save", () => {
+    const legacy = {
+      ...defaultGameState(),
+      version: 4,
+      activeRun: { runId: "old-run", roomGraph: [{ id: "r1" }] },
+      activeCombat: { encounterId: "old-fight" }
+    } as unknown as GameState;
+
+    saveGame(legacy);
+    const loaded = loadGame()!;
+
+    expect(loaded.version).toBe(SAVE_VERSION);
+    expect((loaded as unknown as Record<string, unknown>).activeRun).toBeUndefined();
+    expect((loaded as unknown as Record<string, unknown>).activeCombat).toBeUndefined();
+    expect((loaded as unknown as Record<string, unknown>).completedRuns).toBeUndefined();
   });
 });
 
