@@ -852,6 +852,9 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
   gap: 10px;
   border-bottom: 1px solid transparent;
   padding-bottom: 4px;
+  max-width: 70ch;
+  margin: 0 auto;
+  width: 100%;
 }
 .dungeon-screen-lower .dungeon-header { border-bottom-color: rgba(200, 155, 60, 0.18); }
 .dungeon-screen-deep .dungeon-header { border-bottom-color: rgba(199, 80, 80, 0.24); }
@@ -875,6 +878,9 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
   background: var(--bg-1);
   font-size: 0.84rem;
   color: var(--text-dim);
+  max-width: 70ch;
+  margin: 0 auto;
+  width: 100%;
 }
 .dungeon-hud-hp { display: flex; align-items: center; gap: 8px; }
 .dungeon-hud-label {
@@ -890,43 +896,130 @@ code { font-family: ui-monospace, Menlo, monospace; color: var(--accent-2); }
 }
 .dungeon-hud-urgent { color: var(--warn); font-weight: 600; }
 
-.dungeon-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  grid-template-areas: "current adj" "map log";
-  gap: 12px;
-  flex: 1 1 0;
-  min-height: 0;
-  align-items: stretch;
-}
-.dungeon-grid .card:nth-child(1) { grid-area: current; }
-.dungeon-grid .card:nth-child(2) { grid-area: adj; }
-.dungeon-grid .card:nth-child(3) { grid-area: map; }
-.dungeon-grid .card:nth-child(4) { grid-area: log; }
-
-.dungeon-grid-noexits {
-  grid-template-columns: 1.4fr 1fr;
-  grid-template-areas: "current map" "current log";
-  align-items: stretch;
-}
-.dungeon-grid-noexits .card:nth-child(1) { grid-area: current; }
-.dungeon-grid-noexits .card:nth-child(2) { grid-area: map; }
-.dungeon-grid-noexits .card:nth-child(3) { grid-area: log; }
-
-.dungeon-grid > .card {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  max-height: 100%;
-  margin-bottom: 0;
-}
-.dungeon-grid > .card > .card-body {
+/* Narrative column — the dungeon screen's primary reading surface.
+   One scroll region below the sticky header/HUD; the column itself stays
+   centered and capped to a comfortable reading measure. */
+.narrative-scroll {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px;
 }
+.narrative-column {
+  max-width: 70ch;
+  margin: 0 auto;
+  width: 100%;
+  padding: 4px 2px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dungeon-header-biome { display: block; margin-top: 2px; }
+
+.room-hero { margin-bottom: 4px; }
+.room-hero-meta {
+  display: block;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.room-hero-title {
+  font-size: 2rem;
+  margin: 0 0 8px;
+}
+.room-hero-danger .room-hero-title { color: var(--danger); }
+.room-hero-prose {
+  font-size: 1.08rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.passages-block { margin-top: 14px; }
+.passages-heading {
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin: 0 0 8px;
+}
+.passages-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.passage-choice {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 100ms ease, background 100ms ease;
+}
+.passage-choice:hover { border-color: var(--accent); background: var(--bg-2); }
+.passage-direction {
+  flex: 0 0 auto;
+  min-width: 4.5em;
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+.passage-direction::after { content: "\2014"; margin-left: 8px; color: var(--text-muted); }
+.passage-desc { color: var(--text-dim); font-style: italic; }
+
+.dungeon-secondary-toggles {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.secondary-toggle {
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 100ms ease, color 100ms ease;
+}
+.secondary-toggle:hover { border-color: var(--accent); color: var(--text); }
+
+.chart-panel,
+.log-panel,
+.gear-risk-panel {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg-1);
+}
+.chart-panel-header,
+.log-panel-header,
+.gear-risk-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.chart-panel-header h3,
+.log-panel-header h3,
+.gear-risk-panel-header h3 { margin: 0; font-size: 1rem; }
 
 .dungeon-header-mood {
   color: var(--text-dim);
@@ -1174,9 +1267,13 @@ button.map-room:hover {
 /* Combat — scene layout */
 .combat-screen {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
   gap: 12px;
   padding: 14px 24px 18px;
+  max-width: 70ch;
+  margin: 0 auto;
+  width: 100%;
+  min-height: 0;
 }
 .combat-header {
   display: flex;
@@ -1196,17 +1293,16 @@ button.map-room:hover {
 .combat-header-state .danger { color: var(--danger); }
 
 .combat-stage {
-  display: grid;
-  grid-template-columns: 1fr 280px;
-  gap: 14px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
 }
 .combat-enemy-row {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(150px, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  padding: 18px 16px;
+  padding: 14px 16px;
   border: 1px solid var(--warm-line);
   border-radius: 10px;
   background:
@@ -1220,6 +1316,8 @@ button.map-room:hover {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1 1 150px;
+  max-width: 220px;
   padding: 10px 12px;
   background: var(--bg-2);
   border: 1px solid var(--line);
@@ -1280,6 +1378,7 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   background: var(--bg-1);
   border: 1px solid var(--line);
   border-radius: 8px;
+  width: 100%;
 }
 .combat-player-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .combat-player-stats { letter-spacing: 0.02em; }
@@ -1383,17 +1482,23 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
 .combat-log-panel {
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 8px 12px;
+  padding: 8px 14px;
   background: var(--bg-1);
-  max-height: 180px;
+  min-height: 0;
   overflow-y: auto;
+  font-family: ui-serif, Georgia, serif;
 }
-.combat-log { list-style: none; padding-left: 0; margin: 0; font-size: 0.9rem; color: var(--text-dim); }
+.combat-log { list-style: none; padding-left: 0; margin: 0; font-size: 0.95rem; color: var(--text-dim); }
 .combat-log li {
-  padding: 3px 0;
+  padding: 4px 0;
   border-bottom: 1px dashed rgba(255,255,255,0.05);
 }
-.combat-log li:last-child { color: var(--text); }
+.combat-log li:last-child {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 1.08em;
+  border-bottom: none;
+}
 
 .combat-actions-bar {
   display: flex;
@@ -1860,6 +1965,15 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   padding: 8px 10px;
   color: var(--accent-2);
   font-weight: 700;
+}
+/* The dev panel docks fixed to the bottom-right corner. Reserve clear space
+   under the game's own bottom-pinned action bars so its (collapsed) summary
+   strip never sits on top of a button the player needs to click. */
+.app-root:has(> .dev-panel) .combat-actions-bar {
+  padding-bottom: 52px;
+}
+.app-root:has(> .dev-panel) .narrative-column {
+  padding-bottom: 64px;
 }
 .dev-panel-body {
   border-top: 1px solid var(--line);
