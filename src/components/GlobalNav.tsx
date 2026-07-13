@@ -38,7 +38,7 @@ export function GlobalNav() {
   ];
 
   const hpPct = player.maxHp > 0 ? Math.max(0, Math.min(100, (player.hp / player.maxHp) * 100)) : 0;
-  const hpTier = hpPct <= 25 ? "realm-hp-low" : hpPct <= 55 ? "realm-hp-mid" : "";
+  const hpTier = hpPct <= 25 ? "realm-hp-low" : hpPct <= 50 ? "realm-hp-mid" : "";
 
   return (
     <nav className="realm-band" aria-label="Game navigation">
