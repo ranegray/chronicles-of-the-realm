@@ -45,13 +45,15 @@ import { appendRunSummary, buildRunSummary } from "../game/runSummary";
 import { getModifier, recalculateCharacterStats } from "../game/characterMath";
 import { THREAT_RULES } from "../game/constants";
 import type { CombatThreatDelta } from "../game/combat";
-import type { DungeonLogEntryType, ThreatChange, ThreatChangeReason } from "../game/types";
+import type { DungeonLogEntryType, ThreatChange, ThreatChangeReason, ThreatState } from "../game/types";
 import {
   applyDelveStrainChange,
   applyThreatChange,
   calculateDescendStrainGain,
   createThreatStateWithCarryover,
-  getThreatModifiers
+  getThreatModifiers,
+  getThreatLevelFromPoints,
+  createInitialDelveStrainState
 } from "../game/threat";
 import { addDungeonLogEntry } from "../game/dungeonLog";
 import { clearPendingLoot, depositPendingLoot, getPendingLoot, hasPendingLoot } from "../game/pendingLoot";
@@ -97,6 +99,8 @@ import { previewEquipmentChange as previewEquipmentChangeBase } from "../game/eq
 import { addItemState, removeItemState } from "../game/itemStates";
 import { resolveCombatAction as resolveCombatActionBase } from "../game/combatActions";
 import { playSfx, setAudioMuted } from "../game/audio";
+import { createDelveRun, applyDelveAction } from "../game/delve/delveRun";
+import type { DelveAction, DelveRunDeps, DelveRunState } from "../game/delve/types";
 
 export interface GameStore {
   screen: ScreenId;
@@ -188,6 +192,12 @@ export interface GameStore {
   setKeepsake: (itemInstanceId: string) => void;
   clearKeepsake: () => void;
   startDungeonRunWithPreparations: (params?: { biome?: import("../game/types").DungeonBiome; seed?: string }) => void;
+
+  // The Delve (v0.5 run layer)
+  startDelveRun: (placeId: string) => void;
+  performDelveAction: (action: DelveAction) => void;
+  resolveDelveRunEnd: () => void;
+  abandonDelveRun: () => void;
 
   // v0.4 integration wrappers
   awardXp: (xp: number) => void;
@@ -497,6 +507,125 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
     set({ state: next, lastDeathSummary: summary, lastExtractionSummary: undefined, screen: "runSummary" });
     persist(next);
+  },
+
+  startDelveRun: placeId => {
+    const s = get().state;
+    if (!s.player) return;
+    const raidPack = s.preparedInventory ?? createEmptyInventory();
+    const delveRun = createDelveRun({
+      placeId,
+      seed: String(Date.now()),
+      flasksPacked: raidPack.items
+        .filter(i => i.tags?.includes("oilFlask"))
+        .reduce((n, i) => n + i.quantity, 0)
+    });
+    const next: GameState = {
+      ...s,
+      delveRun,
+      delveRaidPack: raidPack,
+      preparedInventory: createEmptyInventory(),
+      delveMeta: {
+        startedAt: Date.now(),
+        xpGained: 0,
+        keepsakeInstanceId: resolveKeepsakeForRun(s, raidPack),
+        insuredInstanceId: resolveInsuredForRun(s, s.player)
+      },
+      pendingKeepsakeInstanceId: undefined,
+      pendingInsuredInstanceId: undefined
+    };
+    set({ state: next, screen: "delve" });
+    persist(next);
+  },
+
+  performDelveAction: action => {
+    const s = get().state;
+    if (!s.delveRun || !s.player) return;
+    const raidPack = s.delveRaidPack ?? createEmptyInventory();
+    const deps: DelveRunDeps = {
+      character: s.player,
+      carriedItems: raidPack.items,
+      carriedWeight: calculateInventoryWeight(raidPack),
+      carryCapacity: s.player.derivedStats.carryCapacity
+    };
+    const result = applyDelveAction(s.delveRun, action, deps);
+
+    let player = s.player;
+    let pack = raidPack;
+    let xpGained = s.delveMeta?.xpGained ?? 0;
+    let terminal: "extracted" | "died" | undefined;
+
+    for (const event of result.events) {
+      switch (event.kind) {
+        case "hpDelta": {
+          player = { ...player, hp: Math.max(0, Math.min(player.maxHp, player.hp + event.amount)) };
+          break;
+        }
+        case "itemsTaken": {
+          for (const item of event.items) pack = addItem(pack, item);
+          if (event.gold > 0) pack = { ...pack, gold: pack.gold + event.gold };
+          break;
+        }
+        case "flaskConsumed": {
+          pack = removeOneItemByTag(pack, "oilFlask");
+          break;
+        }
+        case "itemConsumed": {
+          pack = removeOneItemByTag(pack, event.tag);
+          break;
+        }
+        case "enemyDefeated": {
+          const def = tryGetEnemy(event.enemyId);
+          if (def) {
+            xpGained += def.xpReward;
+            player = { ...player, xp: player.xp + def.xpReward };
+          }
+          break;
+        }
+        case "extracted": terminal = "extracted"; break;
+        case "died": terminal = "died"; break;
+        default: break;
+      }
+    }
+
+    const nextMeta = { ...(s.delveMeta ?? { startedAt: Date.now(), xpGained: 0 }), xpGained };
+
+    // Terminal statuses (extracted/died) are NOT resolved into the v0.4
+    // run-summary flow here — the screen stays up long enough to show a
+    // brief terminal narrative line first (Pillar 4), then calls
+    // resolveDelveRunEnd() after a short pause. See that action below.
+    let delveRun = result.state;
+    if (terminal === "extracted") {
+      delveRun = appendDelveNarrativeEntry(delveRun, "You come up into evening air.");
+    } else if (terminal === "died") {
+      delveRun = appendDelveNarrativeEntry(delveRun, "The dark closes over you. The Warrens keep what they took.");
+    }
+
+    const next: GameState = {
+      ...s,
+      player,
+      delveRun,
+      delveRaidPack: pack,
+      delveMeta: nextMeta
+    };
+    set({ state: next });
+    persist(next);
+  },
+
+  resolveDelveRunEnd: () => {
+    const s = get().state;
+    if (!s.delveRun || s.delveRun.status === "active") return;
+    if (s.delveRun.status === "extracted") {
+      finishDelveRunWithExtraction(get, set, s, s.delveRun);
+    } else if (s.delveRun.status === "dead") {
+      finishDelveRunWithDeath(get, set, s, s.delveRun);
+    }
+  },
+
+  abandonDelveRun: () => {
+    const s = get().state;
+    if (!s.delveRun || !s.player) return;
+    finishDelveRunAbandoned(get, set, s, s.delveRun);
   },
 
   moveToRoom: roomId => {
@@ -2053,6 +2182,7 @@ function getScreenForLoadedState(state: GameState): ScreenId {
   if (!state.player) return "mainMenu";
   if (state.activeCombat && !state.activeCombat.over) return "combat";
   if (state.activeRun?.status === "active") return "dungeon";
+  if (state.delveRun?.status === "active") return "delve";
   return "village";
 }
 
@@ -2228,6 +2358,184 @@ function finishRunWithExtraction(
   set({ state: next, lastExtractionSummary: result.summary, lastDeathSummary: undefined, screen: "runSummary" });
   persist(next);
   playSfx("extract");
+}
+
+// ---------------------------------------------------------------------------
+// The Delve (v0.5 run layer) — the pure engine in src/game/delve/ knows
+// nothing about Character/Inventory/village progression, so the store bridges
+// it to the existing v0.4 run-summary / death-cost / extraction-reward flows
+// via a lightweight adapter object shaped like a DungeonRun. Those flows only
+// ever read raidInventory, xpGained, loadoutSnapshot, keepsakeInstanceId,
+// insuredInstanceId, and (on death) roomGraph/visitedRoomIds for the
+// "how far from an extract" stat — all safe to fake or leave empty here.
+// See friction notes in the PR description: quests and run preparations
+// aren't wired into delve runs yet (that's the village-integration work in
+// issue #38), so activeQuestIds/questProgressAtStart are empty.
+// ---------------------------------------------------------------------------
+
+function appendDelveNarrativeEntry(run: DelveRunState, text: string): DelveRunState {
+  const entry = { id: `terminal_${run.actionCount}`, kind: "system" as const, text };
+  return { ...run, narrative: [...run.narrative, entry] };
+}
+
+function removeOneItemByTag(inv: Inventory, tag: string): Inventory {
+  const item = inv.items.find(i => i.tags?.includes(tag));
+  if (!item) return inv;
+  return removeItem(inv, item.instanceId, 1);
+}
+
+function tryGetEnemy(id: string) {
+  try { return getEnemy(id); } catch { return undefined; }
+}
+
+function buildDelveRunAdapter(
+  state: GameState,
+  delveRun: DelveRunState,
+  pack: Inventory,
+  xpGained: number,
+  status: "extracted" | "dead" | "abandoned"
+): DungeonRun {
+  const meta = state.delveMeta;
+  return {
+    runId: `delve:${delveRun.placeId}:${delveRun.seed}`,
+    seed: delveRun.seed,
+    generatorVersion: 1,
+    biome: delveRun.placeId as DungeonRun["biome"],
+    tier: delveRun.tier,
+    status,
+    startedAt: meta?.startedAt ?? Date.now(),
+    currentRoomId: delveRun.currentRoomId,
+    roomGraph: [],
+    visitedRoomIds: delveRun.visitedRoomIds,
+    raidInventory: pack,
+    loadoutSnapshot: state.player ? collectLoadoutSnapshot(state.player) : [],
+    activeQuestIds: [],
+    questProgressAtStart: {},
+    xpGained,
+    roomsVisitedBeforeDepth: 0,
+    roomsCompletedBeforeDepth: 0,
+    dangerLevel: 0,
+    threat: {
+      points: delveRun.alertness,
+      level: getThreatLevelFromPoints(delveRun.alertness),
+      maxLevel: THREAT_RULES.maxLevel as ThreatState["maxLevel"],
+      lastChangedAt: Date.now(),
+      changes: []
+    },
+    delveStrain: createInitialDelveStrainState(),
+    knownRoomIntel: {},
+    dungeonLog: [],
+    keepsakeInstanceId: meta?.keepsakeInstanceId,
+    insuredInstanceId: meta?.insuredInstanceId
+  };
+}
+
+function clearDelveRunState(s: GameState): Pick<GameState, "delveRun" | "delveRaidPack" | "delveMeta"> {
+  return { delveRun: undefined, delveRaidPack: undefined, delveMeta: undefined };
+}
+
+function finishDelveRunWithExtraction(
+  get: () => GameStore,
+  set: (partial: Partial<GameStore>) => void,
+  s: GameState,
+  delveRun: DelveRunState
+) {
+  if (!s.player || !s.village) {
+    const cleared: GameState = { ...s, ...clearDelveRunState(s) };
+    set({ state: cleared, screen: "village" });
+    persist(cleared);
+    return;
+  }
+  const pack = s.delveRaidPack ?? createEmptyInventory();
+  const xpGained = s.delveMeta?.xpGained ?? 0;
+  const fakeRun = buildDelveRunAdapter(s, delveRun, pack, xpGained, "extracted");
+  const rng = createRng(`delveExtract:${fakeRun.seed}`);
+  const result = applyExtractionRewards({ player: s.player, village: s.village, stash: s.stash, run: fakeRun, rng });
+  const leveledPlayer = applyXpAndLevel(result.player);
+  const runSummary = buildRunSummary({
+    run: fakeRun,
+    village: result.village,
+    reason: "extracted",
+    reasonText: "You come up into evening air, the Warrens behind you.",
+    extraction: result.summary
+  });
+  const finalState: GameState = {
+    ...s,
+    ...clearDelveRunState(s),
+    player: leveledPlayer,
+    village: result.village,
+    stash: result.stash,
+    lastRunSummary: runSummary,
+    runSummaries: appendRunSummary(s.runSummaries, runSummary)
+  };
+  set({ state: finalState, lastExtractionSummary: result.summary, lastDeathSummary: undefined, screen: "runSummary" });
+  persist(finalState);
+  playSfx("extract");
+}
+
+function finishDelveRunWithDeath(
+  get: () => GameStore,
+  set: (partial: Partial<GameStore>) => void,
+  s: GameState,
+  delveRun: DelveRunState
+) {
+  if (!s.player) return;
+  const pack = s.delveRaidPack ?? createEmptyInventory();
+  const xpGained = s.delveMeta?.xpGained ?? 0;
+  const fakeRun = buildDelveRunAdapter(s, delveRun, pack, xpGained, "dead");
+  const { run: deadRun, player: recoveredPlayer, stash, summary } = resolveDeathOutcome({
+    run: fakeRun,
+    player: s.player,
+    stash: s.stash
+  });
+  const runSummary = buildRunSummary({
+    run: deadRun,
+    village: s.village,
+    reason: "dead",
+    reasonText: "The Warrens keep what they took. You do not come back up.",
+    death: summary
+  });
+  const finalState: GameState = {
+    ...s,
+    ...clearDelveRunState(s),
+    player: recoveredPlayer,
+    stash,
+    lastRunSummary: runSummary,
+    runSummaries: appendRunSummary(s.runSummaries, runSummary)
+  };
+  set({ state: finalState, lastDeathSummary: summary, lastExtractionSummary: undefined, screen: "runSummary" });
+  persist(finalState);
+  playSfx("death");
+}
+
+function finishDelveRunAbandoned(
+  get: () => GameStore,
+  set: (partial: Partial<GameStore>) => void,
+  s: GameState,
+  delveRun: DelveRunState
+) {
+  if (!s.player) return;
+  const pack = s.delveRaidPack ?? createEmptyInventory();
+  const xpGained = s.delveMeta?.xpGained ?? 0;
+  const fakeRun = buildDelveRunAdapter(s, delveRun, pack, xpGained, "abandoned");
+  const { run, player, stash, summary } = resolveAbandonOutcome({ run: fakeRun, player: s.player, stash: s.stash });
+  const runSummary = buildRunSummary({
+    run,
+    village: s.village,
+    reason: "abandoned",
+    reasonText: "You cut the line and left the raid pack behind.",
+    death: summary
+  });
+  const finalState: GameState = {
+    ...s,
+    ...clearDelveRunState(s),
+    player,
+    stash,
+    lastRunSummary: runSummary,
+    runSummaries: appendRunSummary(s.runSummaries, runSummary)
+  };
+  set({ state: finalState, lastDeathSummary: summary, lastExtractionSummary: undefined, screen: "runSummary" });
+  persist(finalState);
 }
 
 function handleExtractionResult(

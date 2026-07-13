@@ -105,7 +105,10 @@ export function migrateSaveIfNeeded(state: unknown): GameState | null {
     settings: {
       ...base.settings,
       ...(isRecord(state.settings) ? state.settings : {})
-    }
+    },
+    delveRun: normalizeDelveRun(state.delveRun),
+    delveRaidPack: normalizeInventory(state.delveRaidPack) ?? undefined,
+    delveMeta: normalizeDelveMeta(state.delveMeta)
   } as GameState;
 
   return normalized;
@@ -322,6 +325,33 @@ function legacyStableExtraction(): ExtractionPoint {
     description: "A safe route leads back to the surface.",
     activationText: "You leave the dungeon with your spoils.",
     successText: "You escaped."
+  };
+}
+
+/**
+ * The Delve (v0.5) is additive and optional on GameState; we don't deep-
+ * validate its full shape (a heavily-nested pure-engine type) here — only
+ * enough of a sanity check that a corrupt/foreign value can't wrongly route
+ * the app to the delve screen on load. A malformed delve run is simply
+ * dropped, same as any other unrecognized save fragment.
+ */
+function normalizeDelveRun(value: unknown): GameState["delveRun"] {
+  if (!isRecord(value)) return undefined;
+  if (typeof value.placeId !== "string") return undefined;
+  if (typeof value.currentRoomId !== "string") return undefined;
+  if (value.status !== "active" && value.status !== "extracted" && value.status !== "dead") return undefined;
+  if (!Array.isArray(value.narrative)) return undefined;
+  return value as unknown as GameState["delveRun"];
+}
+
+function normalizeDelveMeta(value: unknown): GameState["delveMeta"] {
+  if (!isRecord(value)) return undefined;
+  if (typeof value.startedAt !== "number") return undefined;
+  return {
+    startedAt: value.startedAt,
+    xpGained: typeof value.xpGained === "number" ? value.xpGained : 0,
+    keepsakeInstanceId: typeof value.keepsakeInstanceId === "string" ? value.keepsakeInstanceId : undefined,
+    insuredInstanceId: typeof value.insuredInstanceId === "string" ? value.insuredInstanceId : undefined
   };
 }
 

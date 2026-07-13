@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { getAudioContext, isAudioMuted } from "./audio";
 import { useGameStore } from "../store/gameStore";
 import type { ScreenId, ThreatLevel } from "./types";
+import { getThreatLevelFromPoints } from "./threat";
 
 // ---------------------------------------------------------------------------
 // Pure threat -> sound mapping (unit tested in src/tests/ambient.test.ts)
@@ -191,7 +192,7 @@ export class AmbientEngine {
   }
 
   private desiredBed(): AmbientBed {
-    if (this.screen === "dungeon" || this.screen === "combat") return "dungeon";
+    if (this.screen === "dungeon" || this.screen === "combat" || this.screen === "delve") return "dungeon";
     if (this.screen === "village") return "village";
     return "none";
   }
@@ -523,6 +524,11 @@ function isInCombat(screen: ScreenId, hasActiveCombat: boolean): boolean {
   return screen === "combat" || hasActiveCombat;
 }
 
+function delveThreatLevel(alertnessPoints: number | undefined): ThreatLevel {
+  if (alertnessPoints === undefined) return 0;
+  return getThreatLevelFromPoints(alertnessPoints);
+}
+
 /**
  * Mounts the ambient engine for the lifetime of the app. Reads screen and
  * threat state from the store, resumes the shared AudioContext on the first
@@ -533,8 +539,12 @@ export function useAmbientAudio(): void {
   if (!engineRef.current) engineRef.current = new AmbientEngine();
 
   const screen = useGameStore(s => s.screen);
-  const threatLevel = useGameStore(s => s.state.activeRun?.threat.level ?? 0);
-  const hasActiveCombat = useGameStore(s => Boolean(s.state.activeCombat && !s.state.activeCombat.over));
+  const threatLevel = useGameStore(s =>
+    s.state.activeRun?.threat.level ?? delveThreatLevel(s.state.delveRun?.alertness)
+  );
+  const hasActiveCombat = useGameStore(s =>
+    Boolean(s.state.activeCombat && !s.state.activeCombat.over) || Boolean(s.state.delveRun?.activeEncounter)
+  );
   const muted = useGameStore(s => s.state.settings.audioMuted);
 
   useEffect(() => {

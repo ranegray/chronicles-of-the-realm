@@ -6,6 +6,7 @@ import { CharacterCreationScreen } from "./screens/CharacterCreationScreen";
 import { VillageScreen } from "./screens/VillageScreen";
 import { DungeonScreen } from "./screens/DungeonScreen";
 import { CombatScreen } from "./screens/CombatScreen";
+import { DelveScreen } from "./screens/DelveScreen";
 import { RunSummaryScreen } from "./screens/RunSummaryScreen";
 import { StashScreen } from "./screens/StashScreen";
 import { MerchantScreen } from "./screens/MerchantScreen";
@@ -38,6 +39,7 @@ export default function App() {
       {screen === "village" && <VillageScreen />}
       {screen === "dungeon" && <DungeonScreen />}
       {screen === "combat" && <CombatScreen />}
+      {screen === "delve" && <DelveScreen />}
       {screen === "runSummary" && <RunSummaryScreen />}
       {screen === "stash" && <StashScreen />}
       {screen === "character" && <CharacterScreen />}
