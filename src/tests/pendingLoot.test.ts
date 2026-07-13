@@ -5,7 +5,7 @@ import { generateDungeonRun, getRoomById } from "../game/dungeonGenerator";
 import { generateVillage } from "../game/npcGenerator";
 import { startCombat } from "../game/combat";
 import { createRng } from "../game/rng";
-import { getEncounter } from "../data/encounters";
+import { getEncounter, getEncountersForBiome } from "../data/encounters";
 import { floorHasPendingLoot } from "../game/pendingLoot";
 import type { Character, ClassId, DungeonRun, ExtractionPoint, GameState, Quest } from "../game/types";
 
@@ -27,6 +27,47 @@ function runWithCombatRoom(seed: string): DungeonRun {
     if (room) return { ...run, currentRoomId: room.id };
   }
   throw new Error("no combat room in 40 seeded attempts");
+}
+
+function runWithExtractionRoom(seed: string): DungeonRun {
+  for (let i = 0; i < 40; i++) {
+    const run = generateDungeonRun({ seed: `${seed}:${i}`, biome: "crypt", tier: 1 });
+    const room = run.roomGraph.find(r => r.type === "extraction" && r.extraction);
+    if (room) return { ...run, currentRoomId: room.id };
+  }
+  throw new Error("no extraction room in 40 seeded attempts");
+}
+
+// Simulates winning a per-turn ambush rolled while a delayed extraction is
+// still charging (src/game/extraction.ts): the encounter isn't tied to the
+// room's own encounterId (extraction rooms don't have one), so we just pick
+// any valid encounter for the biome and run combat resolution against the
+// extraction room directly, with its extraction state pinned to "charging".
+function primeChargingExtractionCombatVictory(seed: string): { roomId: string } {
+  const player = buildCharacter(seed);
+  const run = runWithExtractionRoom(seed);
+  const room = getRoomById(run.roomGraph, run.currentRoomId)!;
+  const chargingRoom = { ...room, extraction: { ...room.extraction!, state: "charging" as const } };
+  const runWithCharging: DungeonRun = {
+    ...run,
+    roomGraph: run.roomGraph.map(r => (r.id === room.id ? chargingRoom : r))
+  };
+  const village = generateVillage(createRng(`village:${seed}`));
+  village.quests = [materialWatcherQuest()];
+
+  const rng = createRng(`combat:${seed}`);
+  const enc = getEncountersForBiome(run.biome, run.tier)[0]!;
+  const combat = { ...startCombat(enc, rng, room.id, run.tier), over: true, outcome: "victory" as const };
+
+  const state: GameState = {
+    ...useGameStore.getState().state,
+    player,
+    village,
+    activeRun: runWithCharging,
+    activeCombat: combat
+  };
+  useGameStore.setState({ state, screen: "combat" });
+  return { roomId: room.id };
 }
 
 // Synthetic "any material" quest so we can observe the itemRetrieved/materialCollected
@@ -224,5 +265,22 @@ describe("pending loot", () => {
 
     expect(after.activeRun!.raidInventory.items.some(i => i.instanceId === item.instanceId)).toBe(true);
     expect(afterRoom.pendingLoot!.items.some(i => i.instanceId === item.instanceId)).toBe(false);
+  });
+
+  it("winning a per-turn ambush during a charging extraction never deposits combat drops or claims them in the message", () => {
+    // rollCombatDrops is chance-based (~20% for extraction-type rooms); run
+    // several seeds so this test would actually catch a regression that
+    // re-enables deposits while the extraction is still charging.
+    for (let i = 0; i < 30; i++) {
+      localStorage.clear();
+      useGameStore.setState({ state: useGameStore.getState().state, lastRoomMessage: undefined });
+      const { roomId } = primeChargingExtractionCombatVictory(`charging-ambush-${i}`);
+      useGameStore.getState().closeCombatVictory();
+      const after = useGameStore.getState().state;
+      const room = getRoomById(after.activeRun!.roomGraph, roomId)!;
+
+      expect(room.pendingLoot?.items ?? []).toEqual([]);
+      expect(useGameStore.getState().lastRoomMessage ?? "").not.toContain("Left to claim");
+    }
   });
 });
