@@ -73,6 +73,34 @@ function validateFloor(placeId: string, floor: PlaceFloor): void {
     }
   }
 
+  // Exit-count budget (issue #38): rooms get at most 3 exits so navigation
+  // reads as a handful of real choices, not a directory. A room may be
+  // marked `junction` to allow up to 4 — but junctions must be landmarks
+  // (the player learns them by name as a crossroads) and a floor may have
+  // at most 2 of them, or every room starts to feel like a hub.
+  const MAX_EXITS_DEFAULT = 3;
+  const MAX_EXITS_JUNCTION = 4;
+  const MAX_JUNCTIONS_PER_FLOOR = 2;
+
+  const junctionRooms = floor.rooms.filter(r => r.junction);
+  if (junctionRooms.length > MAX_JUNCTIONS_PER_FLOOR) {
+    throw new Error(
+      `${label}: has ${junctionRooms.length} junction rooms, max ${MAX_JUNCTIONS_PER_FLOOR} per floor`
+    );
+  }
+  for (const room of floor.rooms) {
+    if (room.junction && !room.landmark) {
+      throw new Error(`${label}: room "${room.id}" is a junction but not a landmark`);
+    }
+    const maxExits = room.junction ? MAX_EXITS_JUNCTION : MAX_EXITS_DEFAULT;
+    if (room.exits.length > maxExits) {
+      throw new Error(
+        `${label}: room "${room.id}" has ${room.exits.length} exits, max ${maxExits}` +
+        (room.junction ? " (junction)" : "")
+      );
+    }
+  }
+
   // Every exit's `to` must exist, and reciprocal exits must exist unless oneWay.
   for (const room of floor.rooms) {
     for (const exit of room.exits) {

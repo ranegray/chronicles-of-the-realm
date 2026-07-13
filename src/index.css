@@ -2459,6 +2459,16 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
 .delve-entry-dim.delve-entry-sense,
 .delve-entry-dim.delve-entry-map { color: var(--text-muted); }
 
+/* Prior room visits: the scene replaces itself, it doesn't accumulate. Only
+   the last couple of stays stay on screen at all, and only as their name. */
+.delve-segment-collapsed {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  opacity: 0.45;
+  margin-top: 2px;
+}
+
 .delve-entry.delve-entry-in {
   animation: delve-entry-fade-in 260ms ease-out backwards;
 }

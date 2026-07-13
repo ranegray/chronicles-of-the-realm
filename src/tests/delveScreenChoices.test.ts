@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createDelveRun } from "../game/delve/delveRun";
-import type { ActiveEncounter, DelveRunState } from "../game/delve/types";
-import { buildChoiceList } from "../screens/delveChoices";
+import type { ActiveEncounter, DelveNarrativeEntry, DelveRunState } from "../game/delve/types";
+import {
+  buildChoiceList,
+  exitMemoryAnnotation,
+  groupNarrativeSegments,
+  segmentRoomName
+} from "../screens/delveChoices";
 
 const PLACE_ID = "goblinWarrens";
 
@@ -114,5 +119,121 @@ describe("buildChoiceList", () => {
     expect(buildChoiceList(extracted)).toEqual([]);
     const dead = freshRun({ status: "dead" });
     expect(buildChoiceList(dead)).toEqual([]);
+  });
+
+  it("annotates exits from run state: back the way you came, walked before, or plain sense text", () => {
+    // tallow_gallery (a junction) exits: north -> antechamber, east -> candle_row,
+    // south -> grease_cellar, down (vertical!) -> toll_bridge (senses: chittering).
+    const state = freshRun({
+      currentRoomId: "tallow_gallery",
+      cameFromRoomId: "antechamber",
+      visitedRoomIds: ["gullet", "antechamber", "tallow_gallery", "candle_row"]
+    });
+    const choices = buildChoiceList(state);
+    const moveLabel = (direction: string) =>
+      choices.find(c => c.kind === "move" && c.direction === direction)!.label;
+
+    expect(moveLabel("north")).toBe("North — back the way you came");
+    expect(moveLabel("east")).toBe("East — you've walked this way before");
+    expect(moveLabel("south")).toBe("South — a way on");
+    // Unvisited and vertical: keeps its sense text, reads naturally as "Below"
+    // (door state is a per-run population roll, so just check the prefix).
+    expect(moveLabel("down")).toMatch(/^Below — faint chittering/);
+  });
+
+  it("annotates a vertical back-the-way-you-came exit as 'Above'/'Below', not 'Up'/'Down'", () => {
+    // toll_bridge's only vertical exit (up) leads back to tallow_gallery.
+    const state = freshRun({
+      currentRoomId: "toll_bridge",
+      cameFromRoomId: "tallow_gallery",
+      visitedRoomIds: ["gullet", "antechamber", "tallow_gallery", "toll_bridge"]
+    });
+    const choices = buildChoiceList(state);
+    const upMove = choices.find(c => c.kind === "move" && c.direction === "up")!;
+    expect(upMove.label).toBe("Above — back the way you came");
+  });
+});
+
+describe("exitMemoryAnnotation", () => {
+  const baseState = () =>
+    createDelveRun({ placeId: PLACE_ID, seed: "annotation-1", flasksPacked: 1 });
+
+  it("prefers 'back the way you came' over 'walked this way before' when both would apply", () => {
+    const state = { ...baseState(), cameFromRoomId: "antechamber", visitedRoomIds: ["gullet", "antechamber"] };
+    const exit = { direction: "north" as const, to: "antechamber" };
+    expect(exitMemoryAnnotation(state, exit)).toBe("back the way you came");
+  });
+
+  it("returns undefined for an exit to an unvisited room", () => {
+    const state = { ...baseState(), cameFromRoomId: "antechamber", visitedRoomIds: ["gullet", "antechamber"] };
+    const exit = { direction: "south" as const, to: "grease_cellar" };
+    expect(exitMemoryAnnotation(state, exit)).toBeUndefined();
+  });
+
+  it("flags a visited-but-not-came-from room", () => {
+    const state = { ...baseState(), cameFromRoomId: "antechamber", visitedRoomIds: ["gullet", "antechamber", "candle_row"] };
+    const exit = { direction: "east" as const, to: "candle_row" };
+    expect(exitMemoryAnnotation(state, exit)).toBe("you've walked this way before");
+  });
+});
+
+describe("groupNarrativeSegments", () => {
+  function entry(id: string, kind: DelveNarrativeEntry["kind"], text = "x"): DelveNarrativeEntry {
+    return { id, kind, text };
+  }
+
+  it("starts a new segment at every kind:'room' entry", () => {
+    const entries = [
+      entry("1", "room", "The Gullet. Cold air."),
+      entry("2", "sense", "North — a way on."),
+      entry("3", "action", "You search."),
+      entry("4", "room", "Antechamber. A low crawl-space."),
+      entry("5", "sense", "South — warm air.")
+    ];
+    const segments = groupNarrativeSegments(entries);
+    expect(segments).toHaveLength(2);
+    expect(segments[0]!.entries.map(e => e.id)).toEqual(["1", "2", "3"]);
+    expect(segments[1]!.entries.map(e => e.id)).toEqual(["4", "5"]);
+    expect(segments[0]!.id).toBe("1");
+    expect(segments[1]!.id).toBe("4");
+  });
+
+  it("treats a revisit room entry as its own new segment too", () => {
+    const entries = [
+      entry("1", "room", "The Gullet. Cold air."),
+      entry("2", "room", "The Gullet, again.")
+    ];
+    expect(groupNarrativeSegments(entries)).toHaveLength(2);
+  });
+
+  it("returns an empty array for an empty log, and tolerates a log that doesn't start with 'room'", () => {
+    expect(groupNarrativeSegments([])).toEqual([]);
+    const entries = [entry("1", "system", "Somewhere, a bell."), entry("2", "room", "Antechamber.")];
+    const segments = groupNarrativeSegments(entries);
+    expect(segments).toHaveLength(2);
+    expect(segments[0]!.entries.map(e => e.id)).toEqual(["1"]);
+  });
+
+  it("preserves every entry across segments (nothing dropped)", () => {
+    const entries = Array.from({ length: 10 }, (_, i) =>
+      entry(String(i), i % 3 === 0 ? "room" : "sense")
+    );
+    const segments = groupNarrativeSegments(entries);
+    const flattened = segments.flatMap(s => s.entries.map(e => e.id));
+    expect(flattened).toEqual(entries.map(e => e.id));
+  });
+});
+
+describe("segmentRoomName", () => {
+  it("strips the prose tail from a first-visit room entry", () => {
+    expect(segmentRoomName("The Gullet. The tunnel mouth you came in through.")).toBe("The Gullet");
+  });
+
+  it("strips the ', again.' tail from a revisit room entry", () => {
+    expect(segmentRoomName("Antechamber, again.")).toBe("Antechamber");
+  });
+
+  it("returns the whole string when neither tail shape is present", () => {
+    expect(segmentRoomName("Sleeper's Court")).toBe("Sleeper's Court");
   });
 });

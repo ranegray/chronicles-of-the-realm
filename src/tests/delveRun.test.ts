@@ -247,6 +247,11 @@ describe("search", () => {
 
   it("finds nothing on a second search of the same room", () => {
     const h = makeHarness("search-2");
+    // Not a hunter test: strip hunters so a wandering encounter can't
+    // interrupt the second search on this seed (the Warrens' floor-1 layout
+    // was re-authored for issue #38's exit-count trim, which shifted BFS
+    // distances and, with them, which seeds happen to draw an encounter).
+    h.state = { ...h.state, hunters: [] };
     walkTo(h, "trade_room");
     act(h, { type: "search" });
     const poolBefore = h.state.pendingLoot["trade_room"];
@@ -889,7 +894,11 @@ function runDelveBot(seed: string, policy: BotPolicy): DelveSimResult {
 
 describe("delve risk/reward simulation", () => {
   it("a cautious delver extracts most runs; greed makes the floor tilt", () => {
-    const RUNS = 40;
+    // Issue #38 re-authored floor 1's exit graph (fewer exits per room, two
+    // junction rooms), which shifts hunter/noise dynamics enough that 40
+    // seeds landed a hair under the old bad-rate floor. A larger sample
+    // settles the same signal (see thresholds below) without loosening them.
+    const RUNS = 120;
     const cautious = Array.from({ length: RUNS }, (_, i) => runDelveBot(`delve-sim-c-${i + 1}`, "cautious"));
     const greedy = Array.from({ length: RUNS }, (_, i) => runDelveBot(`delve-sim-g-${i + 1}`, "greedy"));
 

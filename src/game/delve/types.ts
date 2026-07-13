@@ -31,6 +31,12 @@ export interface PlaceRoom {
   /** Prose variants; population picks one per run. */
   prose: string[];
   landmark?: boolean;
+  /**
+   * A crossroads room: allowed up to 4 exits instead of the usual 3. Must
+   * also be a landmark (players learn junctions by name) and floors are
+   * capped at 2 junctions each — see validatePlace.
+   */
+  junction?: true;
   exits: PlaceExit[];
   /** Loot table id from the existing loot system; omitted = no loot spawn. */
   lootTableId?: string;
