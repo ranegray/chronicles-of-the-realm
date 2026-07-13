@@ -1,0 +1,146 @@
+/* Character creation — the village taking you in, not a checkout wizard.
+   Same 70ch narrative column as the dungeon and village screens. */
+
+.creation-screen-prose { padding: 14px 24px 20px; display: flex; flex-direction: column; gap: 0; }
+
+.arrival-step-tag {
+  display: block;
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.arrival-title {
+  font-size: 2rem;
+  margin: 0 0 10px;
+}
+
+.arrival-prose {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text);
+  margin: 0 0 18px;
+}
+
+.answer-field { display: flex; flex-direction: column; gap: 6px; max-width: 420px; margin-bottom: 18px; }
+.answer-field-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+.answer-input {
+  background: transparent;
+  color: var(--text);
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 8px 2px;
+  font-family: inherit;
+  font-size: 1.15rem;
+  font-style: italic;
+}
+.answer-input:focus { outline: none; border-bottom-color: var(--accent); }
+.answer-input::placeholder { color: var(--text-muted); font-style: italic; }
+
+.narrative-choice {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.narrative-choice-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.narrative-choice-body { cursor: pointer; }
+.narrative-choice-label {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+.narrative-choice-name {
+  margin: 0 0 4px;
+  font-size: 1.4rem;
+}
+.narrative-choice-trait { color: var(--text-dim); margin: 6px 0; }
+.narrative-choice-bonuses,
+.narrative-choice-stats {
+  margin: 8px 0 0;
+  padding-left: 1.2em;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.narrative-choice-footer { margin-top: 12px; }
+
+.choice-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.choice-row {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 100ms ease, background 100ms ease;
+}
+.choice-row:hover { border-color: var(--accent); background: var(--bg-2); }
+.choice-row-selected { border-color: var(--accent); background: rgba(200, 155, 60, 0.06); }
+.choice-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.choice-row-name { color: var(--accent-2); font-weight: 600; }
+.choice-row-selected-tag {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--good);
+}
+.choice-row-desc { margin: 4px 0 0; color: var(--text-dim); }
+.choice-row-items {
+  margin: 6px 0 0;
+  padding-left: 1.1em;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.measure-block { margin-bottom: 18px; }
+.measure-scores { display: flex; gap: 8px; margin: 12px 0; }
+.measure-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+
+.chronicle-entry {
+  background: var(--bg-1);
+  border: 1px solid var(--warm-line);
+  border-radius: 8px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+}
+.chronicle-entry-name { font-size: 1.5rem; margin: 0 0 2px; }
+.chronicle-entry-sub { color: var(--text-muted); margin: 0 0 10px; }
+.chronicle-entry-stats { color: var(--text-dim); }
+.chronicle-entry-items {
+  margin: 10px 0 0;
+  padding-left: 1.2em;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.arrival-actions { display: flex; gap: 10px; margin-top: 4px; margin-bottom: 24px; }

@@ -3,8 +3,27 @@ import { Button } from "../components/Button";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { calculateInventoryWeight } from "../game/inventory";
 import { useGameStore } from "../store/gameStore";
-import { ServiceLevelBadge } from "../components/ServiceLevelBadge";
-import { getCurrentServiceLevelDefinition, getRelationshipLabel } from "../game/villageProgression";
+import { getRelationshipLabel } from "../game/villageProgression";
+import type { NpcRole, Quest } from "../game/types";
+import "./VillageScreen.css";
+
+const ROLE_VERB_PHRASES: Record<NpcRole, string> = {
+  blacksmith: "works the forge",
+  alchemist: "keeps the still going behind a curtain of bitter herbs",
+  enchanter: "reads the marks on old metal",
+  quartermaster: "minds the stores",
+  cartographer: "sketches the dungeon's margins in pale ink",
+  elder: "speaks for what's left of the village",
+  healer: "binds wounds with quiet patience",
+  trader: "haggles by the gate"
+};
+
+const TRUST_TAGS: Record<string, string> = {
+  Stranger: "barely knows you",
+  Trusted: "has come to trust you",
+  Ally: "counts you as an ally",
+  Devoted: "would go to war for you"
+};
 
 export function VillageScreen() {
   const player = useGameStore(s => s.state.player);
@@ -27,17 +46,17 @@ export function VillageScreen() {
   const activeQuests = village.quests.filter(q => q.status === "active");
   const completedQuests = village.quests.filter(q => q.status === "completed");
   const preparedWeight = calculateInventoryWeight(preparedInventory);
-  const queuedQuest = activeQuests[0] ?? availableQuests[0];
+  const noticeQuests = [...activeQuests, ...availableQuests].slice(0, 3);
 
   return (
-    <div className="screen village-screen">
-      <section className="delve-hero">
-        <div className="delve-hero-body">
-          <div className="delve-hero-place">
-            <span className="delve-hero-place-name">{village.name}</span>
+    <div className="screen village-screen village-screen-prose">
+      <div className="narrative-scroll">
+        <div className="narrative-column">
+          <div className="village-hero-row">
+            <span className="village-hero-name">{village.name}</span>
             <button
               type="button"
-              className="delve-hero-reset"
+              className="village-hero-reset"
               title="Reset save and return to the title"
               onClick={() => setShowResetConfirm(true)}
             >Reset</button>
@@ -54,77 +73,87 @@ export function VillageScreen() {
               onCancel={() => setShowResetConfirm(false)}
             />
           )}
-          <h1>Enter the Dungeon</h1>
-          <div className="delve-hero-meta">
-            <span><em>Pack</em> {preparedWeight} / {player.derivedStats.carryCapacity}</span>
-            <span><em>Gold</em> {stash.gold}</span>
-            <span><em>Active quests</em> {activeQuests.length}</span>
-            <span><em>Renown</em> {village.renown}</span>
-          </div>
-        </div>
-        <div className="delve-hero-actions">
-          <Button className="btn-hero" onClick={() => startRun()}>Enter the Dungeon</Button>
-          <Button variant="secondary" onClick={() => goToScreen("stash")}>Pack Gear</Button>
-        </div>
-      </section>
 
-      {message && <p className="msg village-message">{message}</p>}
+          <p className="village-hero-prose">
+            The morning comes in cold, the kind that sits in the joints. Lanterns still burn
+            along the palisade, though the sky beyond the tree line has gone the grey of first
+            light. Somewhere below the frost line the dungeon waits; it has never once been in
+            a hurry.
+          </p>
 
-      <section className="village-courtyard">
-        <header className="village-courtyard-head">
-          <h2>Courtyard</h2>
-          <span className="muted small">{village.npcs.length} in town</span>
-        </header>
-        <ul className="npc-grid">
-          {village.npcs.map(npc => {
-            const currentLevel = getCurrentServiceLevelDefinition({ npc });
-            return (
-              <li key={npc.id} className="npc-tile" onClick={() => openMerchant(npc.id)}>
-                <div className="npc-tile-head">
-                  <strong>{npc.name}</strong>
-                  <span className="muted small">{capitalize(npc.role)}</span>
-                </div>
-                <div className="npc-tile-sub">
-                  <ServiceLevelBadge level={npc.service.level} label={currentLevel?.title} />
-                  <span className="muted small">Trust {getRelationshipLabel(npc.relationship)}</span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+          {message && <p className="msg village-message">{message}</p>}
 
-      <section className="village-footer">
-        <div className="village-quest-strip">
-          <div className="village-quest-strip-main">
-            <span className="village-quest-eyebrow">Quest Board</span>
-            {queuedQuest ? (
-              <>
-                <strong>{queuedQuest.title}</strong>
-                <span className="muted small">
-                  {queuedQuest.status === "active"
-                    ? `Progress ${queuedQuest.currentCount}/${queuedQuest.requiredCount}`
-                    : "New posting"}
-                </span>
-              </>
-            ) : (
-              <span className="muted">No posted work.</span>
-            )}
-          </div>
-          <div className="village-quest-strip-actions">
-            {queuedQuest?.status === "available" && (
-              <Button variant="ghost" onClick={() => toggleQuest(queuedQuest.id)}>Accept</Button>
-            )}
-            <Button variant="secondary" onClick={() => goToScreen("quests")}>
-              Quest Log · {availableQuests.length} open · {completedQuests.length} ready
-            </Button>
-          </div>
+          <section className="village-decision" aria-label="Today's decision">
+            <h1 className="village-decision-title">Enter the Dungeon</h1>
+            <div className="village-decision-actions">
+              <Button className="btn-hero" onClick={() => startRun()}>Enter the Dungeon</Button>
+              <Button variant="secondary" onClick={() => goToScreen("stash")}>Pack Gear</Button>
+            </div>
+            <div className="village-decision-meta muted small">
+              <span><em>Pack</em> {preparedWeight} / {player.derivedStats.carryCapacity}</span>
+              <span><em>Gold</em> {stash.gold}</span>
+              <span><em>Active quests</em> {activeQuests.length}</span>
+              <span><em>Renown</em> {village.renown}</span>
+            </div>
+          </section>
+
+          <section className="village-section" aria-label="Villagers">
+            <h3 className="village-section-heading">In the Village</h3>
+            <ul className="roster-list">
+              {village.npcs.map(npc => {
+                const trustLabel = getRelationshipLabel(npc.relationship);
+                const trustTag = TRUST_TAGS[trustLabel] ?? trustLabel.toLowerCase();
+                const verb = ROLE_VERB_PHRASES[npc.role] ?? npc.description.toLowerCase();
+                return (
+                  <li key={npc.id}>
+                    <button
+                      type="button"
+                      className="roster-line"
+                      onClick={() => openMerchant(npc.id)}
+                    >
+                      <span className="roster-sentence">
+                        <strong>{npc.name}</strong> {verb}; {trustTag}.
+                      </span>
+                      <span className="roster-trust-tag">{trustLabel}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
+          <section className="village-section" aria-label="Quest board">
+            <h3 className="village-section-heading">Posted Notices</h3>
+            <div className="notice-board">
+              {noticeQuests.length === 0 ? (
+                <p className="notice-empty">No postings on the board today.</p>
+              ) : (
+                noticeQuests.map(quest => (
+                  <div className="notice-item" key={quest.id}>
+                    <div className="notice-item-main">
+                      <strong className="notice-item-title">{quest.title}</strong>
+                      <span className="muted small">{describeQuestStatus(quest)}</span>
+                    </div>
+                    {quest.status === "available" && (
+                      <Button variant="ghost" onClick={() => toggleQuest(quest.id)}>Accept</Button>
+                    )}
+                  </div>
+                ))
+              )}
+              <div className="notice-board-footer">
+                <Button variant="secondary" onClick={() => goToScreen("quests")}>
+                  Quest Log · {availableQuests.length} open · {completedQuests.length} ready
+                </Button>
+              </div>
+            </div>
+          </section>
         </div>
-      </section>
+      </div>
     </div>
   );
 }
 
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+function describeQuestStatus(quest: Quest): string {
+  if (quest.status === "active") return `Progress ${quest.currentCount}/${quest.requiredCount}`;
+  return "New posting";
 }

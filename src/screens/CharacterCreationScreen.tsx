@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../components/Button";
-import { Card } from "../components/Card";
 import { useGameStore } from "../store/gameStore";
 import { ANCESTRIES } from "../data/ancestries";
 import { CLASSES } from "../data/classes";
@@ -12,8 +11,17 @@ import { getClass } from "../data/classes";
 import { instanceFromTemplateId } from "../game/inventory";
 import { createRng } from "../game/rng";
 import type { AbilityName, EquipmentSlots, ItemInstance } from "../game/types";
+import "./CharacterCreationScreen.css";
 
 type Step = 0 | 1 | 2 | 3 | 4;
+
+const STEP_TAGS = [
+  "The Elder Asks",
+  "Your Calling",
+  "Taking Your Measure",
+  "Provisioning",
+  "The First Entry"
+];
 
 export function CharacterCreationScreen() {
   const draft = useGameStore(s => s.draft);
@@ -39,219 +47,241 @@ export function CharacterCreationScreen() {
 
   if (!draft) return null;
 
-  const stepLabels = ["Name & Ancestry", "Class", "Abilities", "Kit", "Confirm"];
-
   return (
-    <div className="screen creation-screen">
-      <div className="creation-header">
-        <h2>New Adventurer</h2>
-        <div className="step-indicator">
-          {stepLabels.map((s, i) => (
-            <span key={s} className={`step ${i === step ? "step-active" : i < step ? "step-done" : ""}`}>
-              {i + 1}. {s}
-            </span>
-          ))}
-        </div>
-      </div>
+    <div className="screen creation-screen creation-screen-prose">
+      <div className="narrative-scroll">
+        <div className="narrative-column">
+          <span className="arrival-step-tag">{step + 1} of {STEP_TAGS.length} · {STEP_TAGS[step]}</span>
 
-      {step === 0 && (
-        <div className="creation-step">
-          <label className="field">
-            <span>Name</span>
-            <input
-              className="text-input"
-              value={draft.name}
-              onChange={e => setName(e.target.value)}
-              placeholder="A name worth remembering"
-              maxLength={40}
-            />
-          </label>
+          {step === 0 && (
+            <div className="creation-step">
+              <h1 className="arrival-title">The Elder Asks</h1>
+              <p className="arrival-prose">
+                An old woman looks up from her ledger as you cross the threshold. She has seen
+                enough strangers arrive at this gate to know better than to ask twice. "Well," she
+                says. "Who are you, and what blood carries you?"
+              </p>
 
-          <Carousel
-            label="Ancestry"
-            index={ancestryIdx}
-            count={ANCESTRIES.length}
-            onPrev={() => setAncestryIdx((ancestryIdx - 1 + ANCESTRIES.length) % ANCESTRIES.length)}
-            onNext={() => setAncestryIdx((ancestryIdx + 1) % ANCESTRIES.length)}
-          >
-            {(() => {
-              const a = ANCESTRIES[ancestryIdx]!;
-              const isSelected = draft.ancestryId === a.id;
-              return (
-                <Card
-                  title={a.name}
-                  subtitle={isSelected ? "Selected" : ""}
-                  variant="warm"
-                  selectable
-                  selected={isSelected}
-                  onClick={() => selectAncestry(a.id)}
-                  footer={
-                    <Button
-                      variant={isSelected ? "secondary" : "primary"}
+              <label className="answer-field">
+                <span className="answer-field-label">Your Name</span>
+                <input
+                  className="answer-input"
+                  value={draft.name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="A name worth remembering"
+                  maxLength={40}
+                />
+              </label>
+
+              <NarrativeCarousel
+                label="Bloodline"
+                index={ancestryIdx}
+                count={ANCESTRIES.length}
+                onPrev={() => setAncestryIdx((ancestryIdx - 1 + ANCESTRIES.length) % ANCESTRIES.length)}
+                onNext={() => setAncestryIdx((ancestryIdx + 1) % ANCESTRIES.length)}
+              >
+                {(() => {
+                  const a = ANCESTRIES[ancestryIdx]!;
+                  const isSelected = draft.ancestryId === a.id;
+                  return (
+                    <div
+                      className={`narrative-choice-body${isSelected ? " narrative-choice-body-selected" : ""}`}
                       onClick={() => selectAncestry(a.id)}
                     >
-                      {isSelected ? "Selected" : "Choose"}
-                    </Button>
-                  }
-                >
-                  <p>{a.description}</p>
-                  <p><strong>{a.traitName}.</strong> {a.traitDescription}</p>
-                  <BonusList bonuses={a.bonuses} />
-                </Card>
-              );
-            })()}
-          </Carousel>
+                      <div className="narrative-choice-controls">
+                        <h2 className="narrative-choice-name">{a.name}</h2>
+                        {isSelected && <span className="choice-row-selected-tag">Chosen</span>}
+                      </div>
+                      <p>{a.description}</p>
+                      <p className="narrative-choice-trait"><strong>{a.traitName}.</strong> {a.traitDescription}</p>
+                      <BonusList bonuses={a.bonuses} />
+                      <div className="narrative-choice-footer">
+                        <Button
+                          variant={isSelected ? "secondary" : "primary"}
+                          onClick={() => selectAncestry(a.id)}
+                        >
+                          {isSelected ? "Chosen" : "Claim this bloodline"}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </NarrativeCarousel>
 
-          <div className="creation-actions">
-            <Button onClick={() => setStep(1)} disabled={!draft.name.trim() || !draft.ancestryId}>
-              Continue
-            </Button>
-          </div>
-        </div>
-      )}
+              <div className="arrival-actions">
+                <Button onClick={() => setStep(1)} disabled={!draft.name.trim() || !draft.ancestryId}>
+                  Continue
+                </Button>
+              </div>
+            </div>
+          )}
 
-      {step === 1 && (
-        <div className="creation-step">
-          <Carousel
-            label="Class"
-            index={classIdx}
-            count={CLASSES.length}
-            onPrev={() => setClassIdx((classIdx - 1 + CLASSES.length) % CLASSES.length)}
-            onNext={() => setClassIdx((classIdx + 1) % CLASSES.length)}
-          >
-            {(() => {
-              const c = CLASSES[classIdx]!;
-              const isSelected = draft.classId === c.id;
-              return (
-                <Card
-                  title={c.name}
-                  subtitle={isSelected ? "Selected" : ""}
-                  variant="warm"
-                  selectable
-                  selected={isSelected}
-                  onClick={() => selectClass(c.id)}
-                  footer={
-                    <Button
-                      variant={isSelected ? "secondary" : "primary"}
+          {step === 1 && (
+            <div className="creation-step">
+              <h1 className="arrival-title">Your Calling</h1>
+              <p className="arrival-prose">
+                "And what calling did you take up, before this?" the elder asks. "The village
+                cares less for what you were than what you can still do."
+              </p>
+
+              <NarrativeCarousel
+                label="Calling"
+                index={classIdx}
+                count={CLASSES.length}
+                onPrev={() => setClassIdx((classIdx - 1 + CLASSES.length) % CLASSES.length)}
+                onNext={() => setClassIdx((classIdx + 1) % CLASSES.length)}
+              >
+                {(() => {
+                  const c = CLASSES[classIdx]!;
+                  const isSelected = draft.classId === c.id;
+                  return (
+                    <div
+                      className={`narrative-choice-body${isSelected ? " narrative-choice-body-selected" : ""}`}
                       onClick={() => selectClass(c.id)}
                     >
-                      {isSelected ? "Selected" : "Choose"}
-                    </Button>
-                  }
-                >
-                  <p>{c.description}</p>
-                  <ul className="class-stats">
-                    <li>Base HP: {c.baseHp}</li>
-                    <li>Accuracy: +{c.baseAccuracy}</li>
-                    <li>Armor: +{c.baseArmor}</li>
-                    <li>Magic Bonus: +{c.magicBonus}</li>
-                    <li>Preferred: {c.preferredAbilities.join(", ")}</li>
-                  </ul>
-                </Card>
-              );
-            })()}
-          </Carousel>
-          <div className="creation-actions">
-            <Button variant="ghost" onClick={() => setStep(0)}>Back</Button>
-            <Button onClick={() => setStep(2)} disabled={!draft.classId}>Continue</Button>
-          </div>
+                      <div className="narrative-choice-controls">
+                        <h2 className="narrative-choice-name">{c.name}</h2>
+                        {isSelected && <span className="choice-row-selected-tag">Chosen</span>}
+                      </div>
+                      <p>{c.description}</p>
+                      <ul className="narrative-choice-stats">
+                        <li>Base HP: {c.baseHp}</li>
+                        <li>Accuracy: +{c.baseAccuracy}</li>
+                        <li>Armor: +{c.baseArmor}</li>
+                        <li>Magic Bonus: +{c.magicBonus}</li>
+                        <li>Preferred: {c.preferredAbilities.join(", ")}</li>
+                      </ul>
+                      <div className="narrative-choice-footer">
+                        <Button
+                          variant={isSelected ? "secondary" : "primary"}
+                          onClick={() => selectClass(c.id)}
+                        >
+                          {isSelected ? "Chosen" : "Take up this calling"}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </NarrativeCarousel>
+
+              <div className="arrival-actions">
+                <Button variant="ghost" onClick={() => setStep(0)}>Back</Button>
+                <Button onClick={() => setStep(2)} disabled={!draft.classId}>Continue</Button>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="creation-step">
+              <h1 className="arrival-title">Taking Your Measure</h1>
+              <p className="arrival-prose">
+                The elder walks a slow circle around you, the way a buyer walks a circle around a
+                horse. 4d6, drop the lowest. You may reroll up to {CHARACTER_CREATION.abilityRolls.rerollLimit} times
+                before she stops humoring you.
+              </p>
+
+              <div className="measure-block">
+                <div className="measure-scores">
+                  {draft.rolledScores.length === 0
+                    ? <em>Taking your measure…</em>
+                    : draft.rolledScores.map((v, i) => (<span key={i} className="score-chip">{v}</span>))}
+                </div>
+                <div className="measure-actions">
+                  <Button variant="ghost" onClick={reroll}
+                    disabled={draft.rerollsUsed >= CHARACTER_CREATION.abilityRolls.rerollLimit}>
+                    Reroll All ({CHARACTER_CREATION.abilityRolls.rerollLimit - draft.rerollsUsed} left)
+                  </Button>
+                  <Button variant="secondary" onClick={autoAssign} disabled={!draft.classId || draft.rolledScores.length === 0}>
+                    Auto-Assign for Class
+                  </Button>
+                </div>
+
+                <ManualAssignTable />
+              </div>
+
+              <div className="arrival-actions">
+                <Button variant="ghost" onClick={() => setStep(1)}>Back</Button>
+                <Button onClick={() => setStep(3)} disabled={!draft.abilityScores}>Continue</Button>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && draft.classId && (
+            <div className="creation-step">
+              <h1 className="arrival-title">Provisioning</h1>
+              <p className="arrival-prose">
+                The quartermaster lays a few kits across the counter, worn but serviceable.
+                "Pick what suits you," she says. "It won't be all you carry, but it's what you
+                start with."
+              </p>
+
+              <ul className="choice-list">
+                {getClass(draft.classId).starterKits.map(kit => {
+                  const selected = draft.starterKitId === kit.id;
+                  return (
+                    <li key={kit.id}>
+                      <button
+                        type="button"
+                        className={`choice-row${selected ? " choice-row-selected" : ""}`}
+                        onClick={() => selectKit(kit.id)}
+                      >
+                        <div className="choice-row-head">
+                          <span className="choice-row-name">{kit.name}</span>
+                          {selected && <span className="choice-row-selected-tag">Chosen</span>}
+                        </div>
+                        <p className="choice-row-desc">{kit.description}</p>
+                        <ul className="choice-row-items">
+                          {kit.itemTemplateIds.map(id => <li key={id}>{id.replace(/_/g, " ")}</li>)}
+                        </ul>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <div className="arrival-actions">
+                <Button variant="ghost" onClick={() => setStep(2)}>Back</Button>
+                <Button onClick={() => setStep(4)} disabled={!draft.starterKitId}>Continue</Button>
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="creation-step">
+              <h1 className="arrival-title">The First Entry</h1>
+              <p className="arrival-prose">
+                The elder closes her ledger on a fresh page and slides it across to you. This is
+                where your chronicle begins.
+              </p>
+              <ConfirmSummary />
+              <div className="arrival-actions">
+                <Button variant="ghost" onClick={() => setStep(3)}>Back</Button>
+                <Button onClick={() => finalize()} disabled={!CharacterCreationService.isReadyToFinalize(draft)}>
+                  Begin
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
-      )}
-
-      {step === 2 && (
-        <div className="creation-step">
-          <h3>Roll Abilities</h3>
-          <p>4d6, drop the lowest. You may reroll up to {CHARACTER_CREATION.abilityRolls.rerollLimit} times.</p>
-          <div className="rolled-scores">
-            {draft.rolledScores.length === 0
-              ? <em>Rolling…</em>
-              : draft.rolledScores.map((v, i) => (<span key={i} className="score-chip">{v}</span>))}
-          </div>
-          <div className="creation-actions">
-            <Button variant="ghost" onClick={reroll}
-              disabled={draft.rerollsUsed >= CHARACTER_CREATION.abilityRolls.rerollLimit}>
-              Reroll All ({CHARACTER_CREATION.abilityRolls.rerollLimit - draft.rerollsUsed} left)
-            </Button>
-            <Button variant="secondary" onClick={autoAssign} disabled={!draft.classId || draft.rolledScores.length === 0}>
-              Auto-Assign for Class
-            </Button>
-          </div>
-
-          <ManualAssignTable />
-
-          <div className="creation-actions">
-            <Button variant="ghost" onClick={() => setStep(1)}>Back</Button>
-            <Button onClick={() => setStep(3)} disabled={!draft.abilityScores}>Continue</Button>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && draft.classId && (
-        <div className="creation-step">
-          <h3>Choose a Starting Kit</h3>
-          <div className="kit-grid">
-            {getClass(draft.classId).starterKits.map(kit => {
-              const selected = draft.starterKitId === kit.id;
-              return (
-                <Card
-                  key={kit.id}
-                  title={kit.name}
-                  subtitle={selected ? "Selected" : ""}
-                  variant="warm"
-                  selectable
-                  selected={selected}
-                  onClick={() => selectKit(kit.id)}
-                  footer={
-                    <Button variant={selected ? "secondary" : "primary"} onClick={() => selectKit(kit.id)}>
-                      {selected ? "Selected" : "Choose"}
-                    </Button>
-                  }
-                >
-                  <p>{kit.description}</p>
-                  <ul className="kit-list">
-                    {kit.itemTemplateIds.map(id => <li key={id}>{id.replace(/_/g, " ")}</li>)}
-                  </ul>
-                </Card>
-              );
-            })}
-          </div>
-          <div className="creation-actions">
-            <Button variant="ghost" onClick={() => setStep(2)}>Back</Button>
-            <Button onClick={() => setStep(4)} disabled={!draft.starterKitId}>Continue</Button>
-          </div>
-        </div>
-      )}
-
-      {step === 4 && (
-        <div className="creation-step">
-          <h3>Confirm</h3>
-          <ConfirmSummary />
-          <div className="creation-actions">
-            <Button variant="ghost" onClick={() => setStep(3)}>Back</Button>
-            <Button onClick={() => finalize()} disabled={!CharacterCreationService.isReadyToFinalize(draft)}>
-              Begin
-            </Button>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
 
-function Carousel({
+function NarrativeCarousel({
   label, index, count, onPrev, onNext, children
 }: {
   label: string; index: number; count: number;
   onPrev: () => void; onNext: () => void; children: React.ReactNode;
 }) {
   return (
-    <div className="carousel">
-      <div className="carousel-controls">
+    <div className="narrative-choice">
+      <div className="narrative-choice-controls">
         <Button variant="ghost" onClick={onPrev}>‹ Prev</Button>
-        <span className="carousel-label">{label} {index + 1} / {count}</span>
+        <span className="narrative-choice-label">{label} {index + 1} / {count}</span>
         <Button variant="ghost" onClick={onNext}>Next ›</Button>
       </div>
-      <div className="carousel-body">{children}</div>
+      <div>{children}</div>
     </div>
   );
 }
@@ -260,7 +290,7 @@ function BonusList({ bonuses }: { bonuses: Record<string, number | undefined> | 
   const entries = Object.entries(bonuses as Record<string, number | undefined>).filter(([, v]) => v !== undefined && v !== 0);
   if (entries.length === 0) return null;
   return (
-    <ul className="bonus-list">
+    <ul className="narrative-choice-bonuses">
       {entries.map(([k, v]) => (<li key={k}>{k}: {(v as number) > 0 ? `+${v}` : v}</li>))}
     </ul>
   );
@@ -340,15 +370,18 @@ function ConfirmSummary() {
   }
   const ds = calculateDerivedStats(draft.abilityScores, ancestry, cls, equipped);
   return (
-    <div className="confirm-summary">
-      <Card title={draft.name || "Unnamed"} subtitle={`${ancestry.name} ${cls.name}`}>
-        <p><strong>Kit:</strong> {kit.name}</p>
-        <p><strong>HP:</strong> {ds.maxHp} · <strong>Armor:</strong> {ds.armor} · <strong>Acc:</strong> +{ds.accuracy} · <strong>Eva:</strong> {ds.evasion}</p>
-        <p><strong>Carry:</strong> {ds.carryCapacity} · <strong>Magic:</strong> {ds.magicPower} · <strong>Crit:</strong> {ds.critChance}%</p>
-        <ul className="equipment-list">
-          {items.map(i => <li key={i.instanceId}>{i.name}</li>)}
-        </ul>
-      </Card>
+    <div className="chronicle-entry">
+      <h2 className="chronicle-entry-name">{draft.name || "Unnamed"}</h2>
+      <p className="chronicle-entry-sub">{ancestry.name} {cls.name} · {kit.name}</p>
+      <p className="chronicle-entry-stats">
+        <strong>HP:</strong> {ds.maxHp} · <strong>Armor:</strong> {ds.armor} · <strong>Acc:</strong> +{ds.accuracy} · <strong>Eva:</strong> {ds.evasion}
+      </p>
+      <p className="chronicle-entry-stats">
+        <strong>Carry:</strong> {ds.carryCapacity} · <strong>Magic:</strong> {ds.magicPower} · <strong>Crit:</strong> {ds.critChance}%
+      </p>
+      <ul className="chronicle-entry-items">
+        {items.map(i => <li key={i.instanceId}>{i.name}</li>)}
+      </ul>
     </div>
   );
 }

@@ -1,0 +1,143 @@
+/* Village screen — prose column, same reading surface as the dungeon screen.
+   The village is a place, not a dashboard: one narrative column, the day's
+   decision framed prominently, NPCs read as a roster of people, not tiles. */
+
+.village-screen-prose { padding: 14px 24px 20px; display: flex; flex-direction: column; gap: 0; }
+
+.village-hero-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+.village-hero-name {
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+.village-hero-reset {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-muted);
+  font: inherit;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+.village-hero-reset:hover { color: var(--text-dim); }
+
+.village-hero-prose {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text);
+  margin: 4px 0 18px;
+}
+
+.village-decision {
+  border: 1px solid var(--warm-line);
+  border-radius: 10px;
+  padding: 16px 20px 18px;
+  margin-bottom: 20px;
+  background:
+    radial-gradient(circle at 85% 10%, rgba(216, 178, 92, 0.10), transparent 55%),
+    linear-gradient(135deg, rgba(216, 178, 92, 0.04), rgba(13, 14, 18, 0)),
+    var(--warm-bg);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.35);
+}
+.village-decision-title {
+  margin: 0 0 10px;
+  font-size: 1.7rem;
+}
+.village-decision-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.village-decision-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  font-variant-numeric: tabular-nums;
+}
+.village-decision-meta em {
+  font-style: normal;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  margin-right: 4px;
+}
+
+.village-section { margin-top: 8px; margin-bottom: 20px; }
+.village-section-heading {
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin: 0 0 10px;
+}
+
+.roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.roster-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 100ms ease, background 100ms ease;
+}
+.roster-line:hover { border-color: var(--accent); background: var(--bg-2); }
+.roster-sentence strong { color: var(--accent-2); font-weight: 600; }
+.roster-trust-tag {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.notice-board {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.notice-item {
+  padding: 10px 14px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.notice-item-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.notice-item-title { color: var(--text); }
+.notice-empty { color: var(--text-muted); font-style: italic; }
+.notice-board-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
