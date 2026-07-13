@@ -69,7 +69,10 @@ export function buildRunSummary({
     questProgress: getQuestProgress(run, village),
     questsCompleted: extraction?.questsCompleted ?? getCompletedRunQuests(run, village),
     questRewards: extraction?.questRewards ?? [],
-    unlocksApplied: extraction?.unlocksApplied ?? []
+    unlocksApplied: extraction?.unlocksApplied ?? [],
+    questItemsSaved: death?.questItemsSaved ?? [],
+    keepsakeSaved: death?.keepsakeSaved,
+    insuranceReturned: death?.insuranceReturned
   };
 }
 

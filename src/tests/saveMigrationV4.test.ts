@@ -98,7 +98,8 @@ describe("save migration v4", () => {
       questProgress: [],
       questsCompleted: [],
       questRewards: [stripV4ItemFields(instanceFromTemplateId("material_bone_dust", rng))],
-      unlocksApplied: []
+      unlocksApplied: [],
+      questItemsSaved: []
     };
 
     const legacy = {

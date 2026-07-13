@@ -40,7 +40,7 @@ import { getEnemy } from "../data/enemies";
 import { getAncestry } from "../data/ancestries";
 import { getClass } from "../data/classes";
 import { startCombat as startCombatBase, resolvePlayerAction, type CombatAction } from "../game/combat";
-import { applyAbandonPenalty, applyDeathPenalty, applyExtractionRewards, applyXpAndLevel, type DeathSummary, type ExtractionRewardSummary } from "../game/progression";
+import { applyExtractionRewards, applyXpAndLevel, resolveAbandonOutcome, resolveDeathOutcome, type DeathSummary, type ExtractionRewardSummary } from "../game/progression";
 import { appendRunSummary, buildRunSummary } from "../game/runSummary";
 import { getModifier, recalculateCharacterStats } from "../game/characterMath";
 import { THREAT_RULES } from "../game/constants";
@@ -78,7 +78,14 @@ import { initializeVillageProgression, upgradeNpcService as upgradeNpcServiceBas
 import { initializeQuestChainsForVillage, advanceQuestChainAfterQuestClaim } from "../game/questChains";
 import { craftRecipe as craftRecipeBase } from "../game/crafting";
 import { performServiceAction as performServiceActionBase } from "../game/services";
-import { purchaseRunPreparation as purchaseRunPreparationBase, applyRunPreparationsToRun } from "../game/runPreparation";
+import {
+  purchaseRunPreparation as purchaseRunPreparationBase,
+  applyRunPreparationsToRun,
+  purchaseInsurance as purchaseInsuranceBase,
+  cancelInsurance as cancelInsuranceBase,
+  setKeepsake as setKeepsakeBase,
+  clearKeepsake as clearKeepsakeBase
+} from "../game/runPreparation";
 import { applyQuestReward } from "../game/villageRewards";
 import {
   awardCharacterXp,
@@ -176,6 +183,10 @@ export interface GameStore {
   ) => void;
   purchaseRunPreparation: (npcId: string, optionId: string) => void;
   clearPendingRunPreparation: (preparedModifierId: string) => void;
+  purchaseInsurance: (itemInstanceId: string) => void;
+  cancelInsurance: () => void;
+  setKeepsake: (itemInstanceId: string) => void;
+  clearKeepsake: () => void;
   startDungeonRunWithPreparations: (params?: { biome?: import("../game/types").DungeonBiome; seed?: string }) => void;
 
   // v0.4 integration wrappers
@@ -405,6 +416,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     run.raidInventory = s.preparedInventory ?? createEmptyInventory();
     run.loadoutSnapshot = collectLoadoutSnapshot(s.player);
     run.questProgressAtStart = captureQuestProgress(s.village, activeIds);
+    run.keepsakeInstanceId = resolveKeepsakeForRun(s, run.raidInventory);
+    run.insuredInstanceId = resolveInsuredForRun(s, s.player);
     const prepared = applyRunPreparationsToRun({
       run,
       character: s.player,
@@ -418,7 +431,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       player: prepared.character,
       activeRun: run,
       preparedInventory: createEmptyInventory(),
-      pendingRunPreparations: (s.pendingRunPreparations ?? []).filter(prep => !prepared.appliedPreparations.some(applied => applied.id === prep.id))
+      pendingRunPreparations: (s.pendingRunPreparations ?? []).filter(prep => !prepared.appliedPreparations.some(applied => applied.id === prep.id)),
+      pendingKeepsakeInstanceId: undefined,
+      pendingInsuredInstanceId: undefined
     };
     set({ state: next, screen: "dungeon", lastRoomMessage: `You enter ${getBiome(run.biome).name}.` });
     persist(next);
@@ -433,6 +448,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     run.raidInventory = s.preparedInventory ?? createEmptyInventory();
     run.loadoutSnapshot = collectLoadoutSnapshot(s.player);
     run.questProgressAtStart = captureQuestProgress(s.village, activeIds);
+    run.keepsakeInstanceId = resolveKeepsakeForRun(s, run.raidInventory);
+    run.insuredInstanceId = resolveInsuredForRun(s, s.player);
     const prepared = applyRunPreparationsToRun({
       run,
       character: s.player,
@@ -446,7 +463,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       player: prepared.character,
       activeRun: run,
       preparedInventory: createEmptyInventory(),
-      pendingRunPreparations: (s.pendingRunPreparations ?? []).filter(prep => !prepared.appliedPreparations.some(applied => applied.id === prep.id))
+      pendingRunPreparations: (s.pendingRunPreparations ?? []).filter(prep => !prepared.appliedPreparations.some(applied => applied.id === prep.id)),
+      pendingKeepsakeInstanceId: undefined,
+      pendingInsuredInstanceId: undefined
     };
     set({ state: next, screen: "dungeon", lastRoomMessage: `You enter the ${run.biome} (${run.seed}).` });
     persist(next);
@@ -454,9 +473,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   abandonRun: () => {
     const s = get().state;
-    if (!s.activeRun) return;
-    const { run, summary } = applyAbandonPenalty(s.activeRun);
-    const player = s.player ? { ...s.player, hp: s.player.maxHp, wounded: undefined } : s.player;
+    if (!s.activeRun || !s.player) return;
+    const { run, player, stash, summary } = resolveAbandonOutcome({
+      run: s.activeRun,
+      player: s.player,
+      stash: s.stash
+    });
     const runSummary = buildRunSummary({
       run,
       village: s.village,
@@ -467,6 +489,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const next: GameState = {
       ...s,
       player,
+      stash,
       activeRun: undefined,
       completedRuns: [...s.completedRuns, run],
       lastRunSummary: runSummary,
@@ -1011,6 +1034,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     nextRun.raidInventory = run.raidInventory;
     nextRun.loadoutSnapshot = run.loadoutSnapshot;
     nextRun.questProgressAtStart = run.questProgressAtStart;
+    nextRun.keepsakeInstanceId = run.keepsakeInstanceId;
+    nextRun.insuredInstanceId = run.insuredInstanceId;
     nextRun.xpGained = run.xpGained;
     nextRun.roomsVisitedBeforeDepth = (run.roomsVisitedBeforeDepth ?? 0) + run.visitedRoomIds.length;
     nextRun.roomsCompletedBeforeDepth = (run.roomsCompletedBeforeDepth ?? 0) + completedThisDepth;
@@ -1385,7 +1410,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const next: GameState = {
       ...s,
       preparedInventory: removeItem(s.preparedInventory, itemInstanceId, item.quantity),
-      stash: addItem(s.stash, item)
+      stash: addItem(s.stash, item),
+      pendingKeepsakeInstanceId: s.pendingKeepsakeInstanceId === itemInstanceId ? undefined : s.pendingKeepsakeInstanceId
     };
     set({ state: next, lastVillageMessage: `${item.name} returned to stash.` });
     persist(next);
@@ -1519,6 +1545,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
       pendingRunPreparations: (s.pendingRunPreparations ?? []).filter(prep => prep.id !== preparedModifierId)
     };
     set({ state: next, lastVillageMessage: "Preparation cleared." });
+    persist(next);
+  },
+
+  purchaseInsurance: itemInstanceId => {
+    const result = purchaseInsuranceBase({ gameState: get().state, itemInstanceId });
+    set({ state: result.gameState, lastVillageMessage: result.message });
+    persist(result.gameState);
+  },
+
+  cancelInsurance: () => {
+    const next = cancelInsuranceBase(get().state);
+    set({ state: next, lastVillageMessage: "Insurance cancelled." });
+    persist(next);
+  },
+
+  setKeepsake: itemInstanceId => {
+    const result = setKeepsakeBase({ gameState: get().state, itemInstanceId });
+    set({ state: result.gameState, lastVillageMessage: result.message });
+    persist(result.gameState);
+  },
+
+  clearKeepsake: () => {
+    const next = clearKeepsakeBase(get().state);
+    set({ state: next, lastVillageMessage: "Keepsake cleared." });
     persist(next);
   },
 
@@ -1971,6 +2021,20 @@ function collectLoadoutSnapshot(player: Character): ItemInstance[] {
   ) as ItemInstance[];
 }
 
+function resolveKeepsakeForRun(state: GameState, raidInventory: Inventory): string | undefined {
+  const instanceId = state.pendingKeepsakeInstanceId;
+  if (!instanceId) return undefined;
+  const item = raidInventory.items.find(i => i.instanceId === instanceId);
+  return item && item.weight === 0 && item.quantity === 1 ? instanceId : undefined;
+}
+
+function resolveInsuredForRun(state: GameState, player: Character): string | undefined {
+  const instanceId = state.pendingInsuredInstanceId;
+  if (!instanceId) return undefined;
+  const equipped = Object.values(player.equipped).filter(Boolean) as ItemInstance[];
+  return equipped.some(item => item.instanceId === instanceId) ? instanceId : undefined;
+}
+
 function captureQuestProgress(village: VillageState | undefined, questIds: string[]): Record<string, number> {
   if (!village) return {};
   return Object.fromEntries(
@@ -2060,19 +2124,6 @@ function completeRoom(run: DungeonRun, roomId: string): DungeonRun {
   };
 }
 
-function recoverPlayerAfterDeath(player: Character, summary: DeathSummary): Character {
-  const lostIds = new Set(summary.itemsLost.map(item => item.instanceId));
-  const equipped = { ...player.equipped };
-  for (const slot of ["weapon", "offhand", "armor", "trinket1", "trinket2"] as const) {
-    const item = equipped[slot];
-    if (item && lostIds.has(item.instanceId)) {
-      equipped[slot] = undefined;
-    }
-  }
-  const recalculated = recalculatePlayer({ ...player, equipped, wounded: undefined });
-  return { ...recalculated, hp: recalculated.maxHp, wounded: undefined };
-}
-
 function rollCombatDrops(room: DungeonRoom, run: DungeonRun, rng: Rng): ItemInstance[] {
   const dropChance =
     room.type === "boss" ? 1 :
@@ -2104,8 +2155,11 @@ function finishRunWithDeath(
     run, type: "danger", now, roomId: run.currentRoomId,
     message: `${player.name} falls here. The dungeon keeps the raid pack.`
   });
-  const { run: deadRun, summary } = applyDeathPenalty(runWithLog);
-  const recoveredPlayer = recoverPlayerAfterDeath(player, summary);
+  const { run: deadRun, player: recoveredPlayer, stash, summary } = resolveDeathOutcome({
+    run: runWithLog,
+    player,
+    stash: s.stash
+  });
   const runSummary = buildRunSummary({
     run: deadRun,
     village: s.village,
@@ -2116,6 +2170,7 @@ function finishRunWithDeath(
   const next: GameState = {
     ...s,
     player: recoveredPlayer,
+    stash,
     activeRun: undefined,
     activeCombat: undefined,
     completedRuns: [...s.completedRuns, deadRun],

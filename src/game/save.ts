@@ -359,6 +359,9 @@ function normalizeRunSummary(value: unknown): RunSummary | undefined {
     gearLost: Array.isArray(value.gearLost) ? value.gearLost.map(normalizeItem).filter(Boolean) : [],
     materialsExtracted: normalizeMaterialVault(value.materialsExtracted),
     materialsLost: normalizeMaterialVault(value.materialsLost),
-    questRewards: Array.isArray(value.questRewards) ? value.questRewards.map(normalizeItem).filter(Boolean) : []
+    questRewards: Array.isArray(value.questRewards) ? value.questRewards.map(normalizeItem).filter(Boolean) : [],
+    questItemsSaved: Array.isArray(value.questItemsSaved) ? value.questItemsSaved.map(normalizeItem).filter(Boolean) : [],
+    keepsakeSaved: normalizeItem(value.keepsakeSaved),
+    insuranceReturned: normalizeItem(value.insuranceReturned)
   } as RunSummary;
 }
