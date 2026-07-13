@@ -1,0 +1,26 @@
+/*
+ * Display-only pacing for DungeonLog (issue #15): entries new since the last
+ * render fade in staggered; older entries are untouched.
+ */
+.dungeon-log-entry.dungeon-log-entry-in {
+  animation: dungeon-log-entry-in 300ms ease-out backwards;
+}
+
+@keyframes dungeon-log-entry-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dungeon-log-entry.dungeon-log-entry-in {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}

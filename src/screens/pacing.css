@@ -1,0 +1,86 @@
+/*
+ * Display-only pacing layer (issue #15). Nothing here touches store state —
+ * it only staggers/animates how already-computed state appears on screen.
+ */
+
+/* --- Combat log: each newly revealed line fades + rises in --- */
+.combat-log li.combat-log-line-in {
+  animation: combat-log-line-in 260ms ease-out backwards;
+}
+
+@keyframes combat-log-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Room transitions: hero fades in, passages follow a beat later --- */
+.room-hero.room-hero-enter {
+  animation: room-hero-fade-in 300ms ease-out backwards;
+}
+
+@keyframes room-hero-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.passages-block.passages-enter {
+  animation: passages-fade-in 300ms ease-out 150ms backwards;
+}
+
+@keyframes passages-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Threat pulse: fires when ThreatMeter's level increases --- */
+.threat-meter-pulse-wrap {
+  display: inline-flex;
+}
+
+.threat-meter-pulse-wrap.threat-pulse {
+  animation: threat-pulse 600ms ease-out;
+}
+
+@keyframes threat-pulse {
+  0% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgba(230, 134, 60, 0));
+  }
+  35% {
+    transform: scale(1.08);
+    filter: drop-shadow(0 0 6px rgba(230, 134, 60, 0.65));
+  }
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgba(230, 134, 60, 0));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .combat-log li.combat-log-line-in,
+  .room-hero.room-hero-enter,
+  .passages-block.passages-enter,
+  .threat-meter-pulse-wrap.threat-pulse {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
