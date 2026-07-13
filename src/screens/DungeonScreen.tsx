@@ -11,7 +11,7 @@ import { useGameStore } from "../store/gameStore";
 import { getRoomById } from "../game/dungeonGenerator";
 import { getBiome } from "../data/biomes";
 import { calculateInventoryWeight } from "../game/inventory";
-import { hasPendingLoot } from "../game/pendingLoot";
+import { floorHasPendingLoot, hasPendingLoot } from "../game/pendingLoot";
 import { SEARCH_RULES } from "../game/constants";
 import type { ActiveTrap, DungeonRoom, DungeonRun, RoomSignTag, ScoutedRoomInfo } from "../game/types";
 import type { ItemWithV4Fields } from "../components/v04UiTypes";
@@ -165,7 +165,10 @@ export function DungeonScreen() {
               <Button onClick={extract}>Extract</Button>
             )}
             {current.type === "boss" && current.completed && (
-              <Button variant="secondary" onClick={descend}>Descend</Button>
+              <Button variant="secondary" onClick={() => {
+                if (floorHasPendingLoot(run) && !confirm("Descend? Unclaimed loot on this floor will be lost.")) return;
+                descend();
+              }}>Descend</Button>
             )}
             {current.type === "questObjective" && (
               <Button onClick={search}>Investigate</Button>
@@ -178,7 +181,7 @@ export function DungeonScreen() {
           </div>
           {hasPendingLoot(current) &&
             !(current.activeEvent && !current.activeEvent.resolved) &&
-            !(current.extraction && current.extraction.state !== "completed") && (
+            !(current.extraction && current.extraction.state === "charging") && (
               <RoomLootPanel
                 room={current}
                 raidInventory={run.raidInventory}

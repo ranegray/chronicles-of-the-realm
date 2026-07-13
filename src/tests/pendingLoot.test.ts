@@ -6,7 +6,8 @@ import { generateVillage } from "../game/npcGenerator";
 import { startCombat } from "../game/combat";
 import { createRng } from "../game/rng";
 import { getEncounter } from "../data/encounters";
-import type { Character, ClassId, DungeonRun, GameState, Quest } from "../game/types";
+import { floorHasPendingLoot } from "../game/pendingLoot";
+import type { Character, ClassId, DungeonRun, ExtractionPoint, GameState, Quest } from "../game/types";
 
 function buildCharacter(seed: string, classId: ClassId = "warrior"): Character {
   let d = createEmptyDraft(`char:${seed}`);
@@ -174,5 +175,54 @@ describe("pending loot", () => {
     expect(Object.keys(after.pendingLoot?.materials ?? {}).length).toBe(0);
     expect(after.completed).toBe(true);
     expect(useGameStore.getState().state.activeRun!.raidInventory.items.length).toBe(0);
+  });
+
+  it("floorHasPendingLoot is false for a fresh floor and true once any room holds loot", () => {
+    const run = runWithCombatRoom("floor-check-1");
+    expect(floorHasPendingLoot(run)).toBe(false);
+
+    const withLoot: DungeonRun = {
+      ...run,
+      roomGraph: run.roomGraph.map(room =>
+        room.id === run.currentRoomId
+          ? { ...room, pendingLoot: { items: [], gold: 25, materials: {} } }
+          : room
+      )
+    };
+    expect(floorHasPendingLoot(withLoot)).toBe(true);
+  });
+
+  it("a room with an active (non-charging) extraction point still allows loot to be taken at the store level", () => {
+    const { roomId } = setupCombatVictoryWithItemLoot("extraction-loot-1");
+    const state = useGameStore.getState().state;
+    const room = getRoomById(state.activeRun!.roomGraph, roomId)!;
+    const item = room.pendingLoot!.items[0]!;
+
+    const extraction: ExtractionPoint = {
+      id: "extract-1",
+      variant: "stable",
+      state: "available",
+      title: "Test Extraction",
+      description: "test",
+      activationText: "test",
+      successText: "test"
+    };
+    const roomWithExtraction = { ...room, extraction };
+    const runWithExtraction: DungeonRun = {
+      ...state.activeRun!,
+      roomGraph: state.activeRun!.roomGraph.map(r => r.id === roomId ? roomWithExtraction : r)
+    };
+    const roomyPlayer: Character = {
+      ...state.player!,
+      derivedStats: { ...state.player!.derivedStats, carryCapacity: 100000 }
+    };
+    useGameStore.setState({ state: { ...state, activeRun: runWithExtraction, player: roomyPlayer } });
+
+    useGameStore.getState().takeItemFromRoom(item);
+    const after = useGameStore.getState().state;
+    const afterRoom = getRoomById(after.activeRun!.roomGraph, roomId)!;
+
+    expect(after.activeRun!.raidInventory.items.some(i => i.instanceId === item.instanceId)).toBe(true);
+    expect(afterRoom.pendingLoot!.items.some(i => i.instanceId === item.instanceId)).toBe(false);
   });
 });

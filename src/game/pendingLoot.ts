@@ -53,6 +53,17 @@ export function depositPendingLoot(run: DungeonRun, roomId: string, deposit: Pen
   };
 }
 
+/**
+ * True when any room on the current floor still holds unclaimed loot. Used to
+ * gate destructive floor transitions (e.g. descending) behind a confirmation —
+ * walking away from a single room's loot is a legitimate implicit "leave it",
+ * but destroying all of a floor's pending loot at once should never happen
+ * silently.
+ */
+export function floorHasPendingLoot(run: DungeonRun): boolean {
+  return run.roomGraph.some(hasPendingLoot);
+}
+
 export function clearPendingLoot(run: DungeonRun, roomId: string): DungeonRun {
   return {
     ...run,
