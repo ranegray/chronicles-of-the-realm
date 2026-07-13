@@ -4,11 +4,14 @@ import { DungeonLog } from "../components/DungeonLog";
 import { EventChoicePanel } from "../components/EventChoicePanel";
 import { ExtractionPanel } from "../components/ExtractionPanel";
 import { GearRiskBadge } from "../components/GearRiskBadge";
+import { RoomLootPanel } from "../components/RoomLootPanel";
+import { ThreatMeter } from "../components/ThreatMeter";
 import { Tooltip } from "../components/Tooltip";
 import { useGameStore } from "../store/gameStore";
 import { getRoomById } from "../game/dungeonGenerator";
 import { getBiome } from "../data/biomes";
 import { calculateInventoryWeight } from "../game/inventory";
+import { floorHasPendingLoot, hasPendingLoot } from "../game/pendingLoot";
 import { SEARCH_RULES } from "../game/constants";
 import type { ActiveTrap, DungeonRoom, DungeonRun, RoomSignTag, ScoutedRoomInfo } from "../game/types";
 import type { ItemWithV4Fields } from "../components/v04UiTypes";
@@ -54,6 +57,8 @@ export function DungeonScreen() {
   const disarm = useGameStore(s => s.disarmTrap);
   const chooseEvent = useGameStore(s => s.chooseRoomEventOption);
   const loot = useGameStore(s => s.lootRoom);
+  const leaveLoot = useGameStore(s => s.leaveRoomLoot);
+  const takeItem = useGameStore(s => s.takeItemFromRoom);
   const extract = useGameStore(s => s.attemptExtract);
   const continueExtract = useGameStore(s => s.continueExtraction);
   const descend = useGameStore(s => s.descendDungeon);
@@ -115,6 +120,7 @@ export function DungeonScreen() {
             <span className="hp-bar-label">{player.hp} / {player.maxHp}</span>
           </div>
         </div>
+        <ThreatMeter threat={run.threat} />
         <span className="dungeon-hud-chip"><em>Pack</em> {raidWeight}/{carryCapacity}</span>
         <span className="dungeon-hud-chip"><em>Gold</em> {run.raidInventory.gold}</span>
         <span className="dungeon-hud-chip"><em>Value</em> {packValue}</span>
@@ -143,11 +149,6 @@ export function DungeonScreen() {
             {roomHasLootFlow && !roomLootSearched && (
               <Button onClick={search}>{lootSearchLabel}</Button>
             )}
-            {roomHasLootFlow && roomLootSearched && (
-              <>
-                <Button variant="secondary" onClick={loot}>Take All</Button>
-              </>
-            )}
             {(current.type === "combat" || current.type === "boss" || current.type === "eliteCombat") && !current.completed && (
               <Button onClick={engage}>Engage</Button>
             )}
@@ -164,7 +165,10 @@ export function DungeonScreen() {
               <Button onClick={extract}>Extract</Button>
             )}
             {current.type === "boss" && current.completed && (
-              <Button variant="secondary" onClick={descend}>Descend</Button>
+              <Button variant="secondary" onClick={() => {
+                if (floorHasPendingLoot(run) && !confirm("Descend? Unclaimed loot on this floor will be lost.")) return;
+                descend();
+              }}>Descend</Button>
             )}
             {current.type === "questObjective" && (
               <Button onClick={search}>Investigate</Button>
@@ -175,6 +179,18 @@ export function DungeonScreen() {
             </>
             )}
           </div>
+          {hasPendingLoot(current) &&
+            !(current.activeEvent && !current.activeEvent.resolved) &&
+            !(current.extraction && current.extraction.state === "charging") && (
+              <RoomLootPanel
+                room={current}
+                raidInventory={run.raidInventory}
+                carryCapacity={carryCapacity}
+                onTakeItem={takeItem}
+                onTakeAll={loot}
+                onLeaveRest={leaveLoot}
+              />
+            )}
           {current.activeTrap && (
             <TrapStatus trap={current.activeTrap} />
           )}

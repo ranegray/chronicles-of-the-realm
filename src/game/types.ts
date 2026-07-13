@@ -657,6 +657,7 @@ export interface DungeonRoom {
   activeEvent?: ActiveRoomEvent;
   activeTrap?: ActiveTrap;
   searchState?: RoomSearchState;
+  pendingLoot?: { items: ItemInstance[]; gold: number; materials: Record<string, number> };
 }
 
 export interface DungeonRun {

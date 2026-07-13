@@ -1948,6 +1948,16 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
 .threat-meter-level {
   font-size: 0.74rem; color: var(--text-muted); font-variant-numeric: tabular-nums; letter-spacing: 0.06em;
 }
+.dungeon-hud .threat-meter {
+  margin: 0;
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 340px;
+}
+.combat-header-state .threat-meter {
+  margin: 0;
+  min-width: 220px;
+}
 
 /* Dungeon log */
 .dungeon-log {
@@ -2222,4 +2232,53 @@ button.combat-enemy:hover { border-color: var(--accent); background: var(--bg-3)
   display: flex;
   gap: 8px;
   margin-top: 8px;
+}
+
+/* Room loot panel */
+.loot-panel {
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg-1);
+}
+.loot-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.loot-panel-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--accent-2);
+  letter-spacing: 0.02em;
+}
+.loot-panel-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.loot-panel-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(46, 49, 64, 0.6);
+}
+.loot-panel-row:last-child { border-bottom: none; }
+.loot-panel-name { color: var(--text); }
+.loot-panel-weight, .loot-panel-value { text-align: right; white-space: nowrap; }
+.loot-panel-extras {
+  margin: 8px 0 0;
+}
+.loot-panel-footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
 }

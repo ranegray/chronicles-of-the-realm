@@ -70,7 +70,10 @@ describe("search", () => {
     const character = buildCharacter("scout");
     const first = searchCurrentRoom({ run, character, rng: createRng("repeat-material-a") });
     const second = searchCurrentRoom({ run: first.run, character, rng: createRng("repeat-material-b") });
-    expect(second.run.raidInventory.materials).toEqual(first.run.raidInventory.materials);
+    const roomAfterFirst = first.run.roomGraph.find(r => r.id === first.run.currentRoomId)!;
+    const roomAfterSecond = second.run.roomGraph.find(r => r.id === second.run.currentRoomId)!;
+    expect(roomAfterSecond.pendingLoot?.materials).toEqual(roomAfterFirst.pendingLoot?.materials);
+    expect(roomAfterSecond.pendingLoot?.items).toEqual(roomAfterFirst.pendingLoot?.items);
   });
 
   it("search count is tracked on the room and blocks a third search", () => {

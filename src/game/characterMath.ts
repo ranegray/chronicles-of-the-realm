@@ -65,7 +65,7 @@ export function calculateDerivedStats(
     accuracy: cls.baseAccuracy + accuracyBonus,
     evasion: 10 + agilMod + evasionBonus,
     critChance: 5 + critBonus,
-    carryCapacity: 20 + mightMod * 3 + endMod * 2 + carryBonus,
+    carryCapacity: 12 + mightMod * 2 + endMod + carryBonus,
     magicPower: cls.magicBonus + intMod + magicBonus,
     trapSense: agilMod + intMod + trapSenseBonus
   };
