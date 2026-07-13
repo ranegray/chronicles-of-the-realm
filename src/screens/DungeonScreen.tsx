@@ -1,5 +1,5 @@
+import { useState } from "react";
 import { Button } from "../components/Button";
-import { Card } from "../components/Card";
 import { DungeonLog } from "../components/DungeonLog";
 import { EventChoicePanel } from "../components/EventChoicePanel";
 import { ExtractionPanel } from "../components/ExtractionPanel";
@@ -13,6 +13,7 @@ import { getBiome } from "../data/biomes";
 import { calculateInventoryWeight } from "../game/inventory";
 import { floorHasPendingLoot, hasPendingLoot } from "../game/pendingLoot";
 import { SEARCH_RULES } from "../game/constants";
+import { getDangerBand } from "../game/scouting";
 import type { ActiveTrap, DungeonRoom, DungeonRun, RoomSignTag, ScoutedRoomInfo } from "../game/types";
 import type { ItemWithV4Fields } from "../components/v04UiTypes";
 import { getTrapTemplate } from "../data/trapTables";
@@ -65,6 +66,8 @@ export function DungeonScreen() {
   const abandon = useGameStore(s => s.abandonRun);
   const lastMessage = useGameStore(s => s.lastRoomMessage);
   const engage = useGameStore(s => s.engageCurrentRoomCombat);
+  const [showMap, setShowMap] = useState(false);
+  const [showLog, setShowLog] = useState(false);
 
   if (!run || !player) return <div className="screen">No active run.</div>;
   const current = getRoomById(run.roomGraph, run.currentRoomId);
@@ -91,6 +94,10 @@ export function DungeonScreen() {
       : "Search";
   const depthTone = run.tier >= 7 ? "deep" : run.tier >= 4 ? "lower" : "upper";
 
+  const passageRooms = current.connectedRoomIds
+    .map(id => getRoomById(run.roomGraph, id))
+    .filter((room): room is DungeonRoom => Boolean(room));
+
   return (
     <div className={`screen dungeon-screen dungeon-screen-${depthTone}`}>
       {lowHp && <div className="low-hp-vignette" aria-hidden="true" />}
@@ -99,8 +106,7 @@ export function DungeonScreen() {
           <span className="dungeon-header-eyebrow" title={`Seed: ${run.seed}`}>
             Depth {run.tier} · {biome.name}
           </span>
-          <h2>{current.title}</h2>
-          <p className="muted">{biome.description}</p>
+          <span className="dungeon-header-biome muted small">{biome.description}</span>
         </div>
         <div className="dungeon-actions">
           <Button variant="danger" onClick={() => {
@@ -127,9 +133,16 @@ export function DungeonScreen() {
         <span className="dungeon-hud-chip"><em>Uncharted</em> {unchartedRooms}</span>
       </div>
 
-      <div className="dungeon-grid dungeon-grid-noexits">
-        <Card title={current.title} subtitle={`${TYPE_LABELS[current.type] ?? current.type} · Danger ${current.dangerRating} · ${exitCount}/4 exits`} variant={current.dangerRating > 2 ? "danger" : "default"}>
-          <p>{current.description}</p>
+      <div className="narrative-scroll">
+        <div className="narrative-column">
+          <div className={`room-hero ${current.dangerRating > 2 ? "room-hero-danger" : ""}`}>
+            <span className="room-hero-meta">
+              {TYPE_LABELS[current.type] ?? current.type} · Danger {current.dangerRating} · {exitCount}/4 exits
+            </span>
+            <h1 className="room-hero-title">{current.title}</h1>
+            <p className="room-hero-prose">{current.description}</p>
+          </div>
+
           {current.trapId && <p className="warn">Trap detected: {current.trapId}</p>}
           {lastMessage && <p className="msg">{lastMessage}</p>}
 
@@ -179,6 +192,7 @@ export function DungeonScreen() {
             </>
             )}
           </div>
+
           {hasPendingLoot(current) &&
             !(current.activeEvent && !current.activeEvent.resolved) &&
             !(current.extraction && current.extraction.state === "charging") && (
@@ -203,31 +217,104 @@ export function DungeonScreen() {
               onContinue={continueExtract}
             />
           )}
-        </Card>
 
-        <Card title="Dungeon Map" subtitle={`${run.visitedRoomIds.length}/${run.roomGraph.length} rooms charted · Hover for intel`}>
-          <DungeonMap run={run} current={current} onMove={moveToRoom} />
-        </Card>
+          <section className="passages-block" aria-label="Passages">
+            <h3 className="passages-heading">Passages</h3>
+            {passageRooms.length === 0 ? (
+              <p className="muted small">No passages lead onward from here.</p>
+            ) : (
+              <ul className="passages-list">
+                {passageRooms.map(room => {
+                  const direction = getDirectionLabel(current, room);
+                  const isVisited = run.visitedRoomIds.includes(room.id);
+                  const intel = run.knownRoomIntel[room.id];
+                  return (
+                    <li key={room.id}>
+                      <button
+                        type="button"
+                        className="passage-choice"
+                        onClick={() => moveToRoom(room.id)}
+                      >
+                        <span className="passage-direction">{direction}</span>
+                        <span className="passage-desc">{describePassage(room, isVisited, intel)}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
 
-        <Card title="Dungeon Log" subtitle={`${run.dungeonLog.length} event${run.dungeonLog.length === 1 ? "" : "s"}`}>
-          <DungeonLog entries={run.dungeonLog} />
-        </Card>
+          <div className="dungeon-secondary-toggles">
+            <button type="button" className="secondary-toggle" onClick={() => setShowMap(v => !v)}>
+              {showMap ? "Hide Chart" : "Chart"}
+            </button>
+            <button type="button" className="secondary-toggle" onClick={() => setShowLog(v => !v)}>
+              {showLog ? "Hide Log" : "Log"} <span className="muted small">({run.dungeonLog.length})</span>
+            </button>
+          </div>
 
-        {riskyItems.length > 0 && (
-          <Card title="Gear Risk" subtitle="Visible item states affecting this delve">
-            <ul className="risk-item-list">
-              {riskyItems.map(item => (
-                <li key={item!.instanceId}>
-                  <strong>{item!.name}</strong>
-                  <GearRiskBadge states={(item as ItemWithV4Fields).states} />
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
+          {showMap && (
+            <section className="chart-panel" aria-label="Dungeon map">
+              <header className="chart-panel-header">
+                <h3>Dungeon Map</h3>
+                <span className="muted small">{run.visitedRoomIds.length}/{run.roomGraph.length} rooms charted · Hover for intel</span>
+              </header>
+              <DungeonMap run={run} current={current} onMove={moveToRoom} />
+            </section>
+          )}
+
+          {showLog && (
+            <section className="log-panel" aria-label="Dungeon log">
+              <header className="log-panel-header">
+                <h3>Dungeon Log</h3>
+                <span className="muted small">{run.dungeonLog.length} event{run.dungeonLog.length === 1 ? "" : "s"}</span>
+              </header>
+              <DungeonLog entries={run.dungeonLog} />
+            </section>
+          )}
+
+          {riskyItems.length > 0 && (
+            <section className="gear-risk-panel" aria-label="Gear risk">
+              <header className="gear-risk-panel-header">
+                <h3>Gear Risk</h3>
+                <span className="muted small">Visible item states affecting this delve</span>
+              </header>
+              <ul className="risk-item-list">
+                {riskyItems.map(item => (
+                  <li key={item!.instanceId}>
+                    <strong>{item!.name}</strong>
+                    <GearRiskBadge states={(item as ItemWithV4Fields).states} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
       </div>
     </div>
   );
+}
+
+function describePassage(
+  room: DungeonRoom,
+  isVisited: boolean,
+  intel?: ScoutedRoomInfo
+): string {
+  if (isVisited) {
+    const band = getDangerBand(room.dangerRating);
+    return `${TYPE_LABELS[room.type] ?? room.type}, danger ${(DANGER_BAND_LABELS[band] ?? band).toLowerCase()}`;
+  }
+  if (!intel) return "an unscouted passage";
+  if (intel.shownType) return `${TYPE_LABELS[intel.shownType] ?? intel.shownType} passage`;
+  if (intel.likelyTypes.length > 0) {
+    const names = intel.likelyTypes.map(t => TYPE_LABELS[t] ?? t).slice(0, 2);
+    return `maybe ${names.join(" or ")}`;
+  }
+  if (intel.dangerBand !== "unknown") {
+    return `signs of ${(DANGER_BAND_LABELS[intel.dangerBand] ?? intel.dangerBand).toLowerCase()} danger`;
+  }
+  return "an unscouted passage";
 }
 
 function canStillSearch(room: DungeonRoom): boolean {
