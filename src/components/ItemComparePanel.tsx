@@ -1,6 +1,7 @@
 import { ItemTooltip } from "./ItemTooltip";
 import { ItemStateWarning } from "./ItemStateWarning";
 import type { EquipmentChangePreview } from "./v04UiTypes";
+import "./ItemComparePanel.css";
 
 export interface ItemComparePanelProps {
   preview?: EquipmentChangePreview;
@@ -9,7 +10,7 @@ export interface ItemComparePanelProps {
 export function ItemComparePanel({ preview }: ItemComparePanelProps) {
   if (!preview) {
     return (
-      <aside className="item-compare-panel item-compare-empty">
+      <aside className="compare-panel compare-panel-empty">
         <span className="muted">Select equipment to preview changes.</span>
       </aside>
     );
@@ -18,12 +19,12 @@ export function ItemComparePanel({ preview }: ItemComparePanelProps) {
   const diffs = Object.entries(preview.statDiff).filter(([, value]) => typeof value === "number" && value !== 0);
 
   return (
-    <aside className="item-compare-panel">
-      <header>
+    <aside className="compare-panel">
+      <header className="compare-panel-header">
         <span className="muted small">Preview</span>
         <h3>Equip {preview.newItem?.name ?? "Item"}?</h3>
       </header>
-      <div className="item-compare-items">
+      <div className="compare-items">
         <div>
           <span className="muted small">Current</span>
           {preview.currentItem ? <ItemTooltip item={preview.currentItem} /> : <em>Empty slot</em>}
@@ -34,7 +35,7 @@ export function ItemComparePanel({ preview }: ItemComparePanelProps) {
         </div>
       </div>
       {diffs.length > 0 ? (
-        <dl className="item-compare-diff">
+        <dl className="compare-diff">
           {diffs.map(([key, value]) => (
             <div key={key}>
               <dt>{formatStatLabel(key)}</dt>

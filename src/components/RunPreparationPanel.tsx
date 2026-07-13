@@ -2,6 +2,7 @@ import { Button } from "./Button";
 import { formatResourceCost } from "../game/materials";
 import type { ItemInstance, PreparedRunModifier, RunPreparationOption, VillageNpc } from "../game/types";
 import { RUN_PREPARATION_RULES } from "../game/constants";
+import "./RunPreparationPanel.css";
 
 export interface RunPreparationPanelProps {
   options: RunPreparationOption[];
@@ -13,17 +14,19 @@ export interface RunPreparationPanelProps {
 export function RunPreparationPanel({ options, selectedPreparations, npcs = [], onPurchase }: RunPreparationPanelProps) {
   const selectedIds = new Set(selectedPreparations.map(prep => prep.optionId));
   return (
-    <div className="run-preparation-panel">
-      <div className="muted small">{selectedPreparations.length}/{RUN_PREPARATION_RULES.maxPreparedModifiers} preparations selected</div>
-      {options.length === 0 ? <div className="inv-empty">No run preparations unlocked.</div> : options.map(option => {
+    <div className="vow-list">
+      <p className="muted small">
+        {selectedPreparations.length}/{RUN_PREPARATION_RULES.maxPreparedModifiers} preparations selected
+      </p>
+      {options.length === 0 ? <div className="pack-empty">No run preparations unlocked.</div> : options.map(option => {
         const npc = npcs.find(entry => entry.role === option.sourceRole);
         const selected = selectedIds.has(option.id);
         return (
-          <div className="prep-card" key={option.id}>
-            <div>
-              <strong>{option.name}</strong>
-              <p>{option.description}</p>
-              <div className="muted small">{option.sourceRole} level {option.requiredServiceLevel} · {formatResourceCost(option.cost)}</div>
+          <div className="vow-row" key={option.id}>
+            <div className="vow-row-main">
+              <strong className="vow-row-name">{option.name}</strong>
+              <span className="vow-row-detail">{option.description}</span>
+              <span className="vow-row-detail">{option.sourceRole} level {option.requiredServiceLevel} · {formatResourceCost(option.cost)}</span>
             </div>
             <Button variant="ghost" disabled={selected || !npc} onClick={() => npc && onPurchase(option.id, npc.id)}>
               {selected ? "Prepared" : "Prepare"}
@@ -44,17 +47,16 @@ export interface KeepsakePanelProps {
 
 export function KeepsakePanel({ candidates, selectedInstanceId, onSelect, onClear }: KeepsakePanelProps) {
   return (
-    <div className="run-preparation-panel">
-      <p className="muted small">One weightless packed item can be designated a keepsake. It survives even if you die below.</p>
+    <div className="vow-list">
       {candidates.length === 0 ? (
-        <div className="inv-empty">Nothing weightless is packed.</div>
+        <div className="pack-empty">Nothing weightless is packed.</div>
       ) : candidates.map(item => {
         const selected = selectedInstanceId === item.instanceId;
         return (
-          <div className="prep-card" key={item.instanceId}>
-            <div>
-              <strong>{item.name}</strong>
-              <p>{item.description}</p>
+          <div className="vow-row" key={item.instanceId}>
+            <div className="vow-row-main">
+              <strong className="vow-row-name">{item.name}</strong>
+              <span className="vow-row-detail">{item.description}</span>
             </div>
             <Button
               variant="ghost"
@@ -80,19 +82,18 @@ export interface InsurancePanelProps {
 
 export function InsurancePanel({ candidates, selectedInstanceId, getCost, gold, onInsure, onCancel }: InsurancePanelProps) {
   return (
-    <div className="run-preparation-panel">
-      <p className="muted small">Insure one equipped piece of gear. If you die, it returns to the stash instead of being lost.</p>
+    <div className="vow-list">
       {candidates.length === 0 ? (
-        <div className="inv-empty">Nothing is equipped.</div>
+        <div className="pack-empty">Nothing is equipped.</div>
       ) : candidates.map(item => {
         const selected = selectedInstanceId === item.instanceId;
         const cost = getCost(item);
         const affordable = gold >= cost;
         return (
-          <div className="prep-card" key={item.instanceId}>
-            <div>
-              <strong>{item.name}</strong>
-              <div className="muted small">{cost}g to insure</div>
+          <div className="vow-row" key={item.instanceId}>
+            <div className="vow-row-main">
+              <strong className="vow-row-name">{item.name}</strong>
+              <span className="vow-row-detail">{cost}g to insure</span>
             </div>
             <Button
               variant="ghost"
