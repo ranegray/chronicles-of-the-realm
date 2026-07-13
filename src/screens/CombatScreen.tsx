@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ActiveActionBar } from "../components/ActiveActionBar";
 import { Button } from "../components/Button";
+import { ThreatMeter } from "../components/ThreatMeter";
 import { useGameStore } from "../store/gameStore";
 import type { EnemyInstance } from "../game/types";
 import { canUseCombatAction, getAvailableCombatActions } from "../game/combatActions";
@@ -143,6 +144,7 @@ export function CombatScreen() {
             <h2>Turn {combat.turn}</h2>
           </div>
           <div className="combat-header-state">
+            {run && !combat.over && <ThreatMeter threat={run.threat} />}
             {combat.over && combat.outcome === "victory" && <span className="good">Victory</span>}
             {combat.over && combat.outcome === "fled" && <span className="warn">Withdrew</span>}
             {combat.over && combat.outcome === "defeat" && <span className="danger">Defeated</span>}

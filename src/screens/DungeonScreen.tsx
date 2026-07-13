@@ -4,6 +4,7 @@ import { DungeonLog } from "../components/DungeonLog";
 import { EventChoicePanel } from "../components/EventChoicePanel";
 import { ExtractionPanel } from "../components/ExtractionPanel";
 import { GearRiskBadge } from "../components/GearRiskBadge";
+import { ThreatMeter } from "../components/ThreatMeter";
 import { Tooltip } from "../components/Tooltip";
 import { useGameStore } from "../store/gameStore";
 import { getRoomById } from "../game/dungeonGenerator";
@@ -115,6 +116,7 @@ export function DungeonScreen() {
             <span className="hp-bar-label">{player.hp} / {player.maxHp}</span>
           </div>
         </div>
+        <ThreatMeter threat={run.threat} />
         <span className="dungeon-hud-chip"><em>Pack</em> {raidWeight}/{carryCapacity}</span>
         <span className="dungeon-hud-chip"><em>Gold</em> {run.raidInventory.gold}</span>
         <span className="dungeon-hud-chip"><em>Value</em> {packValue}</span>

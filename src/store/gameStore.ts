@@ -54,6 +54,7 @@ import {
   getThreatModifiers
 } from "../game/threat";
 import { addDungeonLogEntry } from "../game/dungeonLog";
+import { clearPendingLoot, depositPendingLoot, getPendingLoot, hasPendingLoot } from "../game/pendingLoot";
 import { scoutAdjacentRooms } from "../game/scouting";
 import { searchCurrentRoom } from "../game/search";
 import { disarmTrap as disarmTrapCheck, triggerTrap } from "../game/traps";
@@ -135,6 +136,7 @@ export interface GameStore {
   disarmTrap: () => void;
   chooseRoomEventOption: (choiceId: string) => void;
   lootRoom: () => void;
+  leaveRoomLoot: () => void;
   attemptExtract: () => void;
   continueExtraction: () => void;
   descendDungeon: () => void;
@@ -198,10 +200,9 @@ export interface GameStore {
   debugCompleteQuest: () => void;
 }
 
+// Only used now as a one-shot "already interacted" guard for npcEvent/questObjective
+// rooms, which have no loot of their own. Loot lives in room.pendingLoot (persisted).
 interface RoomScratch {
-  loot?: ItemInstance[];
-  goldFound?: number;
-  materialsFound?: import("../game/types").MaterialVault;
   searched?: boolean;
 }
 
@@ -575,38 +576,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return;
     }
 
-    const scratch = roomScratch.get(room.id) ?? {};
-    if (scratch.searched) {
+    // npcEvent / questObjective rooms have no loot of their own — they just need
+    // a one-shot "already interacted" guard, which roomScratch still tracks.
+    if (room.type === "npcEvent" || room.type === "questObjective") {
+      const scratch = roomScratch.get(room.id) ?? {};
+      if (scratch.searched) {
+        set({ lastRoomMessage: "You have searched here already." });
+        return;
+      }
+      scratch.searched = true;
+      roomScratch.set(room.id, scratch);
+      const rng = createRng(`search:${run.seed}:${room.id}`);
+      const resolved = room.type === "npcEvent"
+        ? resolveVoiceRoom(s, run, room, rng)
+        : resolveQuestObjectiveRoom(s, run, room, rng);
+      set({ state: resolved.state, lastRoomMessage: resolved.message });
+      persist(resolved.state);
+      return;
+    }
+
+    // Treasure / lockedChest / shrine rooms deposit finds into the room's
+    // persisted pendingLoot pool; the "already searched" guard lives on
+    // room.searchState (set by updateRoomAfterScratchSearch) so it survives reloads.
+    if (room.searchState?.searched) {
       set({ lastRoomMessage: "You have searched here already." });
       return;
     }
     const rng = createRng(`search:${run.seed}:${room.id}`);
     const items: ItemInstance[] = [];
     let gold = 0;
-    if (room.type === "npcEvent") {
-      scratch.searched = true;
-      roomScratch.set(room.id, scratch);
-      const resolved = resolveVoiceRoom(s, run, room, rng);
-      set({ state: resolved.state, lastRoomMessage: resolved.message });
-      persist(resolved.state);
-      return;
-    }
-    if (room.type === "questObjective") {
-      scratch.searched = true;
-      roomScratch.set(room.id, scratch);
-      const resolved = resolveQuestObjectiveRoom(s, run, room, rng);
-      set({ state: resolved.state, lastRoomMessage: resolved.message });
-      persist(resolved.state);
-      return;
-    }
     if (room.type === "lockedChest") {
       const lock = resolveLockedChestAttempt(s.player, run, room);
       if (!lock.opened) {
-        scratch.searched = true;
-        scratch.loot = [];
-        scratch.goldFound = 0;
-        scratch.materialsFound = {};
-        roomScratch.set(room.id, scratch);
         const nextRun = updateRoomAfterScratchSearch(run, room.id, false);
         const next: GameState = { ...s, activeRun: nextRun };
         set({
@@ -634,11 +635,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       gold = rollGold(rng, run.tier);
     }
     const materials = generateMaterialLoot({ biome: room.biome, roomType: room.type, tier: run.tier, rng });
-    scratch.loot = items;
-    scratch.goldFound = gold;
-    scratch.materialsFound = materials;
-    scratch.searched = true;
-    roomScratch.set(room.id, scratch);
 
     let next = s;
     if (room.type === "lockedChest") {
@@ -646,13 +642,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     const hasFinds = items.length > 0 || gold > 0 || Object.keys(materials).length > 0;
     const materialText = formatMaterialVault(materials);
-    next = { ...next, activeRun: updateRoomAfterScratchSearch(run, room.id, hasFinds) };
+    let nextRun = updateRoomAfterScratchSearch(run, room.id, hasFinds);
+    nextRun = depositPendingLoot(nextRun, room.id, { items, gold, materials });
+    next = { ...next, activeRun: nextRun };
     set({
       state: next,
       lastRoomMessage:
         !hasFinds
           ? "Nothing of worth in this room."
-          : `Found ${items.length} item(s)${gold > 0 ? ` and ${gold} gold` : ""}${materialText ? ` and ${materialText}` : ""}.`
+          : `Found ${items.length} item(s)${gold > 0 ? ` and ${gold} gold` : ""}${materialText ? ` and ${materialText}` : ""}. Left in the room to claim.`
     });
     persist(next);
     if (hasFinds) playSfx("loot");
@@ -738,14 +736,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const run = s.activeRun;
     const room = getRoomById(run.roomGraph, run.currentRoomId);
     if (!room) return;
-    const scratch = roomScratch.get(room.id);
-    if (!scratch) {
-      set({ lastRoomMessage: "Search the room first." });
+    if (!hasPendingLoot(room)) {
+      set({ lastRoomMessage: "There is nothing here to take." });
       return;
     }
-    const items = scratch.loot ?? [];
-    const gold = scratch.goldFound ?? 0;
-    const materials = scratch.materialsFound ?? {};
+    const pending = getPendingLoot(room);
+    const items = pending.items;
+    const gold = pending.gold;
+    const materials = pending.materials;
     let raid = run.raidInventory;
     const cap = s.player.derivedStats.carryCapacity;
     const remaining: ItemInstance[] = [];
@@ -772,13 +770,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         next = notifyQuestEvent(next, { kind: "materialCollected", tag: id, biome: room.biome });
       }
     }
-    scratch.loot = remaining;
-    scratch.goldFound = 0;
-    scratch.materialsFound = {};
-    roomScratch.set(room.id, scratch);
 
     const updatedRooms = run.roomGraph.map(r =>
-      r.id === room.id ? { ...r, completed: true } : r
+      r.id === room.id
+        ? { ...r, pendingLoot: { items: remaining, gold: 0, materials: {} }, completed: true }
+        : r
     );
     next = {
       ...next,
@@ -795,38 +791,60 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (items.length > 0 || gold > 0 || Object.keys(materials).length > 0) playSfx("loot");
   },
 
+  leaveRoomLoot: () => {
+    const s = get().state;
+    if (!s.activeRun) return;
+    const run = s.activeRun;
+    const room = getRoomById(run.roomGraph, run.currentRoomId);
+    if (!room) return;
+    if (!hasPendingLoot(room)) return;
+    let nextRun = clearPendingLoot(run, room.id);
+    nextRun = {
+      ...nextRun,
+      roomGraph: nextRun.roomGraph.map(r => r.id === room.id ? { ...r, completed: true } : r)
+    };
+    nextRun = addDungeonLogEntry({
+      run: nextRun, type: "info", now: Date.now(), roomId: room.id,
+      message: "You leave the loot where it lies and move on."
+    });
+    const next: GameState = { ...s, activeRun: nextRun };
+    set({ state: next, lastRoomMessage: "You leave it behind." });
+    persist(next);
+  },
+
   takeItemFromRoom: (item: ItemInstance) => {
     const s = get().state;
     if (!s.activeRun || !s.player) return;
     const run = s.activeRun;
     const room = getRoomById(run.roomGraph, run.currentRoomId);
     if (!room) return;
-    const scratch = roomScratch.get(room.id);
-    if (!scratch || !scratch.loot) return;
-    const remaining = scratch.loot.filter(i => i.instanceId !== item.instanceId);
+    const pending = getPendingLoot(room);
+    const found = pending.items.find(i => i.instanceId === item.instanceId);
+    if (!found) return;
+    const remaining = pending.items.filter(i => i.instanceId !== item.instanceId);
     const cap = s.player.derivedStats.carryCapacity;
-    const newWeight = calculateInventoryWeight(run.raidInventory) + item.weight * item.quantity;
+    const newWeight = calculateInventoryWeight(run.raidInventory) + found.weight * found.quantity;
     if (newWeight > cap) {
       set({ lastRoomMessage: "Too heavy to carry." });
       return;
     }
-    let raid = addItem(run.raidInventory, item);
+    let raid = addItem(run.raidInventory, found);
     let next: GameState = { ...s, activeRun: { ...run, raidInventory: raid } };
-    next = notifyQuestEvent(next, { kind: "itemRetrieved", templateId: item.templateId, biome: room.biome });
-    for (const tag of item.tags ?? []) {
+    next = notifyQuestEvent(next, { kind: "itemRetrieved", templateId: found.templateId, biome: room.biome });
+    for (const tag of found.tags ?? []) {
       next = notifyQuestEvent(next, { kind: "materialCollected", tag, biome: room.biome });
     }
-    if (item.tags?.includes("sign")) {
+    if (found.tags?.includes("sign")) {
       next = notifyQuestEvent(next, { kind: "signFound", biome: room.biome });
     }
-    scratch.loot = remaining;
-    if (remaining.length === 0 && (scratch.goldFound ?? 0) === 0 && Object.keys(scratch.materialsFound ?? {}).length === 0) {
-      const updatedRooms = next.activeRun!.roomGraph.map(r =>
-        r.id === room.id ? { ...r, completed: true } : r
-      );
-      next = { ...next, activeRun: { ...next.activeRun!, roomGraph: updatedRooms } };
-    }
-    set({ state: next, lastRoomMessage: `You pocket the ${item.name}.` });
+    const stillPending = remaining.length > 0 || pending.gold > 0 || Object.keys(pending.materials).length > 0;
+    const updatedRooms = next.activeRun!.roomGraph.map(r =>
+      r.id === room.id
+        ? { ...r, pendingLoot: { ...pending, items: remaining }, completed: stillPending ? r.completed : true }
+        : r
+    );
+    next = { ...next, activeRun: { ...next.activeRun!, roomGraph: updatedRooms } };
+    set({ state: next, lastRoomMessage: `You pocket the ${found.name}.` });
     persist(next);
     playSfx("loot");
   },
@@ -1191,7 +1209,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       activeCombat: undefined,
       activeRun: { ...run, roomGraph: updatedRooms }
     };
-    // Generate room and enemy loot
+    // Generate room and enemy loot — all of it is deposited into the room's
+    // pending loot pool rather than banked directly; the player must take it
+    // (or leave it) explicitly.
     const rng = createRng(`combatLoot:${run.seed}:${room.id}`);
     const lootMessages: string[] = [];
     if (room.lootTableId) {
@@ -1203,27 +1223,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
         threatLevel: run.threat.level,
         playerClassId: s.player.classId
       });
-      const cap = s.player.derivedStats.carryCapacity;
-      let raid = next.activeRun!.raidInventory;
-      for (const item of items) {
-        const w = calculateInventoryWeight(raid) + item.weight * item.quantity;
-        if (w <= cap) {
-          raid = addItem(raid, item);
-          lootMessages.push(item.name);
-          next = notifyQuestEvent(next, { kind: "materialCollected", tag: item.tags?.[0] ?? "any", biome: room.biome });
-        }
+      if (items.length > 0 && next.activeRun) {
+        lootMessages.push(...items.map(item => item.name));
+        next = { ...next, activeRun: depositPendingLoot(next.activeRun, room.id, { items }) };
       }
-      next = { ...next, activeRun: { ...next.activeRun!, raidInventory: raid } };
     }
     const materialLoot = generateMaterialLoot({ biome: room.biome, roomType: room.type, tier: run.tier, rng });
     if (Object.keys(materialLoot).length > 0 && next.activeRun) {
-      let raid = addMaterials({ inventory: next.activeRun.raidInventory, materials: materialLoot });
-      next = { ...next, activeRun: { ...next.activeRun, raidInventory: raid } };
+      next = { ...next, activeRun: depositPendingLoot(next.activeRun, room.id, { materials: materialLoot }) };
       for (const [id, amount] of Object.entries(materialLoot)) {
         if (amount) lootMessages.push(formatMaterialVault({ [id]: amount }));
-        for (let i = 0; i < (amount ?? 0); i++) {
-          next = notifyQuestEvent(next, { kind: "materialCollected", tag: id, biome: room.biome });
-        }
       }
     }
     const enc = getEncounter(combat.encounterId);
@@ -1237,26 +1246,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
     const enemyDrops = rollCombatDrops(room, run, rng);
-    if (enemyDrops.length > 0 && next.activeRun && next.player) {
-      const cap = next.player.derivedStats.carryCapacity;
-      let raid = next.activeRun.raidInventory;
-      for (const item of enemyDrops) {
-        const w = calculateInventoryWeight(raid) + item.weight * item.quantity;
-        if (w <= cap) {
-          raid = addItem(raid, item);
-          lootMessages.push(item.name);
-          next = notifyQuestEvent(next, { kind: "itemRetrieved", templateId: item.templateId, biome: room.biome });
-          for (const tag of item.tags ?? []) {
-            next = notifyQuestEvent(next, { kind: "materialCollected", tag, biome: room.biome });
-          }
-          if (item.tags?.includes("sign")) {
-            next = notifyQuestEvent(next, { kind: "signFound", biome: room.biome });
-          }
-        } else {
-          lootMessages.push(`${item.name} left behind`);
-        }
-      }
-      next = { ...next, activeRun: { ...next.activeRun!, raidInventory: raid } };
+    if (enemyDrops.length > 0 && next.activeRun) {
+      lootMessages.push(...enemyDrops.map(item => item.name));
+      next = { ...next, activeRun: depositPendingLoot(next.activeRun, room.id, { items: enemyDrops }) };
     }
     if (next.player) {
       const xpd: Character = { ...next.player, xp: next.player.xp + xpGain };
@@ -1265,7 +1257,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (next.activeRun) {
       next = { ...next, activeRun: { ...next.activeRun, xpGained: (next.activeRun.xpGained ?? 0) + xpGain } };
     }
-    const lootText = lootMessages.length > 0 ? ` Found: ${lootMessages.join(", ")}.` : "";
+    const lootText = lootMessages.length > 0 ? ` Left to claim: ${lootMessages.join(", ")}.` : "";
     const descendText = room.type === "boss"
       ? " A stair descends beyond the chamber."
       : "";
