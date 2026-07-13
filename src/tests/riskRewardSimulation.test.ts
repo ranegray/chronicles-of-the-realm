@@ -7,6 +7,7 @@ import { generateDungeonRun, getRoomById } from "../game/dungeonGenerator";
 import { addItem, calculateInventoryWeight, createEmptyInventory, instanceFromTemplateId, removeItem } from "../game/inventory";
 import { getConsumableHealFormula } from "../game/itemEffects";
 import { generateLootForRoomLootTableId, rollGold } from "../game/lootGenerator";
+import { nextStepToKnownExtraction } from "../game/pathing";
 import { createRng } from "../game/rng";
 import type { Character, ClassId, DungeonBiome, DungeonRoom, DungeonRun, Inventory, ItemInstance } from "../game/types";
 
@@ -108,8 +109,20 @@ function simulateRun(seed: string, scenario: SimScenario): SimResult {
     if (extractionNearby && hasUnvisited && hurtEnough && packValue >= 18) {
       decisionWindows += 1;
     }
-    if (extractionNearby && (packValue >= 90 || currentPlayer.hp <= Math.floor(currentPlayer.maxHp * 0.3))) {
+    // v0.4 (#4): depth-1 fights now bite, so the simulated delver plays like
+    // danger is legible — bank a decent pack or leave once badly hurt instead
+    // of grinding toward a near-full clear.
+    const badlyHurt = currentPlayer.hp <= Math.floor(currentPlayer.maxHp * 0.45);
+    if (extractionNearby && (packValue >= 70 || badlyHurt)) {
       return finish("extracted", seed, run, raidInventory, currentPlayer, decisionWindows, firstExtractionAt);
+    }
+    if (badlyHurt) {
+      const retreatStep = nextStepToKnownExtraction(run, currentRoomId);
+      if (retreatStep) {
+        currentRoomId = retreatStep;
+        run = visitRoom(run, currentRoomId);
+        continue;
+      }
     }
 
     const nextRoomId = chooseNextRoom(run, currentRoomId);
@@ -192,14 +205,19 @@ function processCombatRoom(args: {
   let combat = startCombat(getEncounter(args.room.encounterId), createRng(`sim-start:${args.run.seed}:${args.room.id}`), args.room.id);
 
   for (let turn = 0; turn < 30 && !combat.over; turn++) {
-    const healItem = player.hp <= Math.floor(player.maxHp * 0.4)
+    const healItem = player.hp <= Math.floor(player.maxHp * 0.6)
       ? raidInventory.items.find(item => getConsumableHealFormula(item))
       : undefined;
     const target = combat.enemies.find(enemy => enemy.hp > 0);
     if (!target && !healItem) break;
+    // v0.4 (#4): with a legible danger floor, a delver out of potions and
+    // deep in the red tries to break away rather than trade to zero.
+    const shouldFlee = !healItem && player.hp <= Math.floor(player.maxHp * 0.35);
     const action = healItem
       ? { kind: "useItem" as const, itemInstanceId: healItem.instanceId }
-      : { kind: "attack" as const, targetId: target!.instanceId };
+      : shouldFlee
+        ? { kind: "flee" as const }
+        : { kind: "attack" as const, targetId: target!.instanceId };
     const result = resolvePlayerAction(
       combat,
       player,
@@ -216,6 +234,9 @@ function processCombatRoom(args: {
 
   if (combat.outcome === "defeat" || player.hp <= 0) {
     return { player: { ...player, hp: 0 }, raidInventory, run: args.run };
+  }
+  if (combat.outcome === "fled") {
+    return { player, raidInventory, run: args.run };
   }
 
   const rng = createRng(`sim-combat-loot:${args.run.seed}:${args.room.id}`);

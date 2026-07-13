@@ -56,6 +56,13 @@ export const DEPTH_RULES = {
     armorEveryDepth: 3,
     evasionEveryDepth: 4
   },
+  // Flat baseline applied to every enemy at every depth. Keeps relative
+  // depth scaling intact while making the depth-1 floor legibly dangerous:
+  // a fresh character's first fight should never be free (#4).
+  enemyBaseline: {
+    accuracyBonus: 1,
+    damageModifierBonus: 2
+  },
   extraction: {
     unstableWeightPerDepth: 2,
     guardedWeightPerDepth: 2,
