@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateDungeonRun, generateRoomGraph } from "../game/dungeonGenerator";
+import { generateDungeonRun, generateRoomGraph, MIN_BOSS_GRAPH_DISTANCE } from "../game/dungeonGenerator";
 import { DEPTH_RULES, RUN_RULES } from "../game/constants";
 
 describe("dungeonGenerator", () => {
@@ -100,4 +100,59 @@ describe("dungeonGenerator", () => {
     expect(run.seed).toEqual("ids");
     expect(run.delveStrain.points).toBe(0);
   });
+
+  it("keeps the boss room at least MIN_BOSS_GRAPH_DISTANCE rooms from the entrance (#4)", () => {
+    const biomes = ["crypt", "goblinWarrens", "fungalCaverns", "ruinedKeep", "oldMine", "sunkenTemple"] as const;
+    for (const tier of [1, 2]) {
+      for (let i = 0; i < 50; i++) {
+        const biome = biomes[i % biomes.length]!;
+        const rooms = generateRoomGraph(`boss-distance-${tier}-${i}`, biome, tier);
+        const entrance = rooms.find(r => r.type === "entrance")!;
+        const boss = rooms.find(r => r.type === "boss");
+        expect(boss).toBeDefined();
+
+        const distances = bfsDistances(rooms, entrance.id);
+        const bossDistance = distances.get(boss!.id);
+        expect(bossDistance).toBeDefined();
+
+        const maxDistance = Math.max(
+          ...rooms.filter(r => r.id !== entrance.id && distances.has(r.id)).map(r => distances.get(r.id)!)
+        );
+        const required = Math.min(MIN_BOSS_GRAPH_DISTANCE, maxDistance);
+        expect(bossDistance!).toBeGreaterThanOrEqual(required);
+      }
+    }
+  });
+
+  it("still has all required rooms after boss relocation", () => {
+    for (let i = 0; i < 50; i++) {
+      const rooms = generateRoomGraph(`boss-relocate-${i}`, "crypt", 1);
+      expect(rooms.filter(r => r.type === "entrance").length).toBe(1);
+      expect(rooms.filter(r => r.type === "boss").length).toBe(1);
+      expect(rooms.some(r => r.type === "extraction")).toBe(true);
+      // Room-scoped payloads must still point at their own room after any swap.
+      for (const room of rooms) {
+        if (room.activeTrap) expect(room.activeTrap.roomId).toBe(room.id);
+        if (room.activeEvent) expect(room.activeEvent.roomId).toBe(room.id);
+      }
+      const coords = rooms.map(r => `${r.mapX},${r.mapY}`);
+      expect(new Set(coords).size).toBe(rooms.length);
+    }
+  });
 });
+
+function bfsDistances(rooms: ReturnType<typeof generateRoomGraph>, fromId: string): Map<string, number> {
+  const byId = new Map(rooms.map(r => [r.id, r] as const));
+  const distances = new Map<string, number>([[fromId, 0]]);
+  const queue: string[] = [fromId];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    const d = distances.get(id)!;
+    for (const nbId of byId.get(id)?.connectedRoomIds ?? []) {
+      if (distances.has(nbId)) continue;
+      distances.set(nbId, d + 1);
+      queue.push(nbId);
+    }
+  }
+  return distances;
+}

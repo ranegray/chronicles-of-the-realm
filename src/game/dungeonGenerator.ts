@@ -62,6 +62,11 @@ const NON_ENTRANCE_TYPES: RoomType[] = [
 
 const MAX_ROOM_CONNECTIONS = 4;
 
+// #4: the boss room must never spawn on the entrance's doorstep. It has to be
+// at least this many rooms away (shortest path through the room graph), or as
+// far as the graph allows when the map is smaller than that.
+export const MIN_BOSS_GRAPH_DISTANCE = 4;
+
 const CARDINAL_DIRECTIONS = [
   { dx: 0, dy: -1 },
   { dx: 1, dy: 0 },
@@ -146,11 +151,87 @@ export function generateRoomGraph(
 
   ensureRequiredRooms(rooms, rng, biome, tier);
   assignSpatialLayout(rooms, rng);
+  enforceBossDistance(rooms, rng);
 
   // Mark entrance visited
   rooms[0]!.visited = true;
 
   return rooms;
+}
+
+/**
+ * #4: guarantee the boss room sits at least MIN_BOSS_GRAPH_DISTANCE rooms
+ * (shortest path through the graph) from the entrance — or at the farthest
+ * reachable room when the graph is smaller than that. If the boss landed too
+ * close, its room contents are swapped with a qualifying distant room; ids,
+ * positions and connections stay put so the layout is untouched.
+ */
+export function enforceBossDistance(rooms: DungeonRoom[], rng: Rng): void {
+  const entrance = rooms.find(r => r.type === "entrance");
+  const boss = rooms.find(r => r.type === "boss");
+  if (!entrance || !boss) return;
+
+  const distances = graphDistancesFrom(rooms, entrance.id);
+  const reachable = rooms.filter(r => r.id !== entrance.id && distances.has(r.id));
+  if (reachable.length === 0) return;
+  const maxDistance = Math.max(...reachable.map(r => distances.get(r.id)!));
+  const required = Math.min(MIN_BOSS_GRAPH_DISTANCE, maxDistance);
+  if ((distances.get(boss.id) ?? 0) >= required) return;
+
+  const farEnough = reachable.filter(r => distances.get(r.id)! >= required && r.type !== "boss");
+  // Keep extraction rooms where they are unless there is no other option.
+  const preferred = farEnough.filter(r => r.type !== "extraction" && !r.extractionPoint);
+  const pool = preferred.length > 0 ? preferred : farEnough;
+  if (pool.length === 0) return;
+
+  const target = pool[rng.nextInt(0, pool.length - 1)]!;
+  swapRoomContents(boss, target);
+}
+
+function graphDistancesFrom(rooms: DungeonRoom[], fromId: string): Map<string, number> {
+  const byId = new Map(rooms.map(r => [r.id, r] as const));
+  const distances = new Map<string, number>([[fromId, 0]]);
+  const queue: string[] = [fromId];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    const d = distances.get(id)!;
+    const room = byId.get(id);
+    if (!room) continue;
+    for (const nbId of room.connectedRoomIds) {
+      if (distances.has(nbId)) continue;
+      distances.set(nbId, d + 1);
+      queue.push(nbId);
+    }
+  }
+  return distances;
+}
+
+/** Swap what the rooms *are* (type, encounter, loot, traps, events, …) while
+ * leaving where they are (id, position, connections, visit state) alone. */
+function swapRoomContents(a: DungeonRoom, b: DungeonRoom): void {
+  const KEEP: ReadonlyArray<keyof DungeonRoom> = [
+    "id",
+    "mapX",
+    "mapY",
+    "connectedRoomIds",
+    "visited",
+    "completed"
+  ];
+  const aCopy = { ...a };
+  const bCopy = { ...b };
+  const keys = new Set([...Object.keys(aCopy), ...Object.keys(bCopy)]) as Set<keyof DungeonRoom>;
+  for (const key of keys) {
+    if (KEEP.includes(key)) continue;
+    (a as unknown as Record<string, unknown>)[key] = bCopy[key];
+    (b as unknown as Record<string, unknown>)[key] = aCopy[key];
+  }
+  restampRoomScopedIds(a);
+  restampRoomScopedIds(b);
+}
+
+function restampRoomScopedIds(room: DungeonRoom): void {
+  if (room.activeTrap) room.activeTrap = { ...room.activeTrap, roomId: room.id };
+  if (room.activeEvent) room.activeEvent = { ...room.activeEvent, roomId: room.id };
 }
 
 function buildRoom(

@@ -22,11 +22,12 @@ export function buildEnemyInstance(enemyId: string, rng: Rng, depthTier = 1): En
     hp: def.hp + hpBonus,
     maxHp: def.hp + hpBonus,
     armor: def.armor + Math.floor(depthBonus / DEPTH_RULES.enemyScaling.armorEveryDepth),
-    accuracy: def.accuracy + Math.floor(depthBonus / DEPTH_RULES.enemyScaling.accuracyEveryDepth),
+    accuracy: def.accuracy + DEPTH_RULES.enemyBaseline.accuracyBonus +
+      Math.floor(depthBonus / DEPTH_RULES.enemyScaling.accuracyEveryDepth),
     evasion: def.evasion + Math.floor(depthBonus / DEPTH_RULES.enemyScaling.evasionEveryDepth),
     damageDice: {
       ...def.damageDice,
-      modifier: (def.damageDice.modifier ?? 0) + damageBonus
+      modifier: (def.damageDice.modifier ?? 0) + DEPTH_RULES.enemyBaseline.damageModifierBonus + damageBonus
     }
   };
 }
