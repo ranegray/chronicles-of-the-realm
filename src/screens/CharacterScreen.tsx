@@ -6,7 +6,9 @@ import { TalentScreen } from "./TalentScreen";
 import { getAncestry } from "../data/ancestries";
 import { getClass } from "../data/classes";
 import { generateBuildSummary } from "../game/buildMath";
-import type { Character, VillageState } from "../game/types";
+import { getXpRequiredForLevel } from "../game/characterProgression";
+import { CHARACTER_PROGRESSION_RULES } from "../game/constants";
+import type { Character, CharacterLevel, VillageState } from "../game/types";
 import "./CharacterScreen.css";
 
 const ORDINALS = [
@@ -100,7 +102,10 @@ function composeChronicleEntry(
 ): { eyebrow: string; lede: string } {
   const ancestryName = getAncestry(player.ancestryId).name;
   const className = getClass(player.classId).name;
-  const xpToNext = 100 + (player.level - 1) * 60;
+  const atMaxLevel = player.level >= CHARACTER_PROGRESSION_RULES.maxLevel;
+  const xpToNext = atMaxLevel
+    ? undefined
+    : getXpRequiredForLevel((player.level + 1) as CharacterLevel);
 
   const eyebrow = village
     ? `${ordinal(player.level)} season in ${village.name}`
@@ -119,7 +124,11 @@ function composeChronicleEntry(
     sentences.push(`The chronicle records ${delveCount} ${delveWord}${deathClause}.`);
   }
 
-  sentences.push(`${player.xp} of ${xpToNext} experience toward the next season.`);
+  if (xpToNext === undefined) {
+    sentences.push("The measure is full; the chronicle has nothing further to ask of you.");
+  } else {
+    sentences.push(`${player.xp} of ${xpToNext} experience toward the next season.`);
+  }
 
   if (village && village.renown > 0) {
     sentences.push(`Renown ${village.renown} among its people.`);
