@@ -6,6 +6,10 @@ import { useGameStore } from "../store/gameStore";
 import type { EnemyInstance } from "../game/types";
 import { canUseCombatAction, getAvailableCombatActions } from "../game/combatActions";
 import type { ActiveCombatActionView } from "../components/v04UiTypes";
+import { useLevelIncreasePulse, useStaggeredReveal } from "../components/useStaggeredReveal";
+import "./pacing.css";
+
+const COMBAT_LOG_REVEAL_INTERVAL_MS = 250;
 
 type Fx =
   | { id: string; kind: "enemy-hit"; targetId: string; amount: number }
@@ -28,6 +32,9 @@ export function CombatScreen() {
   const [targetId, setTargetId] = useState<string | null>(null);
   const logRef = useRef<HTMLUListElement | null>(null);
   const logLength = combat?.log.length ?? 0;
+  const { revealed: revealedLogCount, isRevealing: logRevealPending, skip: skipLogReveal } =
+    useStaggeredReveal(logLength, COMBAT_LOG_REVEAL_INTERVAL_MS);
+  const threatPulsing = useLevelIncreasePulse(run?.threat.level ?? 0);
 
   const [fx, setFx] = useState<Fx[]>([]);
   const lastHp = useRef<{ player: number | null; enemies: Record<string, number> }>({
@@ -47,7 +54,7 @@ export function CombatScreen() {
     const el = logRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [logLength]);
+  }, [revealedLogCount]);
 
   useEffect(() => {
     if (!combat || !player) return;
@@ -129,7 +136,13 @@ export function CombatScreen() {
   const enemyHitsBy = (id: string) =>
     fx.filter((f): f is Extract<Fx, { kind: "enemy-hit" }> => f.kind === "enemy-hit" && f.targetId === id);
   const lowHp = player.hp / player.maxHp <= 0.25;
-  const classActions = getUnlockedClassActions(player, combat, Boolean(selectedTarget));
+  const classActions = getUnlockedClassActions(player, combat, Boolean(selectedTarget), logRevealPending);
+
+  const totalLogLines = combat.log.length;
+  const visibleLogCount = Math.min(revealedLogCount, totalLogLines);
+  const logWindowStart = Math.max(0, visibleLogCount - 50);
+  const displayLog = combat.log.slice(logWindowStart, visibleLogCount);
+  const combatOverRevealed = combat.over && !logRevealPending;
 
   return (
     <>
@@ -144,10 +157,14 @@ export function CombatScreen() {
             <h2>Turn {combat.turn}</h2>
           </div>
           <div className="combat-header-state">
-            {run && !combat.over && <ThreatMeter threat={run.threat} />}
-            {combat.over && combat.outcome === "victory" && <span className="good">Victory</span>}
-            {combat.over && combat.outcome === "fled" && <span className="warn">Withdrew</span>}
-            {combat.over && combat.outcome === "defeat" && <span className="danger">Defeated</span>}
+            {run && !combat.over && (
+              <div className={`threat-meter-pulse-wrap ${threatPulsing ? "threat-pulse" : ""}`}>
+                <ThreatMeter threat={run.threat} />
+              </div>
+            )}
+            {combatOverRevealed && combat.outcome === "victory" && <span className="good">Victory</span>}
+            {combatOverRevealed && combat.outcome === "fled" && <span className="warn">Withdrew</span>}
+            {combatOverRevealed && combat.outcome === "defeat" && <span className="danger">Defeated</span>}
           </div>
         </header>
 
@@ -193,9 +210,16 @@ export function CombatScreen() {
           </div>
         </section>
 
-        <section className="combat-log-panel" aria-live="polite">
+        <section
+          className="combat-log-panel"
+          aria-live="polite"
+          onClick={() => logRevealPending && skipLogReveal()}
+          title={logRevealPending ? "Click to skip ahead" : undefined}
+        >
           <ul className="combat-log" ref={logRef}>
-            {combat.log.slice(-50).map((line, i) => <li key={i}>{line}</li>)}
+            {displayLog.map((line, i) => (
+              <li key={logWindowStart + i} className="combat-log-line-in">{line}</li>
+            ))}
           </ul>
         </section>
 
@@ -209,29 +233,29 @@ export function CombatScreen() {
               />
               <Button
                 className="btn-hero combat-action-primary"
-                disabled={!selectedTarget}
+                disabled={!selectedTarget || logRevealPending}
                 onClick={() => selectedTarget && performAction({ kind: "attack", targetId: selectedTarget.instanceId })}
               >
                 Attack{selectedTarget ? ` · ${selectedTarget.name}` : ""}
               </Button>
               <Button
                 variant="secondary"
-                disabled={!selectedTarget}
+                disabled={!selectedTarget || logRevealPending}
                 onClick={() => selectedTarget && performAction({ kind: "powerAttack", targetId: selectedTarget.instanceId })}
               >Power Strike</Button>
-              <Button variant="secondary" onClick={() => performAction({ kind: "defend" })}>Defend</Button>
-              <Button variant="ghost" onClick={performAutoCombat}>Auto</Button>
+              <Button variant="secondary" disabled={logRevealPending} onClick={() => performAction({ kind: "defend" })}>Defend</Button>
+              <Button variant="ghost" disabled={logRevealPending} onClick={performAutoCombat}>Auto</Button>
               <Button variant="ghost" onClick={() => setShowItems(s => !s)}>{showItems ? "Hide Items" : "Items"}</Button>
-              <Button variant="danger" onClick={() => performAction({ kind: "flee" })}>Flee</Button>
+              <Button variant="danger" disabled={logRevealPending} onClick={() => performAction({ kind: "flee" })}>Flee</Button>
             </>
           )}
-          {combat.over && combat.outcome === "victory" && (
+          {combatOverRevealed && combat.outcome === "victory" && (
             <Button className="btn-hero" onClick={closeVictory}>Continue</Button>
           )}
-          {combat.over && combat.outcome === "fled" && (
+          {combatOverRevealed && combat.outcome === "fled" && (
             <Button onClick={closeFlee}>Withdraw</Button>
           )}
-          {combat.over && combat.outcome === "defeat" && (
+          {combatOverRevealed && combat.outcome === "defeat" && (
             <p className="muted">The dungeon takes its dues.</p>
           )}
         </footer>
@@ -266,7 +290,8 @@ export function CombatScreen() {
 function getUnlockedClassActions(
   player: NonNullable<ReturnType<typeof useGameStore.getState>["state"]["player"]>,
   combat: NonNullable<ReturnType<typeof useGameStore.getState>["state"]["activeCombat"]>,
-  hasTarget: boolean
+  hasTarget: boolean,
+  pendingReveal: boolean
 ): ActiveCombatActionView[] {
   return getAvailableCombatActions({ character: player, combatState: combat })
     .filter(action => Boolean(action.requiredTalentId))
@@ -276,8 +301,10 @@ function getUnlockedClassActions(
       const useCheck = canUseCombatAction({ character: player, combatState: combat, actionId: action.id });
       return {
         ...action,
-        disabled: !useCheck.canUse || (needsTarget && !hasTarget),
-        disabledReason: needsTarget && !hasTarget ? "Choose a living target." : useCheck.reason,
+        disabled: !useCheck.canUse || (needsTarget && !hasTarget) || pendingReveal,
+        disabledReason: pendingReveal
+          ? "Let the log catch up."
+          : needsTarget && !hasTarget ? "Choose a living target." : useCheck.reason,
         remainingCooldown: runtime?.remainingCooldown,
         usedThisCombat: runtime?.usedThisCombat
       };

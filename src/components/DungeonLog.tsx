@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { DungeonLogEntry } from "../game/types";
+import { useStaggeredReveal } from "./useStaggeredReveal";
+import "./dungeonLogPacing.css";
+
+const DUNGEON_LOG_REVEAL_INTERVAL_MS = 120;
 
 export interface DungeonLogProps {
   entries: DungeonLogEntry[];
@@ -57,7 +61,9 @@ export function DungeonLog({ entries, limit = 50 }: DungeonLogProps) {
   const listRef = useRef<HTMLUListElement | null>(null);
   const tail = entries.slice(Math.max(0, entries.length - limit));
   const displayEntries = useMemo(() => collapseEntries(tail), [tail]);
-  const latestId = displayEntries[displayEntries.length - 1]?.id;
+  const { revealed } = useStaggeredReveal(displayEntries.length, DUNGEON_LOG_REVEAL_INTERVAL_MS);
+  const visibleEntries = displayEntries.slice(0, revealed);
+  const latestId = visibleEntries[visibleEntries.length - 1]?.id;
 
   useEffect(() => {
     const el = listRef.current;
@@ -65,17 +71,17 @@ export function DungeonLog({ entries, limit = 50 }: DungeonLogProps) {
     el.scrollTop = el.scrollHeight;
   }, [latestId]);
 
-  if (displayEntries.length === 0) {
+  if (visibleEntries.length === 0) {
     return <p className="muted small dungeon-log-empty">The dungeon is still.</p>;
   }
 
   // Older entries fade out the further they are from the latest. The 6 most
   // recent each get progressively dimmer; anything older settles at the
   // dimmest tier.
-  const total = displayEntries.length;
+  const total = visibleEntries.length;
   return (
     <ul ref={listRef} className="dungeon-log dungeon-log-diegetic" aria-label="Recent dungeon events">
-      {displayEntries.map((entry, idx) => {
+      {visibleEntries.map((entry, idx) => {
         const fromLatest = total - 1 - idx;
         const recencyClass = fromLatest === 0
           ? "dungeon-log-now"
@@ -85,7 +91,7 @@ export function DungeonLog({ entries, limit = 50 }: DungeonLogProps) {
         return (
           <li
             key={entry.id}
-            className={`dungeon-log-entry dungeon-log-${entry.type} ${recencyClass}`}
+            className={`dungeon-log-entry dungeon-log-${entry.type} ${recencyClass} dungeon-log-entry-in`}
           >
             {entry.message}
           </li>

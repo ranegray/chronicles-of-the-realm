@@ -20,6 +20,8 @@ import type { ItemWithV4Fields } from "../components/v04UiTypes";
 import { getTrapTemplate } from "../data/trapTables";
 import { getEventTemplate } from "../data/eventTemplates";
 import { describeSign } from "../data/roomSigns";
+import { useLevelIncreasePulse } from "../components/useStaggeredReveal";
+import "./pacing.css";
 
 const TYPE_LABELS: Record<string, string> = {
   entrance: "Entrance",
@@ -71,6 +73,7 @@ export function DungeonScreen() {
   const [showLog, setShowLog] = useState(false);
   const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
   const [showDescendConfirm, setShowDescendConfirm] = useState(false);
+  const threatPulsing = useLevelIncreasePulse(run?.threat.level ?? 0);
 
   if (!run || !player) return <div className="screen">No active run.</div>;
   const current = getRoomById(run.roomGraph, run.currentRoomId);
@@ -150,7 +153,9 @@ export function DungeonScreen() {
             <span className="hp-bar-label">{player.hp} / {player.maxHp}</span>
           </div>
         </div>
-        <ThreatMeter threat={run.threat} />
+        <div className={`threat-meter-pulse-wrap ${threatPulsing ? "threat-pulse" : ""}`}>
+          <ThreatMeter threat={run.threat} />
+        </div>
         <span className="dungeon-hud-chip"><em>Pack</em> {raidWeight}/{carryCapacity}</span>
         <span className="dungeon-hud-chip"><em>Gold</em> {run.raidInventory.gold}</span>
         <span className="dungeon-hud-chip"><em>Value</em> {packValue}</span>
@@ -159,7 +164,10 @@ export function DungeonScreen() {
 
       <div className="narrative-scroll">
         <div className="narrative-column">
-          <div className={`room-hero ${current.dangerRating > 2 ? "room-hero-danger" : ""}`}>
+          <div
+            key={current.id}
+            className={`room-hero room-hero-enter ${current.dangerRating > 2 ? "room-hero-danger" : ""}`}
+          >
             <span className="room-hero-meta">
               {TYPE_LABELS[current.type] ?? current.type} · Danger {current.dangerRating} · {exitCount}/4 exits
             </span>
@@ -245,7 +253,7 @@ export function DungeonScreen() {
             />
           )}
 
-          <section className="passages-block" aria-label="Passages">
+          <section key={current.id} className="passages-block passages-enter" aria-label="Passages">
             <h3 className="passages-heading">Passages</h3>
             {passageRooms.length === 0 ? (
               <p className="muted small">No passages lead onward from here.</p>
