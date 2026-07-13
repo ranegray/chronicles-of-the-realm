@@ -30,7 +30,7 @@ export function DevPanel() {
               checked={!state.settings.audioMuted}
               onChange={event => updateSettings({ audioMuted: !event.currentTarget.checked })}
             />
-            SFX
+            Audio
           </label>
           <Button
             variant="danger"

@@ -77,17 +77,35 @@ export function isAudioMuted(): boolean {
   return muted;
 }
 
-export function playSfx(id: SfxId): void {
-  if (muted || typeof window === "undefined") return;
+/**
+ * Lazily creates (and resumes) the single shared AudioContext used by both
+ * one-shot SFX and the ambient bed, so the two systems never fight over
+ * separate contexts. Returns undefined in unsupported/SSR environments so
+ * callers can no-op gracefully.
+ */
+export function getAudioContext(): AudioContext | undefined {
+  if (typeof window === "undefined") return undefined;
   const AudioContextCtor = window.AudioContext ?? window.webkitAudioContext;
-  if (!AudioContextCtor) return;
+  if (!AudioContextCtor) return undefined;
 
   try {
     audioContext ??= new AudioContextCtor();
     if (audioContext.state === "suspended") {
       void audioContext.resume();
     }
-    playPattern(audioContext, SFX_PATTERNS[id]);
+    return audioContext;
+  } catch {
+    return undefined;
+  }
+}
+
+export function playSfx(id: SfxId): void {
+  if (muted) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    playPattern(ctx, SFX_PATTERNS[id]);
   } catch {
     // Audio should never interrupt gameplay if the browser refuses playback.
   }
