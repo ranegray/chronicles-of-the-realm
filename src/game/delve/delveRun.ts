@@ -241,10 +241,15 @@ const SENSE_TEXT: Record<SenseTag, string> = {
   narrowSqueeze: "a narrow squeeze"
 };
 
+const DIRECTION_PHRASE: Record<string, string> = {
+  north: "To the north", east: "To the east", south: "To the south", west: "To the west",
+  up: "Above", down: "Below"
+};
+
 function exitLine(state: DelveRunState, roomId: string, exit: PlaceExit): string {
   const senses = (exit.senses ?? []).map(s => SENSE_TEXT[s]).join(", ");
   const doorState = state.doorOverrides[`${roomId}:${exit.direction}`];
-  let line = `To the ${exit.direction}, a way on`;
+  let line = `${DIRECTION_PHRASE[exit.direction] ?? `To the ${exit.direction}`}, a way on`;
   if (senses) line += ` — ${senses}`;
   if (doorState === "locked") line += ". The door there is locked fast";
   else if (doorState === "jammed") line += ". The door there is jammed in its frame";
@@ -294,7 +299,11 @@ function signalLine(signal: HunterSignal): string {
   if (signal.distance === 0) return "It is here, in the room with you.";
   const where = signal.direction === "near"
     ? "close by"
-    : `to the ${signal.direction}`;
+    : signal.direction === "up"
+      ? "overhead"
+      : signal.direction === "down"
+        ? "beneath you"
+        : `to the ${signal.direction}`;
   const range = signal.distance === 1 ? "close" : "farther off";
   return `Something ${signal.texture} ${where}, ${range}.`;
 }
