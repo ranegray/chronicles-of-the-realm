@@ -8,8 +8,7 @@ import { useGameStore } from "../store/gameStore";
 
 export function QuestScreen() {
   const village = useGameStore(s => s.state.village);
-  const activeRun = useGameStore(s => s.state.activeRun);
-  const activeCombat = useGameStore(s => s.state.activeCombat);
+  const delveRun = useGameStore(s => s.state.delveRun);
   const toggleQuest = useGameStore(s => s.toggleQuestActive);
 
   if (!village) return <div className="screen">No quests available.</div>;
@@ -18,7 +17,7 @@ export function QuestScreen() {
   const active = village.quests.filter(q => q.status === "active");
   const completed = village.quests.filter(q => q.status === "completed");
   const claimed = village.quests.filter(q => q.status === "claimed");
-  const awayFromVillage = Boolean(activeRun || activeCombat);
+  const awayFromVillage = Boolean(delveRun && delveRun.status === "active");
   const chains = village.questChains ?? [];
 
   return (

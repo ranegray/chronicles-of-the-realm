@@ -93,7 +93,7 @@ export function canUpgradeNpcService(params: {
   if ((npc.service?.level ?? npc.serviceLevel) >= VILLAGE_PROGRESSION_RULES.maxServiceLevel) {
     return { canUpgrade: false, reason: "Already at max service level." };
   }
-  if (params.gameState.activeRun) {
+  if (params.gameState.delveRun) {
     return { canUpgrade: false, reason: "Finish the current run before upgrading village services." };
   }
   const next = getNextServiceLevelDefinition({ npc });

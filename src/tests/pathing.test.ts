@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { extractionDistances, nextStepToKnownExtraction, shortestDistance } from "../game/pathing";
-import { createInitialDelveStrainState, createInitialThreatState } from "../game/threat";
 import type { DungeonRoom, DungeonRun } from "../game/types";
 
 function room(partial: Partial<DungeonRoom> & { id: string }): DungeonRoom {
@@ -20,18 +19,13 @@ function room(partial: Partial<DungeonRoom> & { id: string }): DungeonRoom {
 
 function makeRun(rooms: DungeonRoom[], visitedIds: string[], currentId: string): DungeonRun {
   return {
-    runId: "r", seed: "s", generatorVersion: 1, biome: "crypt", tier: 1,
+    runId: "r", seed: "s", biome: "crypt", tier: 1,
     status: "active", startedAt: 0, currentRoomId: currentId,
     roomGraph: rooms, visitedRoomIds: visitedIds,
     raidInventory: { items: [], gold: 0 },
     loadoutSnapshot: [], activeQuestIds: [],
     questProgressAtStart: {}, xpGained: 0,
-    roomsVisitedBeforeDepth: 0, roomsCompletedBeforeDepth: 0,
-    dangerLevel: 1,
-    threat: createInitialThreatState(0),
-    delveStrain: createInitialDelveStrainState(0),
-    knownRoomIntel: {},
-    dungeonLog: []
+    roomsVisitedBeforeDepth: 0, roomsCompletedBeforeDepth: 0
   };
 }
 

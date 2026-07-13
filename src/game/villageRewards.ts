@@ -1,25 +1,8 @@
-import type { DungeonRun, GameState, MaterialId, Quest, UnlockEffect, VillageState } from "./types";
-import { addItem, createEmptyInventory, instanceFromTemplateId, moveRaidInventoryToStash } from "./inventory";
+import type { GameState, MaterialId, Quest, UnlockEffect, VillageState } from "./types";
+import { addItem, instanceFromTemplateId } from "./inventory";
 import { addMaterials } from "./materials";
 import { createRng } from "./rng";
 import { addNpcRelationship, addNpcServiceXp, applyServiceUnlocks } from "./villageProgression";
-
-export function applyExtractionVillageRewards(params: {
-  gameState: GameState;
-  extractedRun: DungeonRun;
-  now?: number;
-}): {
-  gameState: GameState;
-  messages: string[];
-} {
-  const move = moveRaidInventoryToStash(params.extractedRun.raidInventory, params.gameState.stash);
-  const materialTotal = Object.values(params.extractedRun.raidInventory.materials ?? {}).reduce((sum, value) => sum + (value ?? 0), 0);
-  const messages = materialTotal > 0 ? [`Secured ${materialTotal} material${materialTotal === 1 ? "" : "s"}.`] : [];
-  return {
-    gameState: { ...params.gameState, stash: move.stash, activeRun: { ...params.extractedRun, raidInventory: createEmptyInventory() } },
-    messages
-  };
-}
 
 export function applyQuestReward(params: {
   gameState: GameState;
