@@ -245,7 +245,7 @@ function findInInventoryAndEquipped(
   return equippedItems.find(i => i.instanceId === instanceId);
 }
 
-function guessWeaponDice(weapon: ItemInstance): { count: number; sides: number } {
+export function guessWeaponDice(weapon: ItemInstance): { count: number; sides: number } {
   if (weapon.tags?.includes("two-handed")) return { count: 1, sides: 10 };
   if (weapon.tags?.includes("blade")) return { count: 1, sides: 8 };
   if (weapon.tags?.includes("blunt")) return { count: 1, sides: 8 };
@@ -255,7 +255,7 @@ function guessWeaponDice(weapon: ItemInstance): { count: number; sides: number }
   return { count: 1, sides: 6 };
 }
 
-function getDamageBonus(player: Character, weapon?: ItemInstance): number {
+export function getDamageBonus(player: Character, weapon?: ItemInstance): number {
   if (weapon?.tags?.includes("magic")) {
     return Math.max(0, player.derivedStats.magicPower);
   }
