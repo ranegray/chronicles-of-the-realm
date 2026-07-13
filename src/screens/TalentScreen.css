@@ -1,0 +1,23 @@
+/* Talents, embedded as the chronicle's "what you have learned" section
+   rather than a standalone skill-tree screen. */
+
+.learned-deeds { display: flex; flex-direction: column; gap: 16px; }
+
+.learned-deeds-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.learned-deeds-desc {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  max-width: 52ch;
+}
+.learned-deeds-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}

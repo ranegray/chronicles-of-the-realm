@@ -1,0 +1,35 @@
+/* Build summary — collapsed to a single quiet "in sum" line under the
+   measure, plus any warnings that still need a reader's attention. */
+
+.build-in-sum { margin-top: 10px; }
+
+.build-in-sum-line {
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0;
+}
+.build-in-sum-eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+.build-in-sum-scores { font-variant-numeric: tabular-nums; }
+.build-score-inline { color: var(--text-muted); }
+.build-score-inline strong { color: var(--text); font-weight: 600; }
+.build-score-inline strong.danger { color: var(--danger); }
+
+.build-warnings {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.build-warning { font-size: 0.88rem; font-style: italic; }
+.build-warning-info { color: var(--text-dim); }
+.build-warning-warning { color: var(--warn); }
+.build-warning-danger { color: var(--danger); }

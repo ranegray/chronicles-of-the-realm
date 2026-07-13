@@ -1,6 +1,7 @@
 import type { Character } from "../game/types";
 import { ABILITY_NAMES } from "../game/constants";
 import type { AbilityName } from "../game/types";
+import "./StatBlock.css";
 
 interface Props {
   character: Character;
@@ -9,24 +10,23 @@ interface Props {
 export function StatBlock({ character }: Props) {
   const ds = character.derivedStats;
   return (
-    <div className="stat-block">
-      <div className="stat-row">
-        <StatLabel label="HP" tip="Current health. At zero, the run ends and carried gear is lost." /><strong>{character.hp} / {character.maxHp}</strong>
+    <div className="stat-ledger">
+      <div className="stat-ledger-prominent">
+        <StatEntry label="HP" tip="Current health. At zero, the run ends and carried gear is lost." value={`${character.hp} / ${character.maxHp}`} prominent />
+        <StatEntry label="Armor" tip="Reduces incoming hit damage after an enemy connects." value={ds.armor} prominent />
+        <StatEntry label="Accuracy" tip="Added to attack rolls against enemy evasion." value={`+${ds.accuracy}`} prominent />
+        <StatEntry label="Evasion" tip="Enemy attacks must meet or beat this value to hit." value={ds.evasion} prominent />
+        <StatEntry label="Carry" tip="Maximum raid-pack weight before you must leave loot behind." value={ds.carryCapacity} prominent />
       </div>
-      <div className="stat-row"><StatLabel label="Armor" tip="Reduces incoming hit damage after an enemy connects." /><strong>{ds.armor}</strong></div>
-      <div className="stat-row"><StatLabel label="Accuracy" tip="Added to attack rolls against enemy evasion." /><strong>+{ds.accuracy}</strong></div>
-      <div className="stat-row"><StatLabel label="Evasion" tip="Enemy attacks must meet or beat this value to hit." /><strong>{ds.evasion}</strong></div>
-      <div className="stat-row"><StatLabel label="Crit %" tip="Critical-hit bonus from gear and traits." /><strong>{ds.critChance}%</strong></div>
-      <div className="stat-row"><StatLabel label="Carry" tip="Maximum raid-pack weight before you must leave loot behind." /><strong>{ds.carryCapacity}</strong></div>
-      <div className="stat-row"><StatLabel label="Magic" tip="Power for magical gear and future spell effects." /><strong>{ds.magicPower}</strong></div>
-      <div className="stat-row"><StatLabel label="Trap Sense" tip="Added to trap checks when entering trapped rooms." /><strong>{ds.trapSense}</strong></div>
-      <div className="stat-divider" />
-      {ABILITY_NAMES.map(a => (
-        <div className="stat-row" key={a}>
-          <StatLabel label={a} tip={ABILITY_TIPS[a]} capitalize />
-          <strong>{character.abilityScores[a]}</strong>
-        </div>
-      ))}
+
+      <div className="stat-ledger-grid">
+        <StatEntry label="Crit %" tip="Critical-hit bonus from gear and traits." value={`${ds.critChance}%`} />
+        <StatEntry label="Magic" tip="Power for magical gear and future spell effects." value={ds.magicPower} />
+        <StatEntry label="Trap Sense" tip="Added to trap checks when entering trapped rooms." value={ds.trapSense} />
+        {ABILITY_NAMES.map(a => (
+          <StatEntry key={a} label={a} tip={ABILITY_TIPS[a]} value={character.abilityScores[a]} capitalize />
+        ))}
+      </div>
     </div>
   );
 }
@@ -40,14 +40,23 @@ const ABILITY_TIPS: Record<AbilityName, string> = {
   presence: "Feeds social and future leadership effects."
 };
 
-function StatLabel({ label, tip, capitalize }: { label: string; tip: string; capitalize?: boolean }) {
+function StatEntry({ label, tip, value, capitalize, prominent }: {
+  label: string;
+  tip: string;
+  value: string | number;
+  capitalize?: boolean;
+  prominent?: boolean;
+}) {
   return (
-    <span
-      className="stat-label-help"
-      style={capitalize ? { textTransform: "capitalize" } : undefined}
-      title={tip}
-    >
-      {label}
-    </span>
+    <div className={`stat-entry${prominent ? " stat-entry-prominent" : ""}`}>
+      <span
+        className="stat-entry-label"
+        style={capitalize ? { textTransform: "capitalize" } : undefined}
+        title={tip}
+      >
+        {label}
+      </span>
+      <strong className="stat-entry-value">{value}</strong>
+    </div>
   );
 }

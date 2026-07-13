@@ -1,0 +1,43 @@
+/* Stat block — the record's "measure", a clean two-column ledger rather
+   than a card grid. Prominent combat stats get their own emphasized row;
+   everything else (secondary stats + abilities) reads as a quiet table. */
+
+.stat-ledger { display: flex; flex-direction: column; gap: 16px; }
+
+.stat-ledger-prominent {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--warm-line);
+  border-radius: 8px;
+  background: var(--warm-bg);
+}
+.stat-ledger-prominent .stat-entry-value { font-size: 1.3rem; color: var(--accent-2); }
+
+.stat-ledger-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px 20px;
+}
+
+.stat-entry {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+}
+.stat-entry-prominent { flex-direction: column; gap: 2px; }
+
+.stat-entry-label {
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: help;
+}
+.stat-entry-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}

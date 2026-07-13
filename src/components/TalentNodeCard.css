@@ -1,0 +1,82 @@
+/* A single learned deed — styled as a ledger entry, not a skill-tree node.
+   Status reads from a left rule and a small-caps tag: learned entries are
+   settled fact, available entries invite action, locked entries recede. */
+
+.deed-entry {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 6px;
+  padding: 12px 16px;
+  background: var(--bg-1);
+}
+.deed-entry-learned {
+  border-left-color: var(--accent-2);
+  background: rgba(216, 178, 92, 0.05);
+}
+.deed-entry-available { border-left-color: var(--good); }
+.deed-entry-locked { opacity: 0.6; }
+
+.deed-entry-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.deed-entry-kicker {
+  display: block;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.deed-entry-name { margin: 0; font-size: 1.05rem; }
+
+.deed-entry-status {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.deed-entry-status[data-status="learned"] { color: var(--accent-2); }
+.deed-entry-status[data-status="available"] { color: var(--good); }
+
+.deed-entry-desc { margin: 8px 0 0; color: var(--text-dim); }
+
+.deed-entry-effects {
+  margin: 8px 0 0;
+  padding-left: 1.2em;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.deed-entry-reqs {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.deed-entry-reqs code {
+  background: var(--bg-2);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.deed-entry-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+.deed-entry-cost {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.deed-entry-reason { margin: 6px 0 0; }
