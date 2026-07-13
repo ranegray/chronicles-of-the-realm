@@ -78,6 +78,12 @@ export interface PlaceFloor {
   extracts: PlaceExtract[];
   /** Room count the validator asserts (guards against authoring slips). */
   hunterBudget: { min: number; max: number };
+  /**
+   * The authored stair down to the next floor, if one exists on this floor
+   * (omitted on the bottom floor). Must exist among `rooms` and must not be
+   * the entrance — see validatePlace. "Descend" is only offered here.
+   */
+  descendRoomId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -156,6 +162,8 @@ export interface EncounterBeatResult {
 export interface ActiveEncounter {
   hunterId: string;
   enemyId: string;
+  /** Depth tier fed to buildEnemyInstance at contact (mirrors run.tier + floor - 1); fixed for the encounter's duration. */
+  enemyTier: number;
   enemyHp: number;
   enemyMaxHp: number;
   beat: number;             // 1-based
@@ -261,7 +269,11 @@ export type DelveRunEvent =
   | { kind: "itemsTaken"; roomId: string; items: ItemInstance[]; gold: number; materials: Record<string, number> }
   | { kind: "itemConsumed"; tag: string }
   | { kind: "flaskConsumed" }
-  | { kind: "alertnessLevel"; level: number };
+  | { kind: "alertnessLevel"; level: number }
+  /** A locked/jammed door gave way to lockwork. The closest existing quest
+   * hook to "got past a sealed obstacle" is the openChest event — there is
+   * no literal chest in the Delve, so the store maps this to it. */
+  | { kind: "doorUnlocked"; roomId: string };
 
 export interface DelveActionResult {
   state: DelveRunState;

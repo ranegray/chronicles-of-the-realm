@@ -118,14 +118,14 @@ function crankOrExtractChoices(state: DelveRunState): DelveChoice[] {
 }
 
 /**
- * Whether a next floor exists to descend to. There is no authored "this is
- * the stair" marker on PlaceRoom/PlaceFloor (see friction notes) — descend is
- * offered from any room on a floor once a next floor exists, matching
- * applyDelveAction's own permissiveness (it only checks the target floor
- * exists and the player is standing in the room named as `stairRoomId`).
+ * Whether the current room is this floor's authored stair down (issue #38:
+ * PlaceFloor.descendRoomId) and a next floor actually exists. "Descend" is
+ * only offered here — the bottom floor has no descendRoomId at all.
  */
-function hasNextFloor(state: DelveRunState): boolean {
+function canDescendHere(state: DelveRunState): boolean {
   const place = getPlace(state.placeId);
+  const floor = place.floors.find(f => f.floor === state.floor);
+  if (!floor?.descendRoomId || floor.descendRoomId !== state.currentRoomId) return false;
   return place.floors.some(f => f.floor === state.floor + 1);
 }
 
@@ -183,7 +183,7 @@ export function buildChoiceList(state: DelveRunState): DelveChoice[] {
 
   choices.push(...crankOrExtractChoices(state));
 
-  if (hasNextFloor(state)) {
+  if (canDescendHere(state)) {
     choices.push({ kind: "descend", stairRoomId: state.currentRoomId, label: "Descend" });
   }
 

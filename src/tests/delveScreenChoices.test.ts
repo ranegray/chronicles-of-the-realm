@@ -16,7 +16,7 @@ function freshRun(overrides: Partial<DelveRunState> = {}): DelveRunState {
 }
 
 describe("buildChoiceList", () => {
-  it("at the entrance, offers the single move exit, search, listen, refill lamp, extract, and descend", () => {
+  it("at the entrance, offers the single move exit, search, listen, refill lamp, and extract, but not descend", () => {
     const state = freshRun(); // starts at "gullet": one exit south, and the "way you came" extract
     const choices = buildChoiceList(state);
 
@@ -25,9 +25,20 @@ describe("buildChoiceList", () => {
     expect(choices).toContainEqual(expect.objectContaining({ kind: "listen" }));
     expect(choices).toContainEqual(expect.objectContaining({ kind: "refillLamp" }));
     expect(choices).toContainEqual(expect.objectContaining({ kind: "extract", extractId: "f1_barred_door" }));
-    expect(choices).toContainEqual(expect.objectContaining({ kind: "descend" }));
+    // Descend is only offered at the authored stair room (deep_gallery), not the entrance.
+    expect(choices.some(c => c.kind === "descend")).toBe(false);
     expect(choices.some(c => c.kind === "consultMap")).toBe(false);
     expect(choices.some(c => c.kind === "crank")).toBe(false);
+  });
+
+  it("offers descend only in the authored stair room", () => {
+    const atStair = freshRun({ currentRoomId: "deep_gallery" });
+    expect(buildChoiceList(atStair)).toContainEqual(
+      expect.objectContaining({ kind: "descend", stairRoomId: "deep_gallery" })
+    );
+
+    const elsewhere = freshRun({ currentRoomId: "under_chute" });
+    expect(buildChoiceList(elsewhere).some(c => c.kind === "descend")).toBe(false);
   });
 
   it("drops the search choice once the current room has been searched", () => {
@@ -70,6 +81,7 @@ describe("buildChoiceList", () => {
     const encounter: ActiveEncounter = {
       hunterId: "h1",
       enemyId: "goblin_skulker",
+      enemyTier: 1,
       enemyHp: 10,
       enemyMaxHp: 10,
       beat: 1,

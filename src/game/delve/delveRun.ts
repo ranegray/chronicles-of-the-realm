@@ -29,6 +29,7 @@ import type {
 } from "./types";
 import type { ItemInstance } from "../types";
 import { createRng, makeId, type Rng } from "../rng";
+import { instanceFromTemplateId } from "../inventory";
 import { getLightState, refillFromFlask, spendOil } from "./lamp";
 import {
   bfsPath,
@@ -64,6 +65,19 @@ const REINFORCEMENT_ALERTNESS_LEVEL = 3;
 
 /** How far "listen" reaches, vs. the passive 2-room hunter signals. */
 const LISTEN_DISTANCE = 3;
+
+/**
+ * Noise-to-alertness coupling (issue #38 balance follow-up): alertness gains
+ * loudness × this factor, rounded, rather than raw loudness 1:1. The barred
+ * door (closesAtAlertness 3 = Hunting, 65 pts) needs greedy play to actually
+ * cross Hunting before the oil budget ends the run — see
+ * docs/design/the-delve.md Pillar 3 and the risk/reward simulation in
+ * src/tests/delveRun.test.ts, which asserts the crossing rate directly.
+ * Deliberately in delve constants, not THREAT_RULES — the thresholds
+ * (Quiet/Stirring/.../Hunting) are shared with the old v0.4 flee-chance
+ * math, but how loud the Warrens are per noise event is a delve-only knob.
+ */
+const ALERTNESS_PER_LOUDNESS = 1.5;
 
 // ---------------------------------------------------------------------------
 // createDelveRun
@@ -154,6 +168,16 @@ function enemyPoolFor(biome: string, tier: number, floor: number): string[] {
   const anyBiome = ENEMIES.filter(e => e.biome === biome).map(e => e.id);
   if (anyBiome.length > 0) return anyBiome;
   throw new Error(`No bestiary entries for biome "${biome}"`);
+}
+
+/**
+ * The depth tier fed to buildEnemyInstance for encounters on the current
+ * floor — same formula enemyPoolFor uses to cap its bestiary pool, so floor 2
+ * fights scale up (issue #38 follow-up) instead of pinning to the run's
+ * base tier for every floor.
+ */
+function encounterTier(state: DelveRunState): number {
+  return Math.max(1, state.tier + state.floor - 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -328,7 +352,8 @@ function applySimTick(
 
   // Alertness only rises; points equal the loudness emitted this action.
   const emitted = noises.map(n => emitNoise(n));
-  const gained = emitted.reduce((sum, n) => sum + n.loudness, 0);
+  const rawLoudness = emitted.reduce((sum, n) => sum + n.loudness, 0);
+  const gained = Math.round(rawLoudness * ALERTNESS_PER_LOUDNESS);
   const previousLevel = getThreatLevelFromPoints(state.alertness);
   state.alertness += gained;
   const newLevel = getThreatLevelFromPoints(state.alertness);
@@ -412,6 +437,7 @@ function beginEncounter(ctx: Ctx, deps: DelveRunDeps, rng: Rng, hunterId: string
     cameFromRoomId: state.cameFromRoomId,
     alertnessLevel: getThreatLevelFromPoints(state.alertness),
     adjacentRoomIds: adjacency[state.currentRoomId] ?? [],
+    tier: encounterTier(state),
     rng: rng.forkChild(`open:${hunterId}`)
   });
   state.activeEncounter = encounter;
@@ -551,6 +577,7 @@ function doMove(ctx: Ctx, deps: DelveRunDeps, rng: Rng, direction: Direction): D
       say(ctx, "action", doorState === "locked"
         ? "The lock gives with a grind of cheap iron, louder than you'd like."
         : "You lever the door out of its frame. The wood screams about it.");
+      ctx.events.push({ kind: "doorUnlocked", roomId: state.currentRoomId });
       movePlayer(ctx, exit.to);
     } else {
       say(ctx, "action", doorState === "locked"
@@ -645,39 +672,11 @@ function doSearch(ctx: Ctx, deps: DelveRunDeps, rng: Rng): DelveActionResult {
 }
 
 function makeOilFlaskItem(rng: Rng): ItemInstance {
-  return {
-    instanceId: makeId(rng, "item"),
-    templateId: "delve_oil_flask",
-    name: "Oil Flask",
-    category: "consumable",
-    rarity: "common",
-    description: "A stoppered flask of lamp oil. A full refill.",
-    value: 10,
-    weight: 2,
-    stackable: true,
-    quantity: 1,
-    tags: ["oilFlask", "oil"],
-    affixes: [],
-    states: []
-  };
+  return instanceFromTemplateId("delve_oil_flask", rng, 1);
 }
 
 function makeRationsItem(rng: Rng): ItemInstance {
-  return {
-    instanceId: makeId(rng, "item"),
-    templateId: "consumable_trail_ration",
-    name: "Trail Ration",
-    category: "consumable",
-    rarity: "common",
-    description: "Hard bread, dried meat, a little salt.",
-    value: 2,
-    weight: 1,
-    stackable: true,
-    quantity: 1,
-    tags: ["food", "ration"],
-    affixes: [],
-    states: []
-  };
+  return instanceFromTemplateId("consumable_trail_ration", rng, 1);
 }
 
 // --- listen ------------------------------------------------------------
@@ -837,6 +836,14 @@ function doLeaveLoot(ctx: Ctx): DelveActionResult {
 
 // --- lamp --------------------------------------------------------------
 
+/**
+ * Deliberate Pillar 3 exception: refilling never calls applySimTick, so a
+ * dark-to-full refill costs no oil-track time and draws no hunter tick —
+ * see docs/design/the-delve.md's "Exceptions" note under Pillar 3. Refilling
+ * still isn't free: it burns a flask (pack weight spent in the village
+ * ritual), and it does nothing about the hunters already converging on
+ * whatever noise got you here.
+ */
 function doRefillLamp(ctx: Ctx): DelveActionResult {
   const state = ctx.state;
   if (state.lamp.flasksPacked <= 0) {
@@ -851,6 +858,11 @@ function doRefillLamp(ctx: Ctx): DelveActionResult {
 
 // --- map ---------------------------------------------------------------
 
+/**
+ * Also a Pillar 3 exception: consulting the map spends oil (via OIL_COSTS)
+ * but never calls applySimTick — no noise emitted, no hunter tick. Reading a
+ * map is silent; see docs/design/the-delve.md's "Exceptions" note.
+ */
 function doConsultMap(ctx: Ctx): DelveActionResult {
   const state = ctx.state;
   if (!state.hasMapItem) {
@@ -1094,6 +1106,15 @@ function doExtract(ctx: Ctx, extractId: string): DelveActionResult {
 
 function doDescend(ctx: Ctx, stairRoomId: string): DelveActionResult {
   const state = ctx.state;
+  const currentFloor = floorData(state.placeId, state.floor);
+  if (!currentFloor.descendRoomId) {
+    say(ctx, "system", "There is no way down from here.");
+    return finish(ctx);
+  }
+  if (stairRoomId !== currentFloor.descendRoomId) {
+    say(ctx, "system", "That is not the way down.");
+    return finish(ctx);
+  }
   if (stairRoomId !== state.currentRoomId) {
     say(ctx, "system", "The way down is not in this room.");
     return finish(ctx);

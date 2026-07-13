@@ -368,6 +368,11 @@ const FLOOR1_EDGES: EdgeSpec[] = [
 const FLOOR1: PlaceFloor = {
   floor: 1,
   entranceRoomId: "gullet",
+  // Deep Gallery: far side of the floor from the Gullet (through under_chute
+  // or the collapsing-squeeze/winch route), cold and wet where the upper
+  // warrens turn toward the flooded works below — the fictional edge of
+  // "upper" giving way to "deep."
+  descendRoomId: "deep_gallery",
   rooms: buildRooms(FLOOR1_ROOMS, FLOOR1_EDGES),
   extracts: [
     {

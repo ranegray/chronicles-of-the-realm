@@ -18,7 +18,8 @@ const ROLE_STOCK: Record<NpcRole, string[]> = {
     "consumable_small_draught",
     "consumable_strong_draught",
     "consumable_herbal_poultice",
-    "consumable_trail_ration"
+    "consumable_trail_ration",
+    "delve_oil_flask"
   ],
   enchanter: [
     "scroll_spark",
@@ -30,13 +31,15 @@ const ROLE_STOCK: Record<NpcRole, string[]> = {
     "consumable_trail_ration",
     "consumable_small_draught",
     "armor_hide_jerkin",
-    "weapon_hunting_bow"
+    "weapon_hunting_bow",
+    "delve_oil_flask"
   ],
   cartographer: [
     "trinket_cartographer_ink",
     "trinket_silk_picks",
     "trinket_snare_wire",
-    "consumable_trail_ration"
+    "consumable_trail_ration",
+    "trinket_warrens_map"
   ],
   elder: [
     "consumable_small_draught",

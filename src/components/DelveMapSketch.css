@@ -1,0 +1,39 @@
+/* The cartographer's sketch (issue #38) — parchment-toned, diegetic, no
+   minimap chrome. Reuses the --warm-bg/--warm-line/--accent tokens already
+   used for the delve's lamp/warm accents elsewhere. */
+.delve-map-sketch {
+  margin: 6px 0 4px;
+  padding: 10px 8px;
+  background: var(--warm-bg);
+  border: 1px solid var(--warm-line);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.delve-map-sketch-edge {
+  stroke: var(--warm-line);
+  stroke-width: 1.5;
+}
+
+.delve-map-sketch-node circle {
+  fill: var(--bg-1);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.delve-map-sketch-node-current circle {
+  fill: var(--accent);
+  stroke: var(--accent-2);
+}
+
+.delve-map-sketch-label,
+.delve-map-sketch-label-landmark {
+  fill: var(--text-dim);
+  font-family: ui-serif, "Iowan Old Style", "Apple Garamond", "Baskerville", serif;
+  font-size: 11px;
+}
+
+.delve-map-sketch-label-landmark {
+  fill: var(--text);
+  font-weight: 600;
+}

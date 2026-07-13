@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { DelveMapSketch } from "../components/DelveMapSketch";
 import { useGameStore } from "../store/gameStore";
 import { getLightState } from "../game/delve/lamp";
 import { getThreatLevelFromPoints } from "../game/threat";
@@ -8,6 +9,7 @@ import { THREAT_RULES } from "../game/constants";
 import { calculateInventoryWeight } from "../game/inventory";
 import { useStaggeredReveal } from "../components/useStaggeredReveal";
 import { buildChoiceList, groupNarrativeSegments, segmentRoomName, type DelveChoice } from "./delveChoices";
+import { buildMapSketch } from "./delveMapSketch";
 import type { DelveAction } from "../game/delve/types";
 import "./pacing.css";
 
@@ -61,6 +63,9 @@ export function DelveScreen() {
   }, [run?.status, run?.actionCount, resolveDelveRunEnd]);
 
   const choices = useMemo(() => (run ? buildChoiceList(run) : []), [run]);
+  // Rebuilt whenever the run mutates (visitedRoomIds only grows), not just on
+  // consultMap — the sketch always reflects everywhere you've been so far.
+  const mapSketch = useMemo(() => (run ? buildMapSketch(run) : undefined), [run]);
 
   if (!run || !player) return <div className="screen">No active delve.</div>;
 
@@ -133,18 +138,20 @@ export function DelveScreen() {
           ))}
 
           {currentEntries.map((entry, i) => (
-            <p
-              key={entry.id}
-              ref={i === 0 ? currentSceneRef : undefined}
-              className={[
-                "delve-entry",
-                `delve-entry-${entry.kind}`,
-                "delve-entry-in",
-                i < dimBefore ? "delve-entry-dim" : ""
-              ].filter(Boolean).join(" ")}
-            >
-              {entry.text}
-            </p>
+            <div key={entry.id}>
+              <p
+                ref={i === 0 ? currentSceneRef : undefined}
+                className={[
+                  "delve-entry",
+                  `delve-entry-${entry.kind}`,
+                  "delve-entry-in",
+                  i < dimBefore ? "delve-entry-dim" : ""
+                ].filter(Boolean).join(" ")}
+              >
+                {entry.text}
+              </p>
+              {entry.kind === "map" && mapSketch && <DelveMapSketch sketch={mapSketch} />}
+            </div>
           ))}
 
           {!isOver && !isRevealing && (

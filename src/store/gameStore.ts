@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   Character,
+  DungeonBiome,
   DungeonRun,
   GameSettings,
   GameState,
@@ -12,6 +13,7 @@ import type {
   ItemState,
   ItemStateId,
   Quest,
+  QuestEvent,
   RunSummary,
   ScreenId,
   VillageState
@@ -22,7 +24,7 @@ import {
   createEmptyDraft
 } from "../game/characterCreation";
 import { generateVillage } from "../game/npcGenerator";
-import { seedVillageQuests } from "../game/questGenerator";
+import { seedVillageQuests, applyQuestEventToList } from "../game/questGenerator";
 import { defaultGameState, loadGame, resetGame, saveGame } from "../game/save";
 import { addItem, calculateInventoryWeight, createEmptyInventory, instanceFromTemplateId, removeItem } from "../game/inventory";
 import { getConsumableHealFormula, rollConsumableHealAmount } from "../game/itemEffects";
@@ -341,7 +343,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       seed: String(Date.now()),
       flasksPacked: raidPack.items
         .filter(i => i.tags?.includes("oilFlask"))
-        .reduce((n, i) => n + i.quantity, 0)
+        .reduce((n, i) => n + i.quantity, 0),
+      hasMapItem: raidPack.items.some(i => i.tags?.includes("map"))
     });
     const next: GameState = {
       ...s,
@@ -377,6 +380,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let pack = raidPack;
     let xpGained = s.delveMeta?.xpGained ?? 0;
     let terminal: "extracted" | "died" | undefined;
+    const biome = s.delveRun.placeId as DungeonBiome;
+    const questEvents: QuestEvent[] = [];
 
     for (const event of result.events) {
       switch (event.kind) {
@@ -385,8 +390,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
           break;
         }
         case "itemsTaken": {
-          for (const item of event.items) pack = addItem(pack, item);
+          for (const item of event.items) {
+            pack = addItem(pack, item);
+            questEvents.push({ kind: "itemRetrieved", templateId: item.templateId, biome });
+          }
           if (event.gold > 0) pack = { ...pack, gold: pack.gold + event.gold };
+          for (const tag of Object.keys(event.materials)) {
+            questEvents.push({ kind: "materialCollected", tag, biome });
+          }
           break;
         }
         case "flaskConsumed": {
@@ -403,6 +414,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
             xpGained += def.xpReward;
             player = { ...player, xp: player.xp + def.xpReward };
           }
+          questEvents.push({ kind: "enemySlain", enemyId: event.enemyId, biome });
+          break;
+        }
+        case "doorUnlocked": {
+          questEvents.push({ kind: "chestOpened", biome });
           break;
         }
         case "extracted": terminal = "extracted"; break;
@@ -412,6 +428,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     const nextMeta = { ...(s.delveMeta ?? { startedAt: Date.now(), xpGained: 0 }), xpGained };
+    const village = questEvents.length > 0 && s.village
+      ? {
+          ...s.village,
+          quests: questEvents.reduce((quests, event) => applyQuestEventToList(quests, event), s.village.quests)
+        }
+      : s.village;
 
     // Terminal statuses (extracted/died) are NOT resolved into the v0.4
     // run-summary flow here — the screen stays up long enough to show a
@@ -427,6 +449,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const next: GameState = {
       ...s,
       player,
+      village,
       delveRun,
       delveRaidPack: pack,
       delveMeta: nextMeta
@@ -565,6 +588,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const stock = getMerchantStock(merchant.role, merchant.serviceLevel);
     const template = stock.find(item => item.id === templateId);
     if (!template) return;
+    if (template.tags?.includes("map") && ownsItemTagged(s, "map")) {
+      set({ lastVillageMessage: `You already carry ${template.name}. One is enough.` });
+      return;
+    }
     const price = getBuyPrice(template, merchant.serviceLevel);
     if (s.stash.gold < price) {
       set({ lastVillageMessage: `Need ${price} gold for ${template.name}.` });
@@ -888,6 +915,19 @@ const COMBAT_ACTION_BY_TALENT: Record<string, string> = {
   "devout-field-prayer": "field-prayer",
   "devout-smite-the-hollow": "smite-the-hollow"
 };
+
+/** Whether any item carried anywhere (stash, prepared pack, raid pack, equipped) has this tag. */
+function ownsItemTagged(state: GameState, tag: string): boolean {
+  const equipped = state.player
+    ? (Object.values(state.player.equipped).filter(Boolean) as ItemInstance[])
+    : [];
+  return [
+    ...state.stash.items,
+    ...state.preparedInventory.items,
+    ...(state.delveRaidPack?.items ?? []),
+    ...equipped
+  ].some(item => item.tags?.includes(tag));
+}
 
 function findItemInGameState(state: GameState, itemInstanceId: string): ItemInstance | undefined {
   const equipped = state.player

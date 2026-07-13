@@ -198,6 +198,19 @@ function normalizeDelveRun(value: unknown): GameState["delveRun"] {
   if (typeof value.currentRoomId !== "string") return undefined;
   if (value.status !== "active" && value.status !== "extracted" && value.status !== "dead") return undefined;
   if (!Array.isArray(value.narrative)) return undefined;
+  // Fail safe rather than crash on load: a schema-drifted or foreign
+  // hunters/lamp shape gets the whole run dropped, same as any other
+  // malformed fragment (see the block comment above) — PR #39 review.
+  if (!Array.isArray(value.hunters)) return undefined;
+  if (!value.hunters.every(isRecord)) return undefined;
+  if (!isRecord(value.lamp)) return undefined;
+  if (
+    typeof value.lamp.oil !== "number" ||
+    typeof value.lamp.capacity !== "number" ||
+    typeof value.lamp.flasksPacked !== "number"
+  ) {
+    return undefined;
+  }
   return value as unknown as GameState["delveRun"];
 }
 
