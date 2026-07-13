@@ -485,6 +485,17 @@ export function resolveOption(params: {
     }
 
     case "lure": {
+      // Options are computed at contact and can go stale mid-encounter; the
+      // lamp may have died since. In the dark there is no misdirection.
+      if (lightState === "dark") {
+        return degradeToFightWithFreeExchange({
+          encounter,
+          character,
+          rng,
+          roomId,
+          prose: ["Without light there is nothing to lead it toward. It comes on."]
+        });
+      }
       const chance = lureChance(agilityMod);
       if (rng.nextFloat() < chance) {
         const noise: NoiseEvent = { roomId, loudness: 2, cause: "other" };
