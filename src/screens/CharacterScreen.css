@@ -1,0 +1,64 @@
+/* Character screen — the chronicle's living entry on you. Same 70ch
+   narrative column as village/dungeon/creation; the record continues the
+   "first entry" written at character creation rather than a stat-admin page. */
+
+.character-screen-prose { padding: 14px 24px 20px; display: flex; flex-direction: column; gap: 0; }
+
+.chronicle-eyebrow {
+  display: block;
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.chronicle-name { margin: 0 0 8px; font-size: 2rem; }
+
+.chronicle-lede {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text);
+  margin: 0 0 14px;
+}
+
+.chronicle-hp-row { margin-bottom: 18px; }
+
+.chronicle-delve-note {
+  border: 1px solid var(--warm-line);
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+  background: var(--warm-bg);
+}
+.chronicle-delve-note-title {
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+.chronicle-delve-note-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.chronicle-delve-note-meta em {
+  font-style: normal;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  margin-right: 4px;
+}
+
+.chronicle-section { margin-top: 8px; margin-bottom: 28px; }
+.chronicle-section-heading {
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin: 0 0 12px;
+}
+.chronicle-section-note { margin: -6px 0 10px; }

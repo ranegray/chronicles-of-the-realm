@@ -1,5 +1,12 @@
 import { Button } from "./Button";
 import type { TalentNodeDefinition, TalentUnlockStatus } from "./v04UiTypes";
+import "./TalentNodeCard.css";
+
+const STATUS_LABELS: Record<TalentUnlockStatus, string> = {
+  learned: "Learned",
+  available: "Available",
+  locked: "Locked"
+};
 
 export interface TalentNodeCardProps {
   talent: TalentNodeDefinition;
@@ -11,22 +18,22 @@ export interface TalentNodeCardProps {
 
 export function TalentNodeCard({ talent, status, canLearn, reason, onLearn }: TalentNodeCardProps) {
   return (
-    <article className={`talent-node-card talent-node-${status}`}>
-      <header className="talent-node-header">
+    <article className={`deed-entry deed-entry-${status}`}>
+      <header className="deed-entry-header">
         <div>
-          <span className="talent-node-kicker">Tier {talent.tier} · {talent.type}</span>
-          <h3>{talent.name}</h3>
+          <span className="deed-entry-kicker">Tier {talent.tier} · {talent.type}</span>
+          <h3 className="deed-entry-name">{talent.name}</h3>
         </div>
-        <span className="talent-node-cost">{talent.cost} TP</span>
+        <span className="deed-entry-status" data-status={status}>{STATUS_LABELS[status]}</span>
       </header>
-      <p>{talent.description}</p>
-      <ul className="talent-node-effects">
+      <p className="deed-entry-desc">{talent.description}</p>
+      <ul className="deed-entry-effects">
         {talent.effects.map((effect, index) => (
           <li key={`${talent.id}-effect-${index}`}>{effect.description}</li>
         ))}
       </ul>
       {(talent.requirements?.length ?? 0) > 0 && (
-        <div className="talent-node-reqs">
+        <div className="deed-entry-reqs">
           <span>Requires</span>
           {talent.requirements!.map((requirement, index) => (
             <code key={`${talent.id}-req-${index}`}>
@@ -35,8 +42,8 @@ export function TalentNodeCard({ talent, status, canLearn, reason, onLearn }: Ta
           ))}
         </div>
       )}
-      <footer className="talent-node-footer">
-        <span className={`talent-status talent-status-${status}`}>{status}</span>
+      <footer className="deed-entry-footer">
+        <span className="deed-entry-cost">{talent.cost} TP</span>
         {status === "learned" ? (
           <span className="muted small">Known</span>
         ) : (
@@ -45,7 +52,7 @@ export function TalentNodeCard({ talent, status, canLearn, reason, onLearn }: Ta
           </Button>
         )}
       </footer>
-      {!canLearn && status !== "learned" && reason && <p className="muted small">{reason}</p>}
+      {!canLearn && status !== "learned" && reason && <p className="muted small deed-entry-reason">{reason}</p>}
     </article>
   );
 }

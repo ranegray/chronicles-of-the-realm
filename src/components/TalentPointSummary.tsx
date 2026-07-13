@@ -1,5 +1,6 @@
 import type { Character } from "../game/types";
 import type { CharacterWithProgression } from "./v04UiTypes";
+import "./TalentPointSummary.css";
 
 interface TalentPointSummaryProps {
   character: Character;
@@ -12,7 +13,7 @@ export function TalentPointSummary({ character }: TalentPointSummaryProps) {
   const active = progression?.activeCombatActionIds.length ?? 0;
 
   return (
-    <div className="talent-point-summary">
+    <div className="deed-tally">
       <SummaryCell label="Unspent" value={unspent} tone={unspent > 0 ? "good" : "muted"} />
       <SummaryCell label="Spent" value={spent} />
       <SummaryCell label="Actions" value={`${active}/3`} />
@@ -22,7 +23,7 @@ export function TalentPointSummary({ character }: TalentPointSummaryProps) {
 
 function SummaryCell({ label, value, tone }: { label: string; value: number | string; tone?: "good" | "muted" }) {
   return (
-    <div className="talent-point-cell">
+    <div className="deed-tally-cell">
       <span>{label}</span>
       <strong className={tone}>{value}</strong>
     </div>

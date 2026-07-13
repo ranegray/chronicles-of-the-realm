@@ -1,0 +1,22 @@
+/* Talent point summary — quiet inline tally, small caps over tabular numerals. */
+
+.deed-tally { display: flex; gap: 16px; }
+
+.deed-tally-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+.deed-tally-cell span {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.deed-tally-cell strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.deed-tally-cell strong.good { color: var(--good); }
+.deed-tally-cell strong.muted { color: var(--text-muted); }

@@ -1,9 +1,9 @@
 import { Button } from "../components/Button";
-import { Card } from "../components/Card";
 import { TalentPointSummary } from "../components/TalentPointSummary";
 import { TalentTreePanel } from "../components/TalentTreePanel";
 import type { Character, VillageState } from "../game/types";
 import { getTalentTreeForClass } from "../game/talents";
+import "./TalentScreen.css";
 
 interface TalentScreenProps {
   character: Character;
@@ -16,26 +16,24 @@ interface TalentScreenProps {
 export function TalentScreen({ character, village, onLearnTalent, onRefundTalents, onClose }: TalentScreenProps) {
   const tree = getTalentTreeForClass(character.classId);
   return (
-    <div className="talent-screen">
-      <header className="talent-screen-header">
+    <div className="learned-deeds">
+      <header className="learned-deeds-header">
         <div>
-          <span className="muted small">{formatLabel(character.classId)} progression</span>
-          <h1>Talents</h1>
+          <span className="muted small">{formatLabel(character.classId)} · {tree.name}</span>
+          <p className="learned-deeds-desc">{tree.description}</p>
         </div>
-        <div className="talent-screen-actions">
+        <div className="learned-deeds-actions">
           <TalentPointSummary character={character} />
-          <Button variant="ghost" onClick={onRefundTalents}>Refund</Button>
+          <Button variant="ghost" onClick={onRefundTalents}>Unlearn All</Button>
           {onClose && <Button variant="secondary" onClick={onClose}>Back</Button>}
         </div>
       </header>
-      <Card title={tree.name} subtitle="Small class tree for v0.4 build identity">
-        <TalentTreePanel
-          character={character}
-          tree={tree}
-          village={village}
-          onLearnTalent={onLearnTalent}
-        />
-      </Card>
+      <TalentTreePanel
+        character={character}
+        tree={tree}
+        village={village}
+        onLearnTalent={onLearnTalent}
+      />
     </div>
   );
 }
