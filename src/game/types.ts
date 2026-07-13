@@ -689,6 +689,8 @@ export interface DungeonRun {
     turnsRemaining: number;
   };
   appliedRunPreparations?: PreparedRunModifier[];
+  keepsakeInstanceId?: string;
+  insuredInstanceId?: string;
 }
 
 export type NpcRole =
@@ -1027,6 +1029,8 @@ export interface GameState {
   lastRunSummary?: RunSummary;
   settings: GameSettings;
   pendingRunPreparations?: PreparedRunModifier[];
+  pendingKeepsakeInstanceId?: string;
+  pendingInsuredInstanceId?: string;
 }
 
 export type RunEndReason =
@@ -1073,6 +1077,9 @@ export interface RunSummary {
   questsCompleted: Quest[];
   questRewards: ItemInstance[];
   unlocksApplied: string[];
+  questItemsSaved: ItemInstance[];
+  keepsakeSaved?: ItemInstance;
+  insuranceReturned?: ItemInstance;
 }
 
 export type ScreenId =

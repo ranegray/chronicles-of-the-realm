@@ -6,10 +6,10 @@ import { ItemComparePanel } from "../components/ItemComparePanel";
 import { ItemTooltip } from "../components/ItemTooltip";
 import { LoadoutBuilder } from "../components/LoadoutBuilder";
 import { MaterialInventory } from "../components/MaterialInventory";
-import { RunPreparationPanel } from "../components/RunPreparationPanel";
+import { InsurancePanel, KeepsakePanel, RunPreparationPanel } from "../components/RunPreparationPanel";
 import { calculateInventoryWeight } from "../game/inventory";
 import { getConsumableHealFormula } from "../game/itemEffects";
-import { getAvailableRunPreparationOptions } from "../game/runPreparation";
+import { getAvailableRunPreparationOptions, getInsuranceCost, getKeepsakeCandidates } from "../game/runPreparation";
 import type { EquipmentSlots, Inventory, ItemInstance } from "../game/types";
 import { useGameStore } from "../store/gameStore";
 import type { EquipmentChangePreview, EquipmentSlotName } from "../components/v04UiTypes";
@@ -31,6 +31,10 @@ export function StashScreen() {
   const dropRaidItem = useGameStore(s => s.dropRaidItem);
   const useCombatItem = useGameStore(s => s.useCombatInventoryItem);
   const purchasePreparation = useGameStore(s => s.purchaseRunPreparation);
+  const setKeepsake = useGameStore(s => s.setKeepsake);
+  const clearKeepsake = useGameStore(s => s.clearKeepsake);
+  const purchaseInsurance = useGameStore(s => s.purchaseInsurance);
+  const cancelInsurance = useGameStore(s => s.cancelInsurance);
   const genericEquip = useGameStore(s => s.equipItem);
   const genericUnequip = useGameStore(s => s.unequipItem);
   const previewEquipmentChange = useGameStore(s => s.previewEquipmentChange);
@@ -151,6 +155,26 @@ export function StashScreen() {
                 selectedPreparations={state.pendingRunPreparations ?? []}
                 npcs={state.village?.npcs ?? []}
                 onPurchase={(optionId, npcId) => purchasePreparation(npcId, optionId)}
+              />
+            </Card>
+
+            <Card title="Keepsake" subtitle="Survives even if you die below">
+              <KeepsakePanel
+                candidates={getKeepsakeCandidates(state)}
+                selectedInstanceId={state.pendingKeepsakeInstanceId}
+                onSelect={setKeepsake}
+                onClear={clearKeepsake}
+              />
+            </Card>
+
+            <Card title="Insurance" subtitle="Returns one equipped piece to the stash if you die">
+              <InsurancePanel
+                candidates={player ? (Object.values(player.equipped).filter(Boolean) as ItemInstance[]) : []}
+                selectedInstanceId={state.pendingInsuredInstanceId}
+                getCost={getInsuranceCost}
+                gold={stash.gold}
+                onInsure={purchaseInsurance}
+                onCancel={cancelInsurance}
               />
             </Card>
           </>

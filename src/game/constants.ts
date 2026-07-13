@@ -391,6 +391,8 @@ export const SERVICE_ACTION_RULES = {
   }
 } as const;
 
+export const INSURANCE_RATE = 0.3;
+
 export const RUN_PREPARATION_RULES = {
   maxPreparedModifiers: 3,
   maxByServiceRole: {

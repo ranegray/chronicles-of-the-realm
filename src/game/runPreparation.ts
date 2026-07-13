@@ -1,6 +1,6 @@
 import { RUN_PREPARATION_OPTIONS, getRunPreparationOption } from "../data/runPreparationOptions";
-import { RUN_PREPARATION_RULES } from "./constants";
-import type { Character, DungeonRun, GameState, PreparedRunModifier, RunPreparationOption } from "./types";
+import { INSURANCE_RATE, RUN_PREPARATION_RULES } from "./constants";
+import type { Character, DungeonRun, GameState, ItemInstance, PreparedRunModifier, RunPreparationOption } from "./types";
 import type { Rng } from "./rng";
 import { createRng, makeId } from "./rng";
 import { addItem, instanceFromTemplateId } from "./inventory";
@@ -175,4 +175,112 @@ export function consumeRunPreparations(params: {
     ...params.gameState,
     pendingRunPreparations: (params.gameState.pendingRunPreparations ?? []).filter(prep => !prep.consumed)
   };
+}
+
+// --- Insurance ---
+// A village service: insure one equipped gear piece per run for gold
+// (priced at a fraction of the item's value). If the character dies, the
+// insured piece is unequipped and returned to the stash instead of being
+// lost with the rest of the raid.
+
+export function getInsuranceCost(item: ItemInstance): number {
+  return Math.max(1, Math.ceil(item.value * INSURANCE_RATE));
+}
+
+function findEquippedItem(character: Character, itemInstanceId: string): ItemInstance | undefined {
+  return Object.values(character.equipped).find(
+    (item): item is ItemInstance => Boolean(item) && item!.instanceId === itemInstanceId
+  );
+}
+
+export function canPurchaseInsurance(params: {
+  gameState: GameState;
+  itemInstanceId: string;
+}): { canPurchase: boolean; reason?: string; cost?: number } {
+  if (params.gameState.activeRun) return { canPurchase: false, reason: "Insure gear before the next delve." };
+  const character = params.gameState.player;
+  if (!character) return { canPurchase: false, reason: "No active character." };
+  const item = findEquippedItem(character, params.itemInstanceId);
+  if (!item) return { canPurchase: false, reason: "That item isn't equipped." };
+  if (params.gameState.pendingInsuredInstanceId) {
+    return { canPurchase: false, reason: "Only one piece can be insured per run." };
+  }
+  const cost = getInsuranceCost(item);
+  if (params.gameState.stash.gold < cost) {
+    return { canPurchase: false, reason: "Not enough gold.", cost };
+  }
+  return { canPurchase: true, cost };
+}
+
+export function purchaseInsurance(params: {
+  gameState: GameState;
+  itemInstanceId: string;
+}): { gameState: GameState; success: boolean; message: string } {
+  const gate = canPurchaseInsurance(params);
+  if (!gate.canPurchase || gate.cost === undefined) {
+    return { gameState: params.gameState, success: false, message: gate.reason ?? "Cannot insure that item." };
+  }
+  const item = findEquippedItem(params.gameState.player!, params.itemInstanceId)!;
+  return {
+    gameState: {
+      ...params.gameState,
+      stash: { ...params.gameState.stash, gold: params.gameState.stash.gold - gate.cost },
+      pendingInsuredInstanceId: params.itemInstanceId
+    },
+    success: true,
+    message: `${item.name} insured for ${gate.cost}g. It returns to the stash if you die.`
+  };
+}
+
+export function cancelInsurance(gameState: GameState): GameState {
+  return { ...gameState, pendingInsuredInstanceId: undefined };
+}
+
+// --- Keepsake ---
+// Exactly one weightless item packed for the next raid may be designated
+// as a keepsake. It survives death even though the rest of the raid pack
+// is lost.
+
+function isKeepsakeEligible(item: ItemInstance): boolean {
+  // "Exactly one item" — a stack of several weightless items (e.g. gems)
+  // would let the whole stack ride out death, so only single, non-stacked
+  // items qualify.
+  return item.weight === 0 && item.quantity === 1;
+}
+
+export function getKeepsakeCandidates(gameState: GameState): ItemInstance[] {
+  return gameState.preparedInventory.items.filter(isKeepsakeEligible);
+}
+
+export function canDesignateKeepsake(params: {
+  gameState: GameState;
+  itemInstanceId: string;
+}): { canDesignate: boolean; reason?: string } {
+  if (params.gameState.activeRun) return { canDesignate: false, reason: "Choose a keepsake before the next delve." };
+  const item = params.gameState.preparedInventory.items.find(entry => entry.instanceId === params.itemInstanceId);
+  if (!item) return { canDesignate: false, reason: "Pack the item for the next raid first." };
+  if (!isKeepsakeEligible(item)) {
+    return { canDesignate: false, reason: "Only a single weightless item can be a keepsake." };
+  }
+  return { canDesignate: true };
+}
+
+export function setKeepsake(params: {
+  gameState: GameState;
+  itemInstanceId: string;
+}): { gameState: GameState; success: boolean; message: string } {
+  const gate = canDesignateKeepsake(params);
+  if (!gate.canDesignate) {
+    return { gameState: params.gameState, success: false, message: gate.reason ?? "Cannot set that keepsake." };
+  }
+  const item = params.gameState.preparedInventory.items.find(entry => entry.instanceId === params.itemInstanceId)!;
+  return {
+    gameState: { ...params.gameState, pendingKeepsakeInstanceId: params.itemInstanceId },
+    success: true,
+    message: `${item.name} set as your keepsake. It survives even if you die.`
+  };
+}
+
+export function clearKeepsake(gameState: GameState): GameState {
+  return { ...gameState, pendingKeepsakeInstanceId: undefined };
 }

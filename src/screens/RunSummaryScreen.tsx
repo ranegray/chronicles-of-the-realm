@@ -85,6 +85,31 @@ export function RunSummaryScreen() {
         />
       </Card>
 
+      {(summary.reason === "dead" || summary.reason === "abandoned") &&
+        (summary.questItemsSaved.length > 0 || summary.keepsakeSaved || summary.insuranceReturned) && (
+        <Card title="What Survived">
+          {summary.questItemsSaved.length > 0 && (
+            <>
+              <h4 className="good">Quest Items</h4>
+              <ItemList items={summary.questItemsSaved} empty="No quest items were carried." />
+            </>
+          )}
+          {summary.keepsakeSaved && (
+            <>
+              <h4 className="good">Keepsake</h4>
+              <ItemList items={[summary.keepsakeSaved]} empty="No keepsake was set." />
+            </>
+          )}
+          {summary.insuranceReturned && (
+            <>
+              <h4 className="good">Insurance</h4>
+              <p className="muted small">Returned to the stash rather than kept equipped.</p>
+              <ItemList items={[summary.insuranceReturned]} empty="No gear was insured." />
+            </>
+          )}
+        </Card>
+      )}
+
       {(protectedItems.length > 0 || brokenItems.length > 0) && (
         <Card title="Item Fate">
           {protectedItems.length > 0 && (
