@@ -1,0 +1,26 @@
+.audio-control {
+  position: fixed;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  z-index: 40;
+  background: rgba(20, 18, 24, 0.55);
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.audio-control:hover,
+.audio-control:focus-visible {
+  opacity: 1;
+  background: rgba(20, 18, 24, 0.8);
+}
+
+.audio-control[data-muted="true"] {
+  opacity: 0.4;
+}
