@@ -13,7 +13,7 @@ export function DelveMapSketch({ sketch }: { sketch: MapSketch }) {
   const rowHeight = 56;
   const padding = 28;
   const width = Math.max(1, sketch.columns) * colWidth + padding * 2;
-  const height = (sketch.maxRows + 1) * rowHeight + padding * 2;
+  const height = Math.max(1, sketch.maxRows) * rowHeight + padding * 2;
 
   const posOf = (col: number, row: number) => ({
     x: padding + col * colWidth,

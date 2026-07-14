@@ -2,7 +2,6 @@ import type {
   AncestryDefinition,
   Character,
   ClassDefinition,
-  DungeonRun,
   EquipmentChangePreview,
   EquipmentSlots,
   EquipmentSlotName,
@@ -68,32 +67,6 @@ export function equipItem(params: {
       ...params.character.equipped,
       [params.slot]: params.item
     }
-  };
-}
-
-export function unequipItem(params: {
-  character: Character;
-  slot: EquipmentSlotName;
-  activeRun?: DungeonRun;
-}): {
-  character: Character;
-  success: boolean;
-  reason?: string;
-} {
-  const item = params.character.equipped[params.slot];
-  if (!item) return { character: params.character, success: false, reason: "No item is equipped there." };
-  if (params.activeRun && hasItemState(item, "cursed")) {
-    return { character: params.character, success: false, reason: `${item.name} is cursed and cannot be removed during a delve.` };
-  }
-
-  const equipped: EquipmentSlots = { ...params.character.equipped };
-  delete equipped[params.slot];
-  return {
-    character: {
-      ...params.character,
-      equipped
-    },
-    success: true
   };
 }
 

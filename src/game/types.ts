@@ -1537,26 +1537,3 @@ export interface SearchResult {
   revealedEventId?: string;
 }
 
-// ---------------------------------------------------------------------------
-// v0.2: Dungeon log
-// ---------------------------------------------------------------------------
-
-export type DungeonLogEntryType =
-  | "info"
-  | "warning"
-  | "danger"
-  | "loot"
-  | "combat"
-  | "threat"
-  | "extraction"
-  | "event"
-  | "trap"
-  | "quest";
-
-export interface DungeonLogEntry {
-  id: string;
-  timestamp: number;
-  type: DungeonLogEntryType;
-  message: string;
-  roomId?: string;
-}

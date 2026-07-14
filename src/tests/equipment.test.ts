@@ -6,12 +6,11 @@ import {
   equipItem,
   getPreferredEquipmentSlot,
   getValidEquipmentSlotsForItem,
-  previewEquipmentChange,
-  unequipItem
+  previewEquipmentChange
 } from "../game/equipment";
 import { instanceFromTemplateId } from "../game/inventory";
 import { createRng } from "../game/rng";
-import type { Character, CharacterProgressionState, DungeonRun, ItemInstance, ItemState } from "../game/types";
+import type { Character, CharacterProgressionState, ItemInstance, ItemState } from "../game/types";
 
 describe("equipment", () => {
   it("validates item categories against equipment slots", () => {
@@ -35,33 +34,13 @@ describe("equipment", () => {
     expect(getPreferredEquipmentSlot(trinketB, { trinket1: trinketA })).toBe("trinket2");
   });
 
-  it("equips and unequips items without mutating the original character", () => {
+  it("equips items without mutating the original character", () => {
     const character = makeCharacter();
     const weapon = instanceFromTemplateId("weapon_short_sword", createRng("equip"));
     const equipped = equipItem({ character, item: weapon, slot: "weapon" });
 
     expect(equipped.equipped.weapon?.instanceId).toBe(weapon.instanceId);
     expect(character.equipped.weapon).toBeUndefined();
-
-    const unequipped = unequipItem({ character: equipped, slot: "weapon" });
-    expect(unequipped.success).toBe(true);
-    expect(unequipped.character.equipped.weapon).toBeUndefined();
-  });
-
-  it("blocks cursed equipment removal during active runs", () => {
-    const cursedArmor = withStates(instanceFromTemplateId("armor_padded_coat", createRng("cursed-armor")), [
-      { id: "cursed" }
-    ]);
-    const character = { ...makeCharacter(), equipped: { armor: cursedArmor } };
-    const result = unequipItem({
-      character,
-      slot: "armor",
-      activeRun: { runId: "run" } as DungeonRun
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.reason).toContain("cursed");
-    expect(result.character.equipped.armor).toBeDefined();
   });
 
   it("previews stat differences and warnings for a risky equipment swap", () => {
