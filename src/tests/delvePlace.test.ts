@@ -10,6 +10,7 @@ function room(partial: Partial<PlaceRoom> & { id: string }): PlaceRoom {
     name: partial.name ?? partial.id,
     prose: partial.prose ?? ["A room."],
     landmark: partial.landmark,
+    junction: partial.junction,
     exits: partial.exits ?? [],
     lootTableId: partial.lootTableId,
     hunterSpawn: partial.hunterSpawn,
@@ -131,6 +132,97 @@ describe("validatePlace", () => {
     const place = makePlace([baseFloor(rooms, { extracts: [] })]);
     expect(() => validatePlace(place)).toThrow(/has no extracts/);
   });
+
+  // ---------------------------------------------------------------------
+  // Exit-count budget & junctions (issue #38: fewer exits per room)
+  // ---------------------------------------------------------------------
+  function hubAndLeaves(hubOverrides: Partial<PlaceRoom> = {}): PlaceRoom[] {
+    return [
+      room({
+        id: "hub",
+        hunterSpawn: true,
+        exits: [
+          { direction: "north", to: "b" },
+          { direction: "east", to: "c" },
+          { direction: "south", to: "d" },
+          { direction: "west", to: "e" }
+        ],
+        ...hubOverrides
+      }),
+      room({ id: "b", exits: [{ direction: "south", to: "hub" }] }),
+      room({ id: "c", exits: [{ direction: "west", to: "hub" }] }),
+      room({ id: "d", exits: [{ direction: "north", to: "hub" }] }),
+      room({ id: "e", exits: [{ direction: "east", to: "hub" }] })
+    ];
+  }
+
+  it("throws when a non-junction room has more than 3 exits", () => {
+    const place = makePlace([
+      baseFloor(hubAndLeaves(), { extracts: [{ id: "ex1", roomId: "e", label: "Out", condition: "alwaysOpen" }] })
+    ]);
+    expect(() => validatePlace(place)).toThrow(/"hub" has 4 exits, max 3/);
+  });
+
+  it("throws when a junction room is not also a landmark", () => {
+    const place = makePlace([
+      baseFloor(hubAndLeaves({ junction: true }), {
+        extracts: [{ id: "ex1", roomId: "e", label: "Out", condition: "alwaysOpen" }]
+      })
+    ]);
+    expect(() => validatePlace(place)).toThrow(/"hub" is a junction but not a landmark/);
+  });
+
+  it("allows a junction+landmark room up to 4 exits", () => {
+    const place = makePlace([
+      baseFloor(hubAndLeaves({ junction: true, landmark: true }), {
+        extracts: [{ id: "ex1", roomId: "e", label: "Out", condition: "alwaysOpen" }]
+      })
+    ]);
+    expect(() => validatePlace(place)).not.toThrow();
+  });
+
+  it("throws when even a junction room exceeds 4 exits", () => {
+    const rooms = hubAndLeaves({ junction: true, landmark: true });
+    const hub = rooms[0]!;
+    rooms[0] = { ...hub, exits: [...hub.exits, { direction: "up", to: "f" }] };
+    rooms.push(room({ id: "f", exits: [{ direction: "down", to: "hub" }] }));
+    const place = makePlace([
+      baseFloor(rooms, { extracts: [{ id: "ex1", roomId: "e", label: "Out", condition: "alwaysOpen" }] })
+    ]);
+    expect(() => validatePlace(place)).toThrow(/"hub" has 5 exits, max 4/);
+  });
+
+  it("throws when a floor has more than 2 junction rooms", () => {
+    const rooms = [
+      room({ id: "a", landmark: true, junction: true, hunterSpawn: true, exits: [{ direction: "north", to: "b" }] }),
+      room({ id: "b", landmark: true, junction: true, exits: [{ direction: "south", to: "a" }, { direction: "north", to: "c" }] }),
+      room({ id: "c", landmark: true, junction: true, exits: [{ direction: "south", to: "b" }] })
+    ];
+    const place = makePlace([
+      baseFloor(rooms, { extracts: [{ id: "ex1", roomId: "c", label: "Out", condition: "alwaysOpen" }] })
+    ]);
+    expect(() => validatePlace(place)).toThrow(/has 3 junction rooms, max 2/);
+  });
+
+  it("goblinWarrens has exactly 2 junction rooms per floor, each a landmark with at most 4 exits", () => {
+    for (const floor of GOBLIN_WARRENS.floors) {
+      const junctions = floor.rooms.filter(r => r.junction);
+      expect(junctions.length).toBe(2);
+      for (const j of junctions) {
+        expect(j.landmark).toBe(true);
+        expect(j.exits.length).toBeLessThanOrEqual(4);
+      }
+    }
+  });
+
+  it("goblinWarrens has no more than 3 exits on any non-junction room", () => {
+    for (const floor of GOBLIN_WARRENS.floors) {
+      for (const room of floor.rooms) {
+        if (room.junction) continue;
+        expect(room.exits.length).toBeLessThanOrEqual(3);
+      }
+    }
+  });
 });
 
 describe("buildAdjacency", () => {
@@ -166,8 +258,10 @@ describe("goblinWarrens place", () => {
     }
     const floor1 = GOBLIN_WARRENS.floors[0]!;
     const extractLabels = floor1.extracts.map(e => e.label).sort();
-    expect(extractLabels).toEqual(["The flooded stair", "The rope winch", "The way you came"].sort());
-    const barredDoor = floor1.extracts.find(e => e.label === "The way you came")!;
+    expect(extractLabels).toEqual(
+      ["The flooded stair", "The rope winch", "The Gullet — the way you came in"].sort()
+    );
+    const barredDoor = floor1.extracts.find(e => e.label === "The Gullet — the way you came in")!;
     expect(barredDoor.condition).toBe("closesAtAlertness");
     expect(barredDoor.alertnessLevel).toBe(3);
     expect(barredDoor.roomId).toBe(floor1.entranceRoomId);

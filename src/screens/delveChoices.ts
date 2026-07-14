@@ -11,6 +11,7 @@
 //   3. Otherwise: exits as prose lines, plus contextual actions.
 import { getPlace } from "../game/delve/place";
 import type {
+  DelveNarrativeEntry,
   DelveRunState,
   Direction,
   EncounterOptionKind,
@@ -47,13 +48,16 @@ const SENSE_TEXT: Record<SenseTag, string> = {
   narrowSqueeze: "a narrow squeeze"
 };
 
+// Matches the vertical vocabulary the engine's own sense/hunter-signal
+// prose uses (delveRun.ts's DIRECTION_PHRASE) so an annotated exit reads
+// naturally, e.g. "Below — back the way you came" rather than "Down — ...".
 const DIRECTION_LABELS: Record<Direction, string> = {
   north: "North",
   east: "East",
   south: "South",
   west: "West",
-  up: "Up",
-  down: "Down"
+  up: "Above",
+  down: "Below"
 };
 
 const FIGHT_STANCE_LABELS: Record<FightStance, string> = {
@@ -62,10 +66,23 @@ const FIGHT_STANCE_LABELS: Record<FightStance, string> = {
   breakAway: "Break away"
 };
 
+/**
+ * Memory annotation for an exit, derived from run state at render time (not
+ * baked into the engine's narrative sense lines — those describe the world,
+ * this describes what the player remembers of it). `undefined` means the
+ * exit is unvisited and should keep its plain sense text.
+ */
+export function exitMemoryAnnotation(state: DelveRunState, exit: PlaceExit): string | undefined {
+  if (state.cameFromRoomId && exit.to === state.cameFromRoomId) return "back the way you came";
+  if (state.visitedRoomIds.includes(exit.to)) return "you've walked this way before";
+  return undefined;
+}
+
 function exitButtonLabel(state: DelveRunState, roomId: string, exit: PlaceExit): string {
+  const annotation = exitMemoryAnnotation(state, exit);
   const senses = (exit.senses ?? []).map(s => SENSE_TEXT[s]).join(", ");
   const doorState = state.doorOverrides[`${roomId}:${exit.direction}`];
-  let label = `${DIRECTION_LABELS[exit.direction]} — ${senses || "a way on"}`;
+  let label = `${DIRECTION_LABELS[exit.direction]} — ${annotation ?? (senses || "a way on")}`;
   if (doorState === "locked") label += " (locked)";
   else if (doorState === "jammed") label += " (jammed)";
   else if (doorState === "shut") label += " (shut)";
@@ -101,14 +118,14 @@ function crankOrExtractChoices(state: DelveRunState): DelveChoice[] {
 }
 
 /**
- * Whether a next floor exists to descend to. There is no authored "this is
- * the stair" marker on PlaceRoom/PlaceFloor (see friction notes) — descend is
- * offered from any room on a floor once a next floor exists, matching
- * applyDelveAction's own permissiveness (it only checks the target floor
- * exists and the player is standing in the room named as `stairRoomId`).
+ * Whether the current room is this floor's authored stair down (issue #38:
+ * PlaceFloor.descendRoomId) and a next floor actually exists. "Descend" is
+ * only offered here — the bottom floor has no descendRoomId at all.
  */
-function hasNextFloor(state: DelveRunState): boolean {
+function canDescendHere(state: DelveRunState): boolean {
   const place = getPlace(state.placeId);
+  const floor = place.floors.find(f => f.floor === state.floor);
+  if (!floor?.descendRoomId || floor.descendRoomId !== state.currentRoomId) return false;
   return place.floors.some(f => f.floor === state.floor + 1);
 }
 
@@ -166,9 +183,52 @@ export function buildChoiceList(state: DelveRunState): DelveChoice[] {
 
   choices.push(...crankOrExtractChoices(state));
 
-  if (hasNextFloor(state)) {
+  if (canDescendHere(state)) {
     choices.push({ kind: "descend", stairRoomId: state.currentRoomId, label: "Descend" });
   }
 
   return choices;
+}
+
+// ---------------------------------------------------------------------------
+// Scene segmentation (issue #38: the column reads as the current scene, not
+// an accumulating log)
+// ---------------------------------------------------------------------------
+
+export interface NarrativeSegment {
+  /** id of the leading "room" entry — stable React key for this segment. */
+  id: string;
+  entries: DelveNarrativeEntry[];
+}
+
+/**
+ * Splits a flat narrative log into per-room-visit segments. A new segment
+ * starts at every `kind: "room"` entry (createDelveRun's initial entrance
+ * line, every move that arrives somewhere, and descend all emit one), so a
+ * segment is exactly "everything that happened during this stay in this
+ * room." Pure and order-preserving; does not mutate or drop any entry.
+ */
+export function groupNarrativeSegments(entries: DelveNarrativeEntry[]): NarrativeSegment[] {
+  const segments: NarrativeSegment[] = [];
+  for (const entry of entries) {
+    if (entry.kind === "room" || segments.length === 0) {
+      segments.push({ id: entry.id, entries: [entry] });
+    } else {
+      segments[segments.length - 1]!.entries.push(entry);
+    }
+  }
+  return segments;
+}
+
+/**
+ * The bare room-name portion of a `kind: "room"` entry's text, for the
+ * collapsed-segment heading. `appendRoomProse` (delveRun.ts) always writes
+ * one of two shapes: "Name. Prose..." on a first visit, or "Name, again."
+ * on a revisit — strip whichever tail is present.
+ */
+export function segmentRoomName(roomEntryText: string): string {
+  const againIdx = roomEntryText.indexOf(", again.");
+  if (againIdx !== -1) return roomEntryText.slice(0, againIdx);
+  const dotIdx = roomEntryText.indexOf(". ");
+  return dotIdx !== -1 ? roomEntryText.slice(0, dotIdx) : roomEntryText;
 }

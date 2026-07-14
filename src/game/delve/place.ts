@@ -49,6 +49,24 @@ export function validatePlace(place: Place): void {
   for (const floor of place.floors) {
     validateFloor(place.id, floor);
   }
+
+  // Run state (searchedRoomIds, pendingLoot, doorOverrides, hunter roomIds,
+  // ...) keys on bare roomId with no floor qualifier, so a room id reused
+  // across floors would cross-contaminate that state the moment both floors
+  // are visited in the same run (issue #38 PR #39 review).
+  const seenRoomIds = new Map<string, number>();
+  for (const floor of place.floors) {
+    for (const room of floor.rooms) {
+      const existingFloor = seenRoomIds.get(room.id);
+      if (existingFloor !== undefined) {
+        throw new Error(
+          `Place "${place.id}": room id "${room.id}" is used on both floor ${existingFloor} ` +
+          `and floor ${floor.floor}; room ids must be unique place-wide`
+        );
+      }
+      seenRoomIds.set(room.id, floor.floor);
+    }
+  }
 }
 
 function validateFloor(placeId: string, floor: PlaceFloor): void {
@@ -70,6 +88,34 @@ function validateFloor(placeId: string, floor: PlaceFloor): void {
         );
       }
       seenDirections.add(exit.direction);
+    }
+  }
+
+  // Exit-count budget (issue #38): rooms get at most 3 exits so navigation
+  // reads as a handful of real choices, not a directory. A room may be
+  // marked `junction` to allow up to 4 — but junctions must be landmarks
+  // (the player learns them by name as a crossroads) and a floor may have
+  // at most 2 of them, or every room starts to feel like a hub.
+  const MAX_EXITS_DEFAULT = 3;
+  const MAX_EXITS_JUNCTION = 4;
+  const MAX_JUNCTIONS_PER_FLOOR = 2;
+
+  const junctionRooms = floor.rooms.filter(r => r.junction);
+  if (junctionRooms.length > MAX_JUNCTIONS_PER_FLOOR) {
+    throw new Error(
+      `${label}: has ${junctionRooms.length} junction rooms, max ${MAX_JUNCTIONS_PER_FLOOR} per floor`
+    );
+  }
+  for (const room of floor.rooms) {
+    if (room.junction && !room.landmark) {
+      throw new Error(`${label}: room "${room.id}" is a junction but not a landmark`);
+    }
+    const maxExits = room.junction ? MAX_EXITS_JUNCTION : MAX_EXITS_DEFAULT;
+    if (room.exits.length > maxExits) {
+      throw new Error(
+        `${label}: room "${room.id}" has ${room.exits.length} exits, max ${maxExits}` +
+        (room.junction ? " (junction)" : "")
+      );
     }
   }
 
@@ -97,6 +143,18 @@ function validateFloor(placeId: string, floor: PlaceFloor): void {
   // entranceRoomId must exist.
   if (!roomsById.has(floor.entranceRoomId)) {
     throw new Error(`${label}: entranceRoomId "${floor.entranceRoomId}" does not exist`);
+  }
+
+  // descendRoomId (issue #38), if authored, must exist and must not be the
+  // entrance — the stair down is a distinct, deliberately placed room, not
+  // "descend from anywhere."
+  if (floor.descendRoomId !== undefined) {
+    if (!roomsById.has(floor.descendRoomId)) {
+      throw new Error(`${label}: descendRoomId "${floor.descendRoomId}" does not exist`);
+    }
+    if (floor.descendRoomId === floor.entranceRoomId) {
+      throw new Error(`${label}: descendRoomId cannot be the entrance room`);
+    }
   }
 
   // Every extract roomId must exist.

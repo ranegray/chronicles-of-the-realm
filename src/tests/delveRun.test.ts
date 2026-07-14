@@ -174,7 +174,7 @@ describe("move", () => {
     expect(h.state.currentRoomId).toBe("antechamber");
     expect(h.state.cameFromRoomId).toBe("gullet");
     expect(h.state.lamp.oil).toBe(before.lamp.oil - 1);
-    expect(h.state.alertness).toBe(before.alertness + 1); // light pack, bright lamp
+    expect(h.state.alertness).toBe(before.alertness + 2); // loudness 1 x ALERTNESS_PER_LOUDNESS (1.5), rounded
     expect(h.state.waterClock).toBe(before.waterClock - 1);
     expect(result.narrative.some(n => n.kind === "room" && n.text.includes("Antechamber"))).toBe(true);
     expect(result.narrative.some(n => n.kind === "sense")).toBe(true);
@@ -200,7 +200,7 @@ describe("move", () => {
       act(h, { type: "move", direction: "south" });
       attempts++;
       expect(h.state.lamp.oil).toBe(Math.max(0, before.lamp.oil - 2));
-      expect(h.state.alertness).toBe(before.alertness + 3);
+      expect(h.state.alertness).toBe(before.alertness + Math.round(3 * 1.5)); // lockwork loudness 3
     }
     expect(h.state.currentRoomId).toBe("antechamber");
     expect(h.state.doorOverrides["gullet:south"]).toBeUndefined();
@@ -236,7 +236,7 @@ describe("search", () => {
     const before = h.state;
     const result = act(h, { type: "search" });
     expect(h.state.lamp.oil).toBe(before.lamp.oil - 2);
-    expect(h.state.alertness).toBe(before.alertness + 2);
+    expect(h.state.alertness).toBe(before.alertness + Math.round(2 * 1.5)); // search loudness 2
     const pool = h.state.pendingLoot["trade_room"];
     expect(pool).toBeDefined();
     expect(pool!.items.length).toBeGreaterThan(0);
@@ -247,6 +247,11 @@ describe("search", () => {
 
   it("finds nothing on a second search of the same room", () => {
     const h = makeHarness("search-2");
+    // Not a hunter test: strip hunters so a wandering encounter can't
+    // interrupt the second search on this seed (the Warrens' floor-1 layout
+    // was re-authored for issue #38's exit-count trim, which shifted BFS
+    // distances and, with them, which seeds happen to draw an encounter).
+    h.state = { ...h.state, hunters: [] };
     walkTo(h, "trade_room");
     act(h, { type: "search" });
     const poolBefore = h.state.pendingLoot["trade_room"];
@@ -429,12 +434,12 @@ describe("dark light state", () => {
     expect(result.narrative.every(n => n.kind !== "map")).toBe(true);
   });
 
-  it("doubles move noise: alertness rises by 2 for an unburdened move", () => {
+  it("doubles move noise: alertness rises by 2x for an unburdened move", () => {
     const h = darkHarness("dark-3");
     h.state = { ...h.state, hunters: [] }; // isolate noise accounting from fight noise
     const before = h.state.alertness;
     act(h, { type: "move", direction: "south" });
-    expect(h.state.alertness).toBe(before + 2);
+    expect(h.state.alertness).toBe(before + Math.round(2 * 1.5)); // dark move loudness 2 (1 base + 1 dark)
   });
 });
 
@@ -506,6 +511,34 @@ describe("encounters", () => {
     throw new Error("no seed produced a clean fall-back in 20 tries");
   });
 
+  it("falling back into a room another hunter already occupies chains straight into a new encounter (intended ambush)", () => {
+    // This is deliberate, not a bug: giving ground is retreating into the
+    // dark behind you, and the dark behind you isn't guaranteed empty. The
+    // same-action chain (concludeBeat's applySimTick runs contact detection
+    // right after movePlayer) reads as "you back into something else" —
+    // see docs/design/the-delve.md Pillar 3 exceptions / PR #39 review.
+    for (let i = 0; i < 20; i++) {
+      const h = makeHarness(`enc-chain-${i}`);
+      h.state = {
+        ...h.state,
+        hunters: [
+          { id: "h1", enemyId: "goblin_snare", roomId: "antechamber", state: "dormant" },
+          { id: "h2", enemyId: "goblin_candle", roomId: "gullet", state: "dormant" }
+        ]
+      };
+      act(h, { type: "move", direction: "south" });
+      expect(h.state.activeEncounter?.hunterId).toBe("h1");
+      const result = act(h, { type: "encounterOption", kind: "fallBack" });
+      if (!narrativeText(result).includes("doesn't follow")) continue; // h1 followed; retry with a different seed
+      expect(h.state.currentRoomId).toBe("gullet");
+      // h1 let go, but h2 was already waiting in the room being fallen back into.
+      expect(h.state.activeEncounter).toBeDefined();
+      expect(h.state.activeEncounter?.hunterId).toBe("h2");
+      return;
+    }
+    throw new Error("no seed produced a clean fall-back-into-ambush chain in 20 tries");
+  });
+
   it("unavailable options are refused with their reason", () => {
     const h = makeHarness("enc-4");
     h.state = {
@@ -572,13 +605,16 @@ describe("extracts", () => {
   it("driving alertness up through play bars the door", () => {
     const h = makeHarness("ext-loud");
     h.state = { ...h.state, hunters: [], alertness: HUNTING_POINTS - 2 };
-    act(h, { type: "move", direction: "south" }); // +1
-    act(h, { type: "move", direction: "north" }); // +1 -> crosses Hunting
+    act(h, { type: "move", direction: "south" });
+    if (h.state.activeEncounter) fightItOut(h);
+    act(h, { type: "move", direction: "north" });
+    if (h.state.activeEncounter) fightItOut(h);
     expect(getThreatLevelFromPoints(h.state.alertness)).toBeGreaterThanOrEqual(3);
     expect(h.events.some(e => e.kind === "alertnessLevel" && e.level === 3)).toBe(true);
     expect(h.events.some(e => e.kind === "reinforcement")).toBe(true);
-    // The reinforcement guards the entrance; deal with it before trying the door.
-    fightItOut(h);
+    // The reinforcement may have caught the delver anywhere on the way back;
+    // deal with it, then walk back to the entrance before trying the door.
+    walkTo(h, "gullet");
     expect(h.state.status).toBe("active");
     const result = act(h, { type: "extract", extractId: "f1_barred_door" });
     expect(narrativeText(result)).toContain("barred from the other side");
@@ -623,7 +659,7 @@ describe("extracts", () => {
     act(h, { type: "crank", extractId: "f1_rope_winch" });
     act(h, { type: "crank", extractId: "f1_rope_winch" });
     expect(h.state.cranksDone["f1_rope_winch"]).toBe(3);
-    expect(h.state.alertness).toBe(alertnessBefore + 12); // 3 cranks x loudness 4
+    expect(h.state.alertness).toBe(alertnessBefore + 3 * Math.round(4 * 1.5)); // 3 cranks x loudness 4
     expect(h.state.lamp.oil).toBe(oilBefore - 3);
 
     act(h, { type: "extract", extractId: "f1_rope_winch" });
@@ -889,7 +925,11 @@ function runDelveBot(seed: string, policy: BotPolicy): DelveSimResult {
 
 describe("delve risk/reward simulation", () => {
   it("a cautious delver extracts most runs; greed makes the floor tilt", () => {
-    const RUNS = 40;
+    // Issue #38 re-authored floor 1's exit graph (fewer exits per room, two
+    // junction rooms), which shifts hunter/noise dynamics enough that 40
+    // seeds landed a hair under the old bad-rate floor. A larger sample
+    // settles the same signal (see thresholds below) without loosening them.
+    const RUNS = 120;
     const cautious = Array.from({ length: RUNS }, (_, i) => runDelveBot(`delve-sim-c-${i + 1}`, "cautious"));
     const greedy = Array.from({ length: RUNS }, (_, i) => runDelveBot(`delve-sim-g-${i + 1}`, "greedy"));
 
@@ -921,10 +961,6 @@ describe("delve risk/reward simulation", () => {
     // The design doc's balance target: a competent, cautious run gets out.
     expect(cautiousExtractRate).toBeGreaterThan(0.7);
     // Greed pays: substantially more deaths/trappings than playing it safe.
-    // (Observed: cautious 0/40 bad outcomes, greedy 7/40 — the tilt is real,
-    // though most of it is death-by-goblin; the barred door rarely springs
-    // because the oil budget ends greedy runs before alertness reaches
-    // Hunting. See the run-layer report for the retuning argument.)
     expect(greedyBadRate).toBeGreaterThanOrEqual(cautiousBadRate + 0.1);
     expect(greedyBadRate).toBeGreaterThanOrEqual(0.15);
     // Greed also has to be worth attempting: greedy extractions carry more value.
@@ -933,5 +969,21 @@ describe("delve risk/reward simulation", () => {
     if (g.extracted.length > 0 && c.extracted.length > 0) {
       expect(avgValue(g.extracted)).toBeGreaterThan(avgValue(c.extracted));
     }
+
+    // The barred door must matter (issue #38 balance follow-up): alertness
+    // is monotone non-decreasing within a floor, so alertnessAtEnd is the
+    // peak the run ever reached — "crossed Hunting" means alertnessAtEnd
+    // >= 65. Before ALERTNESS_PER_LOUDNESS (delveRun.ts) was tuned to 1.5x,
+    // greedy runs mostly died to the oil budget before alertness got there
+    // (observed ~1% cross rate on an earlier floor layout); raising the
+    // noise->alertness coupling makes greed reliably outrun the oil and
+    // slam into the door instead. Observed with the 1.5x knob: cautious
+    // ~7.5% cross (barely touches Hunting, extraction rate unaffected),
+    // greedy ~100% cross (every greedy run either fights past the
+    // reinforcement or gets diverted to the flooded stair/winch once the
+    // door bars).
+    const crossedHuntingRate = (rs: DelveSimResult[]) => rs.filter(r => r.alertnessAtEnd >= 65).length / rs.length;
+    expect(crossedHuntingRate(greedy)).toBeGreaterThanOrEqual(0.4);
+    expect(cautiousExtractRate).toBeGreaterThanOrEqual(0.7);
   });
 });

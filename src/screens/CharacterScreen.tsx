@@ -18,7 +18,6 @@ const ORDINALS = [
 
 export function CharacterScreen() {
   const player = useGameStore(s => s.state.player);
-  const run = useGameStore(s => s.state.activeRun);
   const village = useGameStore(s => s.state.village);
   const runSummaries = useGameStore(s => s.state.runSummaries);
   const learnTalent = useGameStore(s => s.learnTalent);
@@ -50,17 +49,6 @@ export function CharacterScreen() {
             </div>
           </div>
 
-          {run && (
-            <div className="chronicle-delve-note">
-              <span className="chronicle-delve-note-title">Mid-Delve</span>
-              <div className="chronicle-delve-note-meta muted small">
-                <span><em>Depth</em> {run.tier}</span>
-                <span><em>Charted</em> {run.visitedRoomIds.length} / {run.roomGraph.length}</span>
-                <span><em>Carried</em> {run.raidInventory.gold} g</span>
-              </div>
-            </div>
-          )}
-
           <section className="chronicle-section" aria-label="Your measure">
             <h2 className="chronicle-section-heading">Your Measure</h2>
             <StatBlock character={player} />
@@ -69,10 +57,8 @@ export function CharacterScreen() {
 
           <section className="chronicle-section" aria-label="What you wear">
             <h2 className="chronicle-section-heading">What You Wear</h2>
-            <p className="chronicle-section-note muted small">
-              {run ? "At risk until extraction." : "Safe in the village."}
-            </p>
-            <LoadoutBuilder character={player} readOnly activeRun={Boolean(run)} />
+            <p className="chronicle-section-note muted small">Safe in the village.</p>
+            <LoadoutBuilder character={player} readOnly activeRun={false} />
           </section>
 
           <section className="chronicle-section" aria-label="What you have learned">

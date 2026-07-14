@@ -14,6 +14,8 @@ interface RoomInit {
   name: string;
   prose: string[];
   landmark?: boolean;
+  /** Crossroads room: allowed up to 4 exits. Max 2 per floor; see place.ts. */
+  junction?: true;
   lootTableId?: string;
   hunterSpawn?: boolean;
   supplySpawn?: boolean;
@@ -65,6 +67,7 @@ function buildRooms(inits: RoomInit[], edges: EdgeSpec[]): PlaceRoom[] {
     name: init.name,
     prose: init.prose,
     landmark: init.landmark,
+    junction: init.junction,
     lootTableId: init.lootTableId,
     hunterSpawn: init.hunterSpawn,
     supplySpawn: init.supplySpawn,
@@ -117,6 +120,7 @@ const FLOOR1_ROOMS: RoomInit[] = [
     id: "tallow_gallery",
     name: "The Tallow Gallery",
     landmark: true,
+    junction: true,
     prose: [
       "A wide gallery lit by a hundred guttering tallow stubs pressed into the walls.",
       "The grease-smoke here is thick enough to taste, and every surface is filmed with it."
@@ -198,6 +202,7 @@ const FLOOR1_ROOMS: RoomInit[] = [
     id: "sleepers_court",
     name: "Sleeper's Court",
     landmark: true,
+    junction: true,
     hunterSpawn: true,
     prose: [
       "A wide, low court packed with sleeping-nests, a dozen at least, most of them still warm.",
@@ -327,14 +332,11 @@ const FLOOR1_EDGES: EdgeSpec[] = [
   { from: "antechamber", dir: "south", to: "tallow_gallery", revDir: "north" },
   { from: "midden_hollow", dir: "south", to: "bramble_lock", revDir: "north",
     doorStates: ["open", "lockable", "jammable"] },
-  { from: "bramble_lock", dir: "east", to: "tallow_gallery", revDir: "west" },
   { from: "tallow_gallery", dir: "east", to: "candle_row", revDir: "west" },
   { from: "tallow_gallery", dir: "south", to: "grease_cellar", revDir: "north" },
   { from: "tallow_gallery", dir: "down", to: "toll_bridge", revDir: "up",
     doorStates: ["open", "jammable"], senses: ["chittering"] },
-  { from: "tallow_gallery", dir: "up", to: "weavers_nook", revDir: "down" },
   { from: "candle_row", dir: "north", to: "trade_room", revDir: "south" },
-  { from: "candle_row", dir: "south", to: "grease_cellar", revDir: "east" },
   { from: "candle_row", dir: "down", to: "weavers_nook", revDir: "up" },
   { from: "grease_cellar", dir: "down", to: "kennel_row", revDir: "up", senses: ["greaseSmell"] },
   { from: "kennel_row", dir: "east", to: "bone_pile_den", revDir: "west" },
@@ -345,12 +347,10 @@ const FLOOR1_EDGES: EdgeSpec[] = [
     senses: ["tallow", "chittering"] },
   { from: "toll_bridge", dir: "east", to: "sleepers_court", revDir: "west",
     senses: ["tallow", "chittering"] },
-  { from: "sleepers_court", dir: "down", to: "gnaw_pit", revDir: "up" },
   { from: "sleepers_court", dir: "south", to: "chute_mouth", revDir: "north" },
   { from: "chute_mouth", dir: "down", to: "under_chute", oneWay: true, senses: ["narrowSqueeze"] },
   { from: "collapsing_squeeze", dir: "down", to: "squeeze_exit", oneWay: true,
     senses: ["narrowSqueeze"] },
-  { from: "gnaw_pit", dir: "south", to: "deep_gallery", revDir: "north" },
   { from: "under_chute", dir: "east", to: "deep_gallery", revDir: "west" },
   { from: "deep_gallery", dir: "east", to: "flooded_approach", revDir: "west",
     senses: ["waterSound", "coldDraft"] },
@@ -362,18 +362,23 @@ const FLOOR1_EDGES: EdgeSpec[] = [
   { from: "weavers_nook", dir: "south", to: "side_larder", revDir: "north" },
   { from: "side_larder", dir: "east", to: "glass_gallery", revDir: "west" },
   { from: "glass_gallery", dir: "south", to: "damp_cutback", revDir: "north", senses: ["lightBeyond"] },
-  { from: "damp_cutback", dir: "east", to: "deep_gallery", revDir: "down" }
+  { from: "sleepers_court", dir: "down", to: "gnaw_pit", revDir: "up" }
 ];
 
 const FLOOR1: PlaceFloor = {
   floor: 1,
   entranceRoomId: "gullet",
+  // Deep Gallery: far side of the floor from the Gullet (through under_chute
+  // or the collapsing-squeeze/winch route), cold and wet where the upper
+  // warrens turn toward the flooded works below — the fictional edge of
+  // "upper" giving way to "deep."
+  descendRoomId: "deep_gallery",
   rooms: buildRooms(FLOOR1_ROOMS, FLOOR1_EDGES),
   extracts: [
     {
       id: "f1_barred_door",
       roomId: "gullet",
-      label: "The way you came",
+      label: "The Gullet — the way you came in",
       condition: "closesAtAlertness",
       alertnessLevel: 3
     },
@@ -437,6 +442,7 @@ const FLOOR2_ROOMS: RoomInit[] = [
     id: "longhouse",
     name: "The Longhouse",
     landmark: true,
+    junction: true,
     prose: [
       "A long hall raised on stolen roof-beams, the closest thing this warren has to a throne room.",
       "Trophies and rags of banners hang from the beams, all of it slightly too large for goblins."
@@ -519,6 +525,7 @@ const FLOOR2_ROOMS: RoomInit[] = [
     id: "chieftains_den",
     name: "The Chieftain's Den",
     landmark: true,
+    junction: true,
     hunterSpawn: true,
     prose: [
       "A wide den heaped with furs and stolen finery, clearly the seat of something in charge.",
@@ -649,9 +656,6 @@ const FLOOR2_EDGES: EdgeSpec[] = [
   { from: "sunken_door", dir: "east", to: "longhouse", revDir: "west" },
   { from: "longhouse", dir: "east", to: "trophy_nook", revDir: "west" },
   { from: "longhouse", dir: "south", to: "grinding_room", revDir: "north" },
-  { from: "longhouse", dir: "down", to: "longhouse_doors", revDir: "up",
-    doorStates: ["open", "jammable"], senses: ["chittering"] },
-  { from: "longhouse", dir: "up", to: "tanners_nook", revDir: "down" },
   { from: "trophy_nook", dir: "north", to: "stores_vault", revDir: "south" },
   { from: "trophy_nook", dir: "south", to: "grinding_room", revDir: "west" },
   { from: "tanners_nook", dir: "south", to: "sump_cistern", revDir: "north", senses: ["waterSound"] },
@@ -670,15 +674,14 @@ const FLOOR2_EDGES: EdgeSpec[] = [
     senses: ["tallow", "chittering"] },
   { from: "longhouse_doors", dir: "down", to: "chieftains_den", revDir: "up",
     senses: ["tallow", "chittering"] },
-  { from: "chieftains_den", dir: "south", to: "midden_drop", revDir: "north" },
   { from: "chieftains_den", dir: "down", to: "ash_chute_mouth", revDir: "up", senses: ["narrowSqueeze"] },
   { from: "ash_chute_mouth", dir: "down", to: "under_ash_chute", oneWay: true },
   { from: "under_ash_chute", dir: "east", to: "lower_gallery", revDir: "west" },
-  { from: "midden_drop", dir: "down", to: "lower_gallery", revDir: "up" },
   { from: "postern_approach", dir: "down", to: "postern_stair", revDir: "up",
     doorStates: ["open", "lockable"], senses: ["coldDraft"] },
   { from: "lower_gallery", dir: "east", to: "flue_approach", revDir: "west" },
-  { from: "flue_approach", dir: "up", to: "old_flue", revDir: "down", senses: ["coldDraft", "lightBeyond"] }
+  { from: "flue_approach", dir: "up", to: "old_flue", revDir: "down", senses: ["coldDraft", "lightBeyond"] },
+  { from: "chieftains_den", dir: "south", to: "midden_drop", revDir: "north" }
 ];
 
 const FLOOR2: PlaceFloor = {

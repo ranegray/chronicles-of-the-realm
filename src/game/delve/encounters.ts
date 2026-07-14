@@ -248,11 +248,13 @@ export function openEncounter(params: {
   cameFromRoomId?: string;
   alertnessLevel: number;
   adjacentRoomIds: string[];
+  /** Depth tier fed to buildEnemyInstance; mirrors delveRun's floor-scaled tier (default 1). */
+  tier?: number;
   rng: Rng;
 }): ActiveEncounter {
-  const { hunter, carriedItems, lightState, cameFromRoomId, adjacentRoomIds, rng } = params;
+  const { hunter, carriedItems, lightState, cameFromRoomId, adjacentRoomIds, rng, tier = 1 } = params;
   const enemyDef = getEnemy(hunter.enemyId);
-  const enemyInstance = buildEnemyInstance(hunter.enemyId, rng.forkChild(`${hunter.id}:stats`), 1);
+  const enemyInstance = buildEnemyInstance(hunter.enemyId, rng.forkChild(`${hunter.id}:stats`), tier);
 
   const options: EncounterOption[] = [
     { kind: "fight", label: "Meet it head-on", available: true },
@@ -266,6 +268,7 @@ export function openEncounter(params: {
   return {
     hunterId: hunter.id,
     enemyId: hunter.enemyId,
+    enemyTier: tier,
     enemyHp: enemyInstance.hp,
     enemyMaxHp: enemyInstance.maxHp,
     beat: 1,
@@ -334,12 +337,12 @@ function enemySwing(params: {
   return { hit: true, damage };
 }
 
-function enemyInstanceFor(encounterEnemyId: string, hunterId: string, rng: Rng): EnemyInstance {
+function enemyInstanceFor(encounterEnemyId: string, hunterId: string, tier: number, rng: Rng): EnemyInstance {
   // Only `instanceId` is randomized inside buildEnemyInstance; every other
   // stat is a pure function of (enemyId, depthTier). Forking off a fixed
   // label keeps this call from disturbing the rng stream the caller uses
   // for its own swing rolls.
-  return buildEnemyInstance(encounterEnemyId, rng.forkChild(`${hunterId}:stats`), 1);
+  return buildEnemyInstance(encounterEnemyId, rng.forkChild(`${hunterId}:stats`), tier);
 }
 
 // ---------------------------------------------------------------------------
@@ -354,7 +357,7 @@ function degradeToFightWithFreeExchange(params: {
   prose: string[];
 }): DelveEncounterBeatResult {
   const { encounter, character, rng, roomId, prose } = params;
-  const enemy = enemyInstanceFor(encounter.enemyId, encounter.hunterId, rng);
+  const enemy = enemyInstanceFor(encounter.enemyId, encounter.hunterId, encounter.enemyTier, rng);
   // The enemy gets an unanswered swing — the option failed because it saw
   // you first, so it strikes before you can set your feet. +1 accuracy
   // documents that opening advantage.
@@ -577,7 +580,7 @@ export function resolveFightBeat(params: {
   roomId: string;
 }): DelveEncounterBeatResult {
   const { encounter, stance, character, rng, lightState, roomId } = params;
-  const enemy = enemyInstanceFor(encounter.enemyId, encounter.hunterId, rng);
+  const enemy = enemyInstanceFor(encounter.enemyId, encounter.hunterId, encounter.enemyTier, rng);
 
   if (stance === "breakAway") {
     const enemyHpRatio = encounter.enemyMaxHp > 0 ? encounter.enemyHp / encounter.enemyMaxHp : 0;

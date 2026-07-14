@@ -115,6 +115,10 @@ export const CharacterCreationService = {
     const items: ItemInstance[] = kit.itemTemplateIds.map(id =>
       instanceFromTemplateId(id, draft.rng, 1)
     );
+    // Every delver starts with one flask of lamp oil for the pack ritual
+    // (issue #38), regardless of class kit — cheap enough to not shape a
+    // kit choice, and every run needs the lamp lit.
+    items.push(instanceFromTemplateId("delve_oil_flask", draft.rng, 1));
 
     const equipped: EquipmentSlots = {};
     for (const item of items) {

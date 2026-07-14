@@ -56,6 +56,18 @@ rises from noise, drives reinforcement spawns at thresholds, hunter boldness,
 and extract conditions (the barred door). Encounter triggers when a hunter
 enters your room or you enter its room.
 
+**Exceptions.** Taking loot (`takeLoot`/`takeAllLoot`/`leaveLoot`), refilling
+the lamp from a flask, and consulting the map are the three actions that
+never run the per-action sim tick: no noise emitted, no hunter movement, no
+alertness gain. Bagging what's already in your hands and pouring oil you're
+already carrying aren't things the Warrens could plausibly hear beyond what
+getting to the room already cost. This is a deliberate, accepted gap, not an
+oversight: a dark-to-full lamp refill is free of consequence the instant you
+have a flask to spend, and standing still to read a map costs oil but never
+draws anything closer. Retuning it — e.g. making refill/consultMap tick like
+every other action — is a possible follow-up if playtesting shows it's
+abused as a "free breather," but v0.5 ships without that tax.
+
 ## Pillar 4 — One column, one loop
 
 No combat screen, no clickable map. A single narrative column: room prose,

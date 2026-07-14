@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { DelveMapSketch } from "../components/DelveMapSketch";
 import { useGameStore } from "../store/gameStore";
 import { getLightState } from "../game/delve/lamp";
 import { getThreatLevelFromPoints } from "../game/threat";
 import { THREAT_RULES } from "../game/constants";
 import { calculateInventoryWeight } from "../game/inventory";
 import { useStaggeredReveal } from "../components/useStaggeredReveal";
-import { buildChoiceList, type DelveChoice } from "./delveChoices";
+import { buildChoiceList, groupNarrativeSegments, segmentRoomName, type DelveChoice } from "./delveChoices";
+import { buildMapSketch } from "./delveMapSketch";
 import type { DelveAction } from "../game/delve/types";
 import "./pacing.css";
 
 const NARRATIVE_REVEAL_INTERVAL_MS = 90;
 const DIM_TAIL_COUNT = 6;
 const TERMINAL_PAUSE_MS = 1400;
+/** How many prior room-visits stay on screen, collapsed to just their name. */
+const COLLAPSED_SEGMENT_COUNT = 2;
 
 export function DelveScreen() {
   const run = useGameStore(s => s.state.delveRun);
@@ -25,15 +29,30 @@ export function DelveScreen() {
 
   const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const currentSceneRef = useRef<HTMLParagraphElement | null>(null);
 
   const totalEntries = run?.narrative.length ?? 0;
   const { revealed, isRevealing, skip } = useStaggeredReveal(totalEntries, NARRATIVE_REVEAL_INTERVAL_MS);
 
+  const visibleNarrative = run?.narrative.slice(0, revealed) ?? [];
+  const segments = useMemo(() => groupNarrativeSegments(visibleNarrative), [visibleNarrative]);
+  const currentSegment = segments[segments.length - 1];
+  const collapsedSegments = segments.slice(
+    Math.max(0, segments.length - 1 - COLLAPSED_SEGMENT_COUNT),
+    segments.length - 1
+  );
+
+  // The scene, not the scroll: pin to the top of the current room's first
+  // line rather than the bottom of the document, so its prose reads from
+  // the start even as new lines stream in beneath it.
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [revealed]);
+    const container = scrollRef.current;
+    const anchor = currentSceneRef.current;
+    if (!container || !anchor) return;
+    const containerTop = container.getBoundingClientRect().top;
+    const anchorTop = anchor.getBoundingClientRect().top;
+    container.scrollTop += anchorTop - containerTop;
+  }, [revealed, currentSegment?.id]);
 
   // Terminal statuses (extracted/died) stay on screen just long enough to
   // read the closing line, then hand off to the v0.4 run-summary flow.
@@ -44,6 +63,9 @@ export function DelveScreen() {
   }, [run?.status, run?.actionCount, resolveDelveRunEnd]);
 
   const choices = useMemo(() => (run ? buildChoiceList(run) : []), [run]);
+  // Rebuilt whenever the run mutates (visitedRoomIds only grows), not just on
+  // consultMap — the sketch always reflects everywhere you've been so far.
+  const mapSketch = useMemo(() => (run ? buildMapSketch(run) : undefined), [run]);
 
   if (!run || !player) return <div className="screen">No active delve.</div>;
 
@@ -56,8 +78,8 @@ export function DelveScreen() {
   const oilPct = run.lamp.capacity > 0 ? Math.round((run.lamp.oil / run.lamp.capacity) * 100) : 0;
   const isOver = run.status !== "active";
 
-  const visibleNarrative = run.narrative.slice(0, revealed);
-  const dimBefore = Math.max(0, visibleNarrative.length - DIM_TAIL_COUNT);
+  const currentEntries = currentSegment?.entries ?? [];
+  const dimBefore = Math.max(0, currentEntries.length - DIM_TAIL_COUNT);
 
   function dispatch(action: DelveAction) {
     if (isRevealing || isOver) return;
@@ -109,18 +131,27 @@ export function DelveScreen() {
 
       <div className="narrative-scroll" ref={scrollRef}>
         <div className="narrative-column delve-column">
-          {visibleNarrative.map((entry, i) => (
-            <p
-              key={entry.id}
-              className={[
-                "delve-entry",
-                `delve-entry-${entry.kind}`,
-                "delve-entry-in",
-                i < dimBefore ? "delve-entry-dim" : ""
-              ].filter(Boolean).join(" ")}
-            >
-              {entry.text}
+          {collapsedSegments.map(segment => (
+            <p key={segment.id} className="delve-entry delve-entry-room delve-segment-collapsed">
+              {segmentRoomName(segment.entries[0]!.text)}
             </p>
+          ))}
+
+          {currentEntries.map((entry, i) => (
+            <div key={entry.id}>
+              <p
+                ref={i === 0 ? currentSceneRef : undefined}
+                className={[
+                  "delve-entry",
+                  `delve-entry-${entry.kind}`,
+                  "delve-entry-in",
+                  i < dimBefore ? "delve-entry-dim" : ""
+                ].filter(Boolean).join(" ")}
+              >
+                {entry.text}
+              </p>
+              {entry.kind === "map" && mapSketch && <DelveMapSketch sketch={mapSketch} />}
+            </div>
           ))}
 
           {!isOver && !isRevealing && (

@@ -15,22 +15,21 @@ import { useGameStore } from "../store/gameStore";
 import type { EquipmentChangePreview, EquipmentSlotName } from "../components/v04UiTypes";
 import "./StashScreen.css";
 
+/**
+ * The pack ritual: village-side gear/prep management before the next delve.
+ * Managing the raid pack mid-delve happens inline in DelveScreen instead —
+ * this screen is only reachable from the village shell (see GlobalNav),
+ * which the one-column delve loop hides while a run is active.
+ */
 export function StashScreen() {
   const stash = useGameStore(s => s.state.stash);
   const preparedInventory = useGameStore(s => s.state.preparedInventory);
-  const activeRun = useGameStore(s => s.state.activeRun);
-  const activeCombat = useGameStore(s => s.state.activeCombat);
   const player = useGameStore(s => s.state.player);
   const villageMessage = useGameStore(s => s.lastVillageMessage);
-  const dungeonMessage = useGameStore(s => s.lastRoomMessage);
   const useStashItem = useGameStore(s => s.useStashConsumable);
   const equipStashItem = useGameStore(s => s.equipItemFromStash);
   const packPreparedItem = useGameStore(s => s.packItemForRun);
   const unpackPreparedItem = useGameStore(s => s.unpackPreparedItem);
-  const useRaidItem = useGameStore(s => s.useRaidConsumable);
-  const equipRaidItem = useGameStore(s => s.equipItemFromRaid);
-  const dropRaidItem = useGameStore(s => s.dropRaidItem);
-  const useCombatItem = useGameStore(s => s.useCombatInventoryItem);
   const purchasePreparation = useGameStore(s => s.purchaseRunPreparation);
   const setKeepsake = useGameStore(s => s.setKeepsake);
   const clearKeepsake = useGameStore(s => s.clearKeepsake);
@@ -42,49 +41,31 @@ export function StashScreen() {
   const state = useGameStore(s => s.state);
   const [preview, setPreview] = useState<EquipmentChangePreview | undefined>();
 
-  const mode = activeCombat ? "combat" : activeRun ? "dungeon" : "village";
-  const message = mode === "village" ? villageMessage : dungeonMessage;
-
-  const eyebrow = mode === "combat" ? "In Combat" : mode === "dungeon" ? "On Delve" : "Village";
-  const scene = mode === "combat"
-    ? "No time to sort gear now. Only to use what's already in hand."
-    : mode === "dungeon"
-      ? "The dark keeps its own ledger. This is what's left of what you brought."
-      : "The pack lies open on the table. The delve does not wait.";
-
   const carryCapacity = player?.derivedStats.carryCapacity ?? 0;
-  const packedWeight = mode === "village"
-    ? calculateInventoryWeight(preparedInventory)
-    : activeRun ? calculateInventoryWeight(activeRun.raidInventory) : 0;
-  const displayedGold = mode === "village" ? stash.gold : activeRun?.raidInventory.gold ?? 0;
+  const packedWeight = calculateInventoryWeight(preparedInventory);
 
   return (
     <div className="screen pack-screen">
-      <span className="pack-hero-eyebrow">{eyebrow}</span>
-      <p className="pack-hero-scene">{scene}</p>
+      <span className="pack-hero-eyebrow">Village</span>
+      <p className="pack-hero-scene">The pack lies open on the table. The delve does not wait.</p>
 
       {player && (
         <div className="pack-status-line">
-          <span><em>{mode === "village" ? "Packed" : "Pack"}</em> {packedWeight} / {carryCapacity}</span>
-          <span><em>{mode === "village" ? "Stash" : "Gold"}</em> {displayedGold}g</span>
+          <span><em>Packed</em> {packedWeight} / {carryCapacity}</span>
+          <span><em>Stash</em> {stash.gold}g</span>
         </div>
       )}
 
-      {message && <p className="msg">{message}</p>}
+      {villageMessage && <p className="msg">{villageMessage}</p>}
 
       {player && (
         <section className="pack-section" aria-label="What you wear">
           <h2 className="pack-section-heading">What You Wear</h2>
-          <p className="pack-section-intro">
-            {mode === "combat"
-              ? "The fight is on. What's equipped stays equipped."
-              : "Every piece you carry on your body, weighed and ready."}
-          </p>
+          <p className="pack-section-intro">Every piece you carry on your body, weighed and ready.</p>
           <LoadoutBuilder
             character={player}
-            inventoryItems={mode === "village" ? stash.items : activeRun?.raidInventory.items}
-            activeRun={mode === "dungeon"}
-            readOnly={mode === "combat"}
+            inventoryItems={stash.items}
+            activeRun={false}
             preview={preview}
             onPreview={(item, slot) => setPreview(previewEquipmentChange(item.instanceId, slot))}
             onEquip={(item, slot) => {
@@ -96,153 +77,109 @@ export function StashScreen() {
               setPreview(undefined);
             }}
           />
-          {mode !== "combat" && <ItemComparePanel preview={preview} />}
+          <ItemComparePanel preview={preview} />
         </section>
       )}
 
       <section className="pack-section" aria-label="What you carry down">
         <h2 className="pack-section-heading">What You Carry Down</h2>
         <p className="pack-section-intro">
-          {mode === "village"
-            ? "Everything staked on the next delve. Weight is the only honest limit."
-            : mode === "dungeon"
-              ? "What you're hauling out of the dark, if you make it."
-              : "Whatever's in the pack is whatever you've got."}
+          Everything staked on the next delve. Weight is the only honest limit.
         </p>
         {player && (
           <WeightBar current={packedWeight} capacity={carryCapacity} />
         )}
 
-        {mode === "village" ? (
-          inventoryIsEmpty(preparedInventory) ? (
-            <div className="pack-empty">Nothing packed.</div>
-          ) : (
-            <>
-              <ul className="pack-row-list">
-                {preparedInventory.items.map(item => (
-                  <PackRow
-                    key={item.instanceId}
-                    item={item}
-                    actions={<Button variant="ghost" onClick={() => unpackPreparedItem(item.instanceId)}>Unpack</Button>}
-                  />
-                ))}
-              </ul>
-              <VaultLine inventory={preparedInventory} />
-            </>
-          )
-        ) : activeRun ? (
-          inventoryIsEmpty(activeRun.raidInventory) ? (
-            <div className="pack-empty">Empty for now.</div>
-          ) : (
-            <>
-              <ul className="pack-row-list">
-                {activeRun.raidInventory.items.map(item => (
-                  <PackRow
-                    key={item.instanceId}
-                    item={item}
-                    actions={
-                      mode === "combat"
-                        ? <CombatItemActions item={item} onUse={() => useCombatItem(item.instanceId)} />
-                        : (
-                          <>
-                            {getConsumableHealFormula(item) && (
-                              <Button variant="ghost" onClick={() => useRaidItem(item.instanceId)}>Use</Button>
-                            )}
-                            {canEquip(item) && (
-                              <>
-                                <Button variant="ghost" onClick={() => setPreview(previewEquipmentChange(item.instanceId, preferredSlotFor(item, player?.equipped)))}>Preview</Button>
-                                <Button variant="ghost" onClick={() => equipRaidItem(item.instanceId)}>Equip</Button>
-                              </>
-                            )}
-                            <Button variant="ghost" onClick={() => dropRaidItem(item.instanceId)}>Drop</Button>
-                          </>
-                        )
-                    }
-                  />
-                ))}
-              </ul>
-              <VaultLine inventory={activeRun.raidInventory} />
-            </>
-          )
-        ) : null}
+        {inventoryIsEmpty(preparedInventory) ? (
+          <div className="pack-empty">Nothing packed.</div>
+        ) : (
+          <>
+            <ul className="pack-row-list">
+              {preparedInventory.items.map(item => (
+                <PackRow
+                  key={item.instanceId}
+                  item={item}
+                  actions={<Button variant="ghost" onClick={() => unpackPreparedItem(item.instanceId)}>Unpack</Button>}
+                />
+              ))}
+            </ul>
+            <VaultLine inventory={preparedInventory} />
+          </>
+        )}
       </section>
 
-      {mode === "village" && (
-        <>
-          <section className="pack-section" aria-label="What stays home">
-            <h2 className="pack-section-heading">What Stays Home</h2>
-            <p className="pack-section-intro">The stash. Safe, and no use to you below.</p>
-            {inventoryIsEmpty(stash) ? (
-              <div className="pack-empty">Stash is bare.</div>
-            ) : (
-              <>
-                <ul className="pack-row-list">
-                  {stash.items.map(item => (
-                    <PackRow
-                      key={item.instanceId}
-                      item={item}
-                      actions={
+      <section className="pack-section" aria-label="What stays home">
+        <h2 className="pack-section-heading">What Stays Home</h2>
+        <p className="pack-section-intro">The stash. Safe, and no use to you below.</p>
+        {inventoryIsEmpty(stash) ? (
+          <div className="pack-empty">Stash is bare.</div>
+        ) : (
+          <>
+            <ul className="pack-row-list">
+              {stash.items.map(item => (
+                <PackRow
+                  key={item.instanceId}
+                  item={item}
+                  actions={
+                    <>
+                      {getConsumableHealFormula(item) && (
+                        <Button variant="ghost" onClick={() => useStashItem(item.instanceId)}>Use</Button>
+                      )}
+                      {canEquip(item) && (
                         <>
-                          {getConsumableHealFormula(item) && (
-                            <Button variant="ghost" onClick={() => useStashItem(item.instanceId)}>Use</Button>
-                          )}
-                          {canEquip(item) && (
-                            <>
-                              <Button variant="ghost" onClick={() => setPreview(previewEquipmentChange(item.instanceId, preferredSlotFor(item, player?.equipped)))}>Preview</Button>
-                              <Button variant="ghost" onClick={() => equipStashItem(item.instanceId)}>Equip</Button>
-                            </>
-                          )}
-                          <Button variant="ghost" onClick={() => packPreparedItem(item.instanceId)}>Pack</Button>
+                          <Button variant="ghost" onClick={() => setPreview(previewEquipmentChange(item.instanceId, preferredSlotFor(item, player?.equipped)))}>Preview</Button>
+                          <Button variant="ghost" onClick={() => equipStashItem(item.instanceId)}>Equip</Button>
                         </>
-                      }
-                    />
-                  ))}
-                </ul>
-                <VaultLine inventory={stash} />
-              </>
-            )}
-          </section>
+                      )}
+                      <Button variant="ghost" onClick={() => packPreparedItem(item.instanceId)}>Pack</Button>
+                    </>
+                  }
+                />
+              ))}
+            </ul>
+            <VaultLine inventory={stash} />
+          </>
+        )}
+      </section>
 
-          <section className="pack-section" aria-label="Before you go">
-            <h2 className="pack-section-heading">Before You Go</h2>
+      <section className="pack-section" aria-label="Before you go">
+        <h2 className="pack-section-heading">Before You Go</h2>
 
-            <div className="pack-vow-block">
-              <h3 className="pack-vow-heading">Run Preparations</h3>
-              <p className="pack-vow-fiction">A few coins spent in the village linger like luck once the dark closes in.</p>
-              <RunPreparationPanel
-                options={getAvailableRunPreparationOptions({ gameState: state })}
-                selectedPreparations={state.pendingRunPreparations ?? []}
-                npcs={state.village?.npcs ?? []}
-                onPurchase={(optionId, npcId) => purchasePreparation(npcId, optionId)}
-              />
-            </div>
+        <div className="pack-vow-block">
+          <h3 className="pack-vow-heading">Run Preparations</h3>
+          <p className="pack-vow-fiction">A few coins spent in the village linger like luck once the dark closes in.</p>
+          <RunPreparationPanel
+            options={getAvailableRunPreparationOptions({ gameState: state })}
+            selectedPreparations={state.pendingRunPreparations ?? []}
+            npcs={state.village?.npcs ?? []}
+            onPurchase={(optionId, npcId) => purchasePreparation(npcId, optionId)}
+          />
+        </div>
 
-            <div className="pack-vow-block">
-              <h3 className="pack-vow-heading">Keepsake</h3>
-              <p className="pack-vow-fiction">One weightless thing, set aside. It survives even if you don't.</p>
-              <KeepsakePanel
-                candidates={getKeepsakeCandidates(state)}
-                selectedInstanceId={state.pendingKeepsakeInstanceId}
-                onSelect={setKeepsake}
-                onClear={clearKeepsake}
-              />
-            </div>
+        <div className="pack-vow-block">
+          <h3 className="pack-vow-heading">Keepsake</h3>
+          <p className="pack-vow-fiction">One weightless thing, set aside. It survives even if you don't.</p>
+          <KeepsakePanel
+            candidates={getKeepsakeCandidates(state)}
+            selectedInstanceId={state.pendingKeepsakeInstanceId}
+            onSelect={setKeepsake}
+            onClear={clearKeepsake}
+          />
+        </div>
 
-            <div className="pack-vow-block">
-              <h3 className="pack-vow-heading">Insurance</h3>
-              <p className="pack-vow-fiction">Pay now, and grief costs less if the delve turns on you.</p>
-              <InsurancePanel
-                candidates={player ? (Object.values(player.equipped).filter(Boolean) as ItemInstance[]) : []}
-                selectedInstanceId={state.pendingInsuredInstanceId}
-                getCost={getInsuranceCost}
-                gold={stash.gold}
-                onInsure={purchaseInsurance}
-                onCancel={cancelInsurance}
-              />
-            </div>
-          </section>
-        </>
-      )}
+        <div className="pack-vow-block">
+          <h3 className="pack-vow-heading">Insurance</h3>
+          <p className="pack-vow-fiction">Pay now, and grief costs less if the delve turns on you.</p>
+          <InsurancePanel
+            candidates={player ? (Object.values(player.equipped).filter(Boolean) as ItemInstance[]) : []}
+            selectedInstanceId={state.pendingInsuredInstanceId}
+            getCost={getInsuranceCost}
+            gold={stash.gold}
+            onInsure={purchaseInsurance}
+            onCancel={cancelInsurance}
+          />
+        </div>
+      </section>
     </div>
   );
 }
@@ -302,13 +239,6 @@ function canEquip(item: ItemInstance): boolean {
     item.category === "armor" ||
     item.category === "shield" ||
     item.category === "trinket";
-}
-
-function CombatItemActions({ item, onUse }: { item: ItemInstance; onUse: () => void }) {
-  if (getConsumableHealFormula(item)) {
-    return <Button variant="ghost" onClick={onUse}>Use</Button>;
-  }
-  return <span className="muted small">Not usable in combat</span>;
 }
 
 function preferredSlotFor(item: ItemInstance, equipped?: EquipmentSlots): EquipmentSlotName {

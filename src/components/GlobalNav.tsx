@@ -5,8 +5,6 @@ import "./GlobalNav.css";
 
 const SHELL_SCREENS = new Set<ScreenId>([
   "village",
-  "dungeon",
-  "combat",
   "merchant",
   "stash",
   "character",
@@ -27,8 +25,7 @@ export function GlobalNav() {
 
   const returnTarget = getReturnTarget(state);
   const returnLabel = getReturnLabel(returnTarget);
-  const inRun = state.activeRun?.status === "active";
-  const inCombat = Boolean(state.activeCombat);
+  const inRun = state.delveRun?.status === "active";
 
   const places: Array<{ id: ScreenId; label: string }> = [
     { id: returnTarget, label: returnLabel },
@@ -75,8 +72,8 @@ export function GlobalNav() {
         </div>
         <div className="realm-plate-id">
           <span className="realm-plate-name">{player.name}</span>
-          <span className={`realm-plate-meta${inCombat ? " realm-plate-meta-combat" : ""}`}>
-            {inCombat ? "In Combat" : inRun ? `Depth ${state.activeRun?.tier}` : "At Rest"}
+          <span className="realm-plate-meta">
+            {inRun ? "In the Warrens" : "At Rest"}
           </span>
         </div>
       </div>
@@ -85,13 +82,11 @@ export function GlobalNav() {
 }
 
 function getReturnTarget(state: ReturnType<typeof useGameStore.getState>["state"]): ScreenId {
-  if (state.activeCombat) return "combat";
-  if (state.activeRun?.status === "active") return "dungeon";
+  if (state.delveRun?.status === "active") return "delve";
   return "village";
 }
 
 function getReturnLabel(screen: ScreenId): string {
-  if (screen === "combat") return "Combat";
-  if (screen === "dungeon") return "The Delve";
+  if (screen === "delve") return "The Delve";
   return "Village";
 }

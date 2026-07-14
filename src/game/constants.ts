@@ -1,4 +1,4 @@
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const DUNGEON_GENERATOR_VERSION = 1;
 export const STORAGE_KEY = "chronicles-of-the-realm:save";
 

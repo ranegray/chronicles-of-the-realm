@@ -660,10 +660,20 @@ export interface DungeonRoom {
   pendingLoot?: { items: ItemInstance[]; gold: number; materials: Record<string, number> };
 }
 
+/**
+ * A slimmed-down remnant of the old v0.4 run type. The full procedural-run
+ * shape (threat/strain, known-room intel, dungeon log, per-room search/trap/
+ * event state, run preparations) was deleted with the old run layer in the
+ * v0.5 demolition (issue #38). What's left is exactly what the reward/death/
+ * summary flows still read: src/game/progression.ts (extraction + death +
+ * abandon outcomes) and src/game/runSummary.ts + src/game/pathing.ts (the
+ * run-summary screen's stats). The delve store bridge in
+ * src/store/gameStore.ts builds one of these as a throwaway adapter so those
+ * v0.4 flows can keep working unmodified — see buildDelveRunAdapter there.
+ */
 export interface DungeonRun {
   runId: string;
   seed: string;
-  generatorVersion: number;
   biome: DungeonBiome;
   tier: number;
   status: RunStatus;
@@ -678,17 +688,6 @@ export interface DungeonRun {
   xpGained: number;
   roomsVisitedBeforeDepth: number;
   roomsCompletedBeforeDepth: number;
-  dangerLevel: number;
-  threat: ThreatState;
-  delveStrain: DelveStrainState;
-  knownRoomIntel: Record<string, ScoutedRoomInfo>;
-  dungeonLog: DungeonLogEntry[];
-  currentExtractionInteraction?: {
-    roomId: string;
-    extractionId: string;
-    turnsRemaining: number;
-  };
-  appliedRunPreparations?: PreparedRunModifier[];
   keepsakeInstanceId?: string;
   insuredInstanceId?: string;
 }
@@ -1022,21 +1021,20 @@ export interface GameState {
   village?: VillageState;
   stash: Inventory;
   preparedInventory: Inventory;
-  activeRun?: DungeonRun;
-  activeCombat?: CombatState;
-  completedRuns: DungeonRun[];
   runSummaries: RunSummary[];
   lastRunSummary?: RunSummary;
   settings: GameSettings;
   pendingRunPreparations?: PreparedRunModifier[];
   pendingKeepsakeInstanceId?: string;
   pendingInsuredInstanceId?: string;
-  /** The Delve (v0.5) run layer. Optional/additive: absent on old saves and
-   *  whenever no delve run is active. See src/game/delve/types.ts. */
+  /** The Delve (v0.5) run layer — the only way to run a dungeon since the
+   *  v0.5 demolition (issue #38) removed the old procedural run engine.
+   *  Optional/additive: absent whenever no delve run is active.
+   *  See src/game/delve/types.ts. */
   delveRun?: import("./delve/types").DelveRunState;
-  /** The raid pack carried into the active delve run (mirrors activeRun.raidInventory
-   *  for the old dungeon layer, tracked separately since DelveRunState itself holds
-   *  no inventory — the engine reports item/gold changes as events for the store). */
+  /** The raid pack carried into the active delve run, tracked separately
+   *  since DelveRunState itself holds no inventory — the engine reports
+   *  item/gold changes as events for the store. */
   delveRaidPack?: Inventory;
   /** Store-side bookkeeping for the active delve run that the pure engine doesn't
    *  track itself (mirrors the run-start snapshot old runs take of keepsake/insurance). */
@@ -1102,8 +1100,6 @@ export type ScreenId =
   | "onboarding"
   | "characterCreation"
   | "village"
-  | "dungeon"
-  | "combat"
   | "delve"
   | "runSummary"
   | "stash"
@@ -1541,26 +1537,3 @@ export interface SearchResult {
   revealedEventId?: string;
 }
 
-// ---------------------------------------------------------------------------
-// v0.2: Dungeon log
-// ---------------------------------------------------------------------------
-
-export type DungeonLogEntryType =
-  | "info"
-  | "warning"
-  | "danger"
-  | "loot"
-  | "combat"
-  | "threat"
-  | "extraction"
-  | "event"
-  | "trap"
-  | "quest";
-
-export interface DungeonLogEntry {
-  id: string;
-  timestamp: number;
-  type: DungeonLogEntryType;
-  message: string;
-  roomId?: string;
-}

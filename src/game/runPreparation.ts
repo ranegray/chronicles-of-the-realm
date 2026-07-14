@@ -1,11 +1,8 @@
 import { RUN_PREPARATION_OPTIONS, getRunPreparationOption } from "../data/runPreparationOptions";
 import { INSURANCE_RATE, RUN_PREPARATION_RULES } from "./constants";
-import type { Character, DungeonRun, GameState, ItemInstance, PreparedRunModifier, RunPreparationOption } from "./types";
-import type { Rng } from "./rng";
+import type { Character, GameState, ItemInstance, PreparedRunModifier, RunPreparationOption } from "./types";
 import { createRng, makeId } from "./rng";
-import { addItem, instanceFromTemplateId } from "./inventory";
 import { canAffordResourceCost, spendResourceCost } from "./materials";
-import { addDungeonLogEntry } from "./dungeonLog";
 
 export function getAvailableRunPreparationOptions(params: {
   gameState: GameState;
@@ -31,7 +28,7 @@ export function canPurchaseRunPreparation(params: {
   reason?: string;
   cost?: RunPreparationOption["cost"];
 } {
-  if (params.gameState.activeRun) return { canPurchase: false, reason: "Prepare after returning to the village." };
+  if (params.gameState.delveRun) return { canPurchase: false, reason: "Prepare after returning to the village." };
   const option = getRunPreparationOption(params.optionId);
   if (!option) return { canPurchase: false, reason: "Unknown preparation." };
   if (!getAvailableRunPreparationOptions({ gameState: params.gameState }).some(entry => entry.id === option.id)) {
@@ -98,73 +95,12 @@ export function purchaseRunPreparation(params: {
   };
 }
 
-export function applyRunPreparationsToRun(params: {
-  run: DungeonRun;
-  character: Character;
-  preparations: PreparedRunModifier[];
-  rng: Rng;
-}): {
-  run: DungeonRun;
-  character: Character;
-  appliedPreparations: PreparedRunModifier[];
-} {
-  let run = params.run;
-  let character = params.character;
-  const applied: PreparedRunModifier[] = [];
-  for (const prep of params.preparations.filter(entry => !entry.consumed)) {
-    switch (prep.effect.type) {
-      case "startWithItem":
-        if (prep.effect.itemTemplateId) {
-          run = {
-            ...run,
-            raidInventory: addItem(run.raidInventory, instanceFromTemplateId(prep.effect.itemTemplateId, params.rng, prep.effect.quantity ?? prep.effect.amount ?? 1))
-          };
-        }
-        break;
-      case "increaseCarryCapacity":
-        character = {
-          ...character,
-          derivedStats: {
-            ...character.derivedStats,
-            carryCapacity: character.derivedStats.carryCapacity + (prep.effect.amount ?? 0)
-          }
-        };
-        break;
-      case "temporaryStatBonus":
-        if (prep.effect.statKey && prep.effect.statKey in character.derivedStats) {
-          character = {
-            ...character,
-            derivedStats: {
-              ...character.derivedStats,
-              [prep.effect.statKey]: (character.derivedStats[prep.effect.statKey as keyof Character["derivedStats"]] as number) + (prep.effect.amount ?? 0)
-            }
-          };
-        }
-        break;
-      case "protectOneItem":
-        run = {
-          ...run,
-          loadoutSnapshot: run.loadoutSnapshot.map((item, index) => index === 0 ? { ...item, protected: true } : item)
-        };
-        break;
-      case "revealExtraRooms":
-      case "improveScouting":
-      case "extractionHint":
-      case "trapWard":
-      case "reduceStartingThreat":
-        run = addDungeonLogEntry({
-          run,
-          type: "info",
-          message: `${getRunPreparationOption(prep.optionId)?.name ?? "Preparation"} is active.`,
-          roomId: run.currentRoomId,
-          now: prep.createdAt
-        });
-        break;
-    }
-    applied.push({ ...prep, consumed: RUN_PREPARATION_RULES.consumeOnRunStart });
-  }
-  return { run: { ...run, appliedRunPreparations: applied }, character, appliedPreparations: applied };
-}
+// applyRunPreparationsToRun (start-with-item, carry-capacity, protect-one-item,
+// etc. effects applied at run start) was deleted with the old dungeon-run
+// layer in the v0.5 demolition (issue #38) — nothing calls it, since the
+// delve engine doesn't consume PreparedRunModifiers yet (that wiring is
+// village-integration follow-up work, same ticket). Purchasing, keepsake,
+// and insurance below are unaffected; they're pure village-side bookkeeping.
 
 export function consumeRunPreparations(params: {
   gameState: GameState;
@@ -197,7 +133,7 @@ export function canPurchaseInsurance(params: {
   gameState: GameState;
   itemInstanceId: string;
 }): { canPurchase: boolean; reason?: string; cost?: number } {
-  if (params.gameState.activeRun) return { canPurchase: false, reason: "Insure gear before the next delve." };
+  if (params.gameState.delveRun) return { canPurchase: false, reason: "Insure gear before the next delve." };
   const character = params.gameState.player;
   if (!character) return { canPurchase: false, reason: "No active character." };
   const item = findEquippedItem(character, params.itemInstanceId);
@@ -256,7 +192,7 @@ export function canDesignateKeepsake(params: {
   gameState: GameState;
   itemInstanceId: string;
 }): { canDesignate: boolean; reason?: string } {
-  if (params.gameState.activeRun) return { canDesignate: false, reason: "Choose a keepsake before the next delve." };
+  if (params.gameState.delveRun) return { canDesignate: false, reason: "Choose a keepsake before the next delve." };
   const item = params.gameState.preparedInventory.items.find(entry => entry.instanceId === params.itemInstanceId);
   if (!item) return { canDesignate: false, reason: "Pack the item for the next raid first." };
   if (!isKeepsakeEligible(item)) {

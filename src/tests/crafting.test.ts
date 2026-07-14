@@ -26,6 +26,6 @@ describe("crafting", () => {
     const village = initializeVillageProgression({ village: generateVillage(createRng("craft-fail")) });
     const gameState = { ...defaultGameState(), village, stash: { items: [], gold: 10, materials: {} } };
     expect(canCraftRecipe({ gameState, recipeId: "recipe-iron-shortblade" }).canCraft).toBe(false);
-    expect(canCraftRecipe({ gameState: { ...gameState, activeRun: { runId: "x" } as never }, recipeId: "recipe-iron-shortblade" }).reason).toMatch(/village/i);
+    expect(canCraftRecipe({ gameState: { ...gameState, delveRun: { placeId: "x" } as never }, recipeId: "recipe-iron-shortblade" }).reason).toMatch(/village/i);
   });
 });

@@ -279,7 +279,18 @@ export const ITEM_TEMPLATES: ItemTemplate[] = [
     rarity: "common",
     description: "Hard bread, dried meat, a little salt.",
     value: 2, weight: 1, stackable: true,
-    tags: ["food"]
+    // "ration" (not just "food") lets the Delve's throwRations encounter
+    // option match on tag — see src/game/delve/encounters.ts.
+    tags: ["food", "ration"]
+  },
+  {
+    id: "delve_oil_flask",
+    name: "Oil Flask",
+    category: "consumable",
+    rarity: "common",
+    description: "A stoppered flask of lamp oil. A full refill for the Delve's lamp.",
+    value: 10, weight: 2, stackable: true,
+    tags: ["oilFlask", "oil"]
   },
   {
     id: "consumable_basic_antidote",
@@ -450,6 +461,15 @@ export const ITEM_TEMPLATES: ItemTemplate[] = [
     description: "A small vial of pale, sharp-smelling ink.",
     value: 24, weight: 0, stackable: true,
     tags: ["tool"]
+  },
+  {
+    id: "trinket_warrens_map",
+    name: "A Warrens Map",
+    category: "trinket",
+    rarity: "uncommon",
+    description: "A hand-inked sketch of the Goblin Warrens, landmarks marked in the cartographer's careful hand.",
+    value: 40, weight: 1, stackable: false,
+    tags: ["map", "warrens"]
   },
   {
     id: "trinket_emberglass",

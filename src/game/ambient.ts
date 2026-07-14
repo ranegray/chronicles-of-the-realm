@@ -83,6 +83,11 @@ export function dungeonRootFrequencies(): {
 
 type AmbientBed = "none" | "dungeon" | "village";
 
+/** The delve run and its brief combat beats share one "dungeon" ambient bed;
+ *  "combat" is a synthetic screen `useAmbientAudio` derives, not a real
+ *  `ScreenId` (the old dungeon/combat screens are gone). */
+type AmbientScreen = ScreenId | "combat";
+
 interface DungeonBedNodes {
   bedGain: GainNode;
   filter: BiquadFilterNode;
@@ -145,7 +150,7 @@ export class AmbientEngine {
   private villageTeardownTimer: ReturnType<typeof setTimeout> | undefined;
 
   private currentBed: AmbientBed = "none";
-  private screen: ScreenId | "none" = "none";
+  private screen: AmbientScreen | "none" = "none";
   private threatLevel: ThreatLevel = 0;
   private ducking = false;
   private muted = isAudioMuted();
@@ -163,7 +168,7 @@ export class AmbientEngine {
     this.applyMasterLevel();
   }
 
-  setScreen(screen: ScreenId): void {
+  setScreen(screen: AmbientScreen): void {
     this.screen = screen;
     this.ducking = screen === "combat";
     this.applyBedForScreen();
@@ -192,7 +197,7 @@ export class AmbientEngine {
   }
 
   private desiredBed(): AmbientBed {
-    if (this.screen === "dungeon" || this.screen === "combat" || this.screen === "delve") return "dungeon";
+    if (this.screen === "combat" || this.screen === "delve") return "dungeon";
     if (this.screen === "village") return "village";
     return "none";
   }
@@ -520,8 +525,8 @@ export class AmbientEngine {
 // React wiring
 // ---------------------------------------------------------------------------
 
-function isInCombat(screen: ScreenId, hasActiveCombat: boolean): boolean {
-  return screen === "combat" || hasActiveCombat;
+function isInCombat(hasActiveCombat: boolean): boolean {
+  return hasActiveCombat;
 }
 
 function delveThreatLevel(alertnessPoints: number | undefined): ThreatLevel {
@@ -539,12 +544,8 @@ export function useAmbientAudio(): void {
   if (!engineRef.current) engineRef.current = new AmbientEngine();
 
   const screen = useGameStore(s => s.screen);
-  const threatLevel = useGameStore(s =>
-    s.state.activeRun?.threat.level ?? delveThreatLevel(s.state.delveRun?.alertness)
-  );
-  const hasActiveCombat = useGameStore(s =>
-    Boolean(s.state.activeCombat && !s.state.activeCombat.over) || Boolean(s.state.delveRun?.activeEncounter)
-  );
+  const threatLevel = useGameStore(s => delveThreatLevel(s.state.delveRun?.alertness));
+  const hasActiveCombat = useGameStore(s => Boolean(s.state.delveRun?.activeEncounter));
   const muted = useGameStore(s => s.state.settings.audioMuted);
 
   useEffect(() => {
@@ -563,7 +564,7 @@ export function useAmbientAudio(): void {
   }, []);
 
   useEffect(() => {
-    engineRef.current?.setScreen(isInCombat(screen, hasActiveCombat) ? "combat" : screen);
+    engineRef.current?.setScreen(isInCombat(hasActiveCombat) ? "combat" : screen);
   }, [screen, hasActiveCombat]);
 
   useEffect(() => {
